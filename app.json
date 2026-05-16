@@ -8,9 +8,11 @@
     "scheme": "surveyapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.surveyapp.app"
     },
     "android": {
+      "package": "com.surveyapp.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,7 +36,12 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "@clerk/expo",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
