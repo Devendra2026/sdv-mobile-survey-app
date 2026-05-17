@@ -209,15 +209,31 @@ export default function SurveyDetailScreen() {
         <AppCard padded={false} className="mb-3">
           <ListRow title="Assessment year" subtitle={survey.assessmentYear} showChevron={false} />
           <View className="h-px bg-line-subtle" />
-          <ListRow title="Property type" subtitle={humanizeRole(survey.propertyType)} showChevron={false} />
+          <ListRow title="Ownership" subtitle={humanizeRole(survey.ownershipType)} showChevron={false} />
           <View className="h-px bg-line-subtle" />
-          <ListRow title="Use" subtitle={humanizeRole(survey.propertyUse)} showChevron={false} />
+          <ListRow title="Property use" subtitle={humanizeRole(survey.propertyUse)} showChevron={false} />
+          {survey.propertyType ? (
+            <>
+              <View className="h-px bg-line-subtle" />
+              <ListRow title="Subcategory" subtitle={humanizeRole(survey.propertyType)} showChevron={false} />
+            </>
+          ) : null}
           <View className="h-px bg-line-subtle" />
-          <ListRow
-            title="Plot · Plinth"
-            subtitle={`${formatArea(survey.plotSqft)} · ${formatArea(survey.plinthSqft)}`}
-            showChevron={false}
-          />
+          <ListRow title="Situation" subtitle={humanizeRole(survey.situation)} showChevron={false} />
+          <View className="h-px bg-line-subtle" />
+          <ListRow title="Road type" subtitle={humanizeRole(survey.roadType)} showChevron={false} />
+          <View className="h-px bg-line-subtle" />
+          <ListRow title="Road size tax zone" subtitle={humanizeRole(survey.taxRateZone)} showChevron={false} />
+          {survey.plotSqft > 0 || survey.plinthSqft > 0 ? (
+            <>
+              <View className="h-px bg-line-subtle" />
+              <ListRow
+                title="Plot · Plinth"
+                subtitle={`${formatArea(survey.plotSqft)} · ${formatArea(survey.plinthSqft)}`}
+                showChevron={false}
+              />
+            </>
+          ) : null}
         </AppCard>
 
         <SectionLabel>Floors ({survey.floors.length})</SectionLabel>

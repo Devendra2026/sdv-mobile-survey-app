@@ -190,6 +190,7 @@ export default defineSchema({
     // Section 4 — Taxation
     assessmentYear: v.string(),
     ownershipType: v.string(),
+    /** Property-use subcategory when use is residential, commercial, or mix. */
     propertyType: v.string(),
     propertyUse: v.string(),
     situation: v.string(),

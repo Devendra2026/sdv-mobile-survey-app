@@ -20,6 +20,7 @@
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
 import { isValidIndianMobile } from '@/utils/format';
+import { taxationSubcategoryComplete } from '@/utils/taxation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -423,13 +424,11 @@ export function draftToUpsertArgs(d: WizardDraft) {
     !d.pinCode ||
     !d.assessmentYear ||
     !d.ownershipType ||
-    !d.propertyType ||
     !d.propertyUse ||
+    !taxationSubcategoryComplete(d.propertyUse, d.propertyType) ||
     !d.situation ||
     !d.roadType ||
     !d.taxRateZone ||
-    d.plotSqft == null ||
-    d.plinthSqft == null ||
     !d.waterSource ||
     !d.sanitationType ||
     !d.solidWasteType
@@ -469,13 +468,13 @@ export function draftToUpsertArgs(d: WizardDraft) {
     pinCode: d.pinCode,
     assessmentYear: d.assessmentYear,
     ownershipType: d.ownershipType,
-    propertyType: d.propertyType,
+    propertyType: d.propertyType?.trim() ?? '',
     propertyUse: d.propertyUse,
     situation: d.situation,
     roadType: d.roadType,
     taxRateZone: d.taxRateZone,
-    plotSqft: d.plotSqft,
-    plinthSqft: d.plinthSqft,
+    plotSqft: d.plotSqft ?? 0,
+    plinthSqft: d.plinthSqft ?? 0,
     waterSource: d.waterSource,
     sanitationType: d.sanitationType,
     solidWasteType: d.solidWasteType,
@@ -525,13 +524,11 @@ export function stepCompletion(d: WizardDraft) {
     address: !!(d.locality?.trim() && d.colonyName?.trim() && d.pinCode),
     taxation: !!(
       d.ownershipType &&
-      d.propertyType &&
       d.propertyUse &&
+      taxationSubcategoryComplete(d.propertyUse, d.propertyType) &&
       d.situation &&
       d.roadType &&
-      d.taxRateZone &&
-      d.plotSqft != null &&
-      d.plinthSqft != null
+      d.taxRateZone
     ),
     floors: !!(d.floors && d.floors.length > 0),
     services: !!(d.waterSource && d.sanitationType && d.solidWasteType),

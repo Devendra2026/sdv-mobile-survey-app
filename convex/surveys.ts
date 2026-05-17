@@ -14,6 +14,7 @@ import { addressTenantContext, normalizeAddressFields, validateAddressSection } 
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
 import { gpsCapture, qcStatus, surveyOwnerEntry, surveyStatus } from './schema';
+import { validateTaxationSection } from './taxationMasters';
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
 /* ────────────────────────── shared input validator ────────────────────────── */
@@ -504,6 +505,17 @@ function validateBusinessRules(
   if (!unitNo) {
     details.unitNo = ['Unit number is required'];
   }
+  Object.assign(
+    details,
+    validateTaxationSection({
+      ownershipType: in_.ownershipType as string | undefined,
+      propertyUse: in_.propertyUse as string | undefined,
+      propertyType: in_.propertyType as string | undefined,
+      situation: in_.situation as string | undefined,
+      roadType: in_.roadType as string | undefined,
+      taxRateZone: in_.taxRateZone as string | undefined,
+    }),
+  );
   const constructedYear = in_.constructedYear as unknown as number | undefined;
   if (constructedYear != null) {
     const currentYear = new Date().getFullYear();

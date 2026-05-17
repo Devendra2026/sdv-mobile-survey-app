@@ -12,6 +12,7 @@ import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { ulbBodyType } from './schema';
+import { seedTaxationMasters } from './taxationMasters';
 
 export { resolveTenantScope } from './tenancy';
 
@@ -522,6 +523,8 @@ export const seedReferenceData = mutation({
         }
       }
     }
+
+    await seedTaxationMasters(ctx);
 
     await writeAudit(ctx, {
       actorId: me._id,

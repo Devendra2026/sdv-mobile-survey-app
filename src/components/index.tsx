@@ -228,26 +228,48 @@ interface AppDropdownProps {
   value: string;
   options: DropdownOption[];
   onChange: (value: string) => void;
+  /** Visible field label above the control (not shown inside the box). */
+  label?: string;
+  required?: boolean;
   placeholder?: string;
+  /** Bottom-sheet title when there is no field `label`; ignored if `label` is set. */
+  modalTitle?: string;
   disabled?: boolean;
 }
 
-export function AppDropdown({ value, options = [], onChange, placeholder, disabled }: AppDropdownProps) {
+export function AppDropdown({
+  value,
+  options = [],
+  onChange,
+  label,
+  required,
+  placeholder = 'Tap to choose',
+  modalTitle,
+  disabled,
+}: AppDropdownProps) {
   const [open, setOpen] = useState(false);
   const safeOptions = options ?? [];
   const selected = safeOptions.find((o) => o.value === value);
+  const sheetTitle = modalTitle ?? label ?? placeholder ?? 'Select';
   return (
-    <>
+    <View>
+      {label ? (
+        <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light dark:text-ink-secondary-dark mb-1.5">
+          {label} {required ? <Text className="text-danger">*</Text> : null}
+        </Text>
+      ) : null}
       <Pressable
         onPress={() => !disabled && setOpen(true)}
         className={`flex-row items-center rounded-md border border-line-default bg-surface-light dark:bg-surface-dark px-3 ${disabled ? 'opacity-60' : ''}`}
         style={{ minHeight: 48 }}
+        accessibilityRole="button"
+        accessibilityLabel={label ? `${label}, ${selected?.label ?? 'not selected'}` : selected?.label}
       >
         <Text
           className={`flex-1 text-body ${selected ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
           numberOfLines={1}
         >
-          {selected ? selected.label : (placeholder ?? 'Select…')}
+          {selected ? selected.label : placeholder}
         </Text>
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
@@ -261,9 +283,13 @@ export function AppDropdown({ value, options = [], onChange, placeholder, disabl
             <View className="items-center pt-2 pb-1">
               <View className="w-9 h-1 rounded-full bg-line-default" />
             </View>
-            <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark px-5 py-3">
-              {placeholder ?? 'Select'}
-            </Text>
+            {sheetTitle ? (
+              <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark px-5 py-3">
+                {sheetTitle}
+              </Text>
+            ) : (
+              <View className="h-2" />
+            )}
             <ScrollView className="px-2.5">
               {safeOptions.map((o) => {
                 const active = o.value === value;
@@ -290,7 +316,7 @@ export function AppDropdown({ value, options = [], onChange, placeholder, disabl
           </Pressable>
         </Pressable>
       </Modal>
-    </>
+    </View>
   );
 }
 

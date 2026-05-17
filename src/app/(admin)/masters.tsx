@@ -14,7 +14,6 @@ type MastersTab = 'tenants' | 'lookups';
 
 const LOOKUP_GROUPS: {
   key:
-    | 'propertyTypes'
     | 'propertyUses'
     | 'ownershipTypes'
     | 'assessmentYears'
@@ -31,7 +30,6 @@ const LOOKUP_GROUPS: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 }[] = [
-  { key: 'propertyTypes', label: 'Property types', icon: 'home-outline' },
   { key: 'propertyUses', label: 'Property uses', icon: 'construct-outline' },
   { key: 'ownershipTypes', label: 'Ownership', icon: 'key-outline' },
   { key: 'assessmentYears', label: 'Assessment years', icon: 'calendar-outline' },

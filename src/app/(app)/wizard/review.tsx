@@ -286,15 +286,31 @@ export default function ReviewScreen() {
         <AppCard padded={false} className="mb-3">
           <ListRow title="Assessment year" subtitle={draft.assessmentYear ?? '—'} showChevron={false} />
           <Divider />
-          <ListRow title="Property type" subtitle={humanizeRole(draft.propertyType)} showChevron={false} />
+          <ListRow title="Ownership" subtitle={humanizeRole(draft.ownershipType)} showChevron={false} />
           <Divider />
-          <ListRow title="Use" subtitle={humanizeRole(draft.propertyUse)} showChevron={false} />
+          <ListRow title="Property use" subtitle={humanizeRole(draft.propertyUse)} showChevron={false} />
+          {draft.propertyType ? (
+            <>
+              <Divider />
+              <ListRow title="Subcategory" subtitle={humanizeRole(draft.propertyType)} showChevron={false} />
+            </>
+          ) : null}
           <Divider />
-          <ListRow
-            title="Plot · Plinth"
-            subtitle={`${formatArea(draft.plotSqft ?? 0)} · ${formatArea(draft.plinthSqft ?? 0)}`}
-            showChevron={false}
-          />
+          <ListRow title="Situation" subtitle={humanizeRole(draft.situation)} showChevron={false} />
+          <Divider />
+          <ListRow title="Road type" subtitle={humanizeRole(draft.roadType)} showChevron={false} />
+          <Divider />
+          <ListRow title="Road size tax zone" subtitle={humanizeRole(draft.taxRateZone)} showChevron={false} />
+          {(draft.plotSqft ?? 0) > 0 || (draft.plinthSqft ?? 0) > 0 ? (
+            <>
+              <Divider />
+              <ListRow
+                title="Plot · Plinth"
+                subtitle={`${formatArea(draft.plotSqft ?? 0)} · ${formatArea(draft.plinthSqft ?? 0)}`}
+                showChevron={false}
+              />
+            </>
+          ) : null}
         </AppCard>
 
         <SectionLabel>Floors ({draft.floors?.length ?? 0})</SectionLabel>

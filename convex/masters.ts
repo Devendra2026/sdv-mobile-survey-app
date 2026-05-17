@@ -6,6 +6,15 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireUser } from './helpers';
 import { RESPONDENT_RELATIONSHIPS } from './ownerRules';
+import {
+  OWNERSHIP_TYPES,
+  PROPERTY_USE_SUBCATEGORIES,
+  PROPERTY_USES,
+  PROPERTY_USES_REQUIRING_SUBCATEGORY,
+  ROAD_TYPES,
+  SITUATIONS,
+  TAX_RATE_ZONES,
+} from './taxationMasters';
 import { assertMunicipalityInScope, resolveTenantScope } from './tenancy';
 
 interface Option {
@@ -80,12 +89,13 @@ export const bundle = query({
       wards: wardOut,
       // Each category is optional in case it isn't seeded yet on a fresh deployment.
       assessmentYears: grouped['assessment_year'] ?? [],
-      ownershipTypes: grouped['ownership_type'] ?? [],
-      propertyTypes: grouped['property_type'] ?? [],
-      propertyUses: grouped['property_use'] ?? [],
-      situations: grouped['situation'] ?? [],
-      roadTypes: grouped['road_type'] ?? [],
-      taxRateZones: grouped['tax_rate_zone'] ?? [],
+      ownershipTypes: grouped['ownership_type']?.length ? grouped['ownership_type']! : OWNERSHIP_TYPES,
+      propertyUses: grouped['property_use']?.length ? grouped['property_use']! : PROPERTY_USES,
+      propertyUseSubcategories: PROPERTY_USE_SUBCATEGORIES,
+      propertyUsesRequiringSubcategory: PROPERTY_USES_REQUIRING_SUBCATEGORY,
+      situations: grouped['situation']?.length ? grouped['situation']! : SITUATIONS,
+      roadTypes: grouped['road_type']?.length ? grouped['road_type']! : ROAD_TYPES,
+      taxRateZones: grouped['tax_rate_zone']?.length ? grouped['tax_rate_zone']! : TAX_RATE_ZONES,
       relationships: RESPONDENT_RELATIONSHIPS,
       waterSources: grouped['water_source'] ?? [],
       sanitationTypes: grouped['sanitation_type'] ?? [],
