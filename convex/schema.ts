@@ -9,41 +9,30 @@
  * Field names match the mobile DTO surface (`src/types/api.ts` from the
  * prior build). Anything renamed here would force a mobile-side rename too.
  */
-import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
+import { defineSchema, defineTable } from 'convex/server';
+import { v } from 'convex/values';
 
 /* ────────────────────────── reusable validators ────────────────────────── */
 
 export const userRole = v.union(
-  v.literal("pending"),
-  v.literal("surveyor"),
-  v.literal("supervisor"),
-  v.literal("admin"),
+  v.literal('pending'),
+  v.literal('surveyor'),
+  v.literal('supervisor'),
+  v.literal('admin'),
 );
 
-export const userStatus = v.union(
-  v.literal("pending_approval"),
-  v.literal("active"),
-  v.literal("disabled"),
-);
+export const userStatus = v.union(v.literal('pending_approval'), v.literal('active'), v.literal('disabled'));
 
 export const surveyStatus = v.union(
-  v.literal("draft"),
-  v.literal("submitted"),
-  v.literal("approved"),
-  v.literal("rejected"),
+  v.literal('draft'),
+  v.literal('submitted'),
+  v.literal('approved'),
+  v.literal('rejected'),
 );
 
-export const qcStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-);
+export const qcStatus = v.union(v.literal('pending'), v.literal('approved'), v.literal('rejected'));
 
-export const photoSlot = v.union(
-  v.literal("front"),
-  v.literal("side"),
-);
+export const photoSlot = v.union(v.literal('front'), v.literal('inside'), v.literal('side'), v.literal('document'));
 
 export const gpsCapture = v.object({
   latitude: v.number(),
@@ -69,30 +58,30 @@ export default defineSchema({
    * userIds — always derive from `ctx.auth.getUserIdentity()`.
    */
   users: defineTable({
-    clerkId: v.string(),                          // identifier from Clerk's `subject`
+    clerkId: v.string(), // identifier from Clerk's `subject`
     email: v.string(),
     name: v.string(),
     avatarUrl: v.optional(v.string()),
 
     role: userRole,
     status: userStatus,
-    municipalityId: v.optional(v.id("municipalities")),
-    wardAssignments: v.array(v.string()),         // ward_no list ("12", "14A")
+    municipalityId: v.optional(v.id('municipalities')),
+    wardAssignments: v.array(v.string()), // ward_no list ("12", "14A")
 
-    requestedRole: v.optional(v.string()),        // what the user asked for at sign-up
+    requestedRole: v.optional(v.string()), // what the user asked for at sign-up
     requestedReason: v.optional(v.string()),
 
-    approvedBy: v.optional(v.id("users")),
+    approvedBy: v.optional(v.id('users')),
     approvedAt: v.optional(v.number()),
-    disabledBy: v.optional(v.id("users")),
+    disabledBy: v.optional(v.id('users')),
     disabledAt: v.optional(v.number()),
 
     lastSeenAt: v.optional(v.number()),
   })
-    .index("by_clerkId", ["clerkId"])
-    .index("by_status", ["status"])
-    .index("by_role_status", ["role", "status"])
-    .index("by_municipality", ["municipalityId"]),
+    .index('by_clerkId', ['clerkId'])
+    .index('by_status', ['status'])
+    .index('by_role_status', ['role', 'status'])
+    .index('by_municipality', ['municipalityId']),
 
   /**
    * Tenants — districts → municipalities → wards.
@@ -102,22 +91,22 @@ export default defineSchema({
     code: v.string(),
     name: v.string(),
     stateName: v.string(),
-  }).index("by_code", ["code"]),
+  }).index('by_code', ['code']),
 
   municipalities: defineTable({
     code: v.string(),
     name: v.string(),
-    bodyType: v.string(),                         // nagar_panchayat | nagar_palika | mahanagar
-    districtId: v.id("districts"),
+    bodyType: v.string(), // nagar_panchayat | nagar_palika | mahanagar
+    districtId: v.id('districts'),
   })
-    .index("by_code", ["code"])
-    .index("by_district", ["districtId"]),
+    .index('by_code', ['code'])
+    .index('by_district', ['districtId']),
 
   wards: defineTable({
-    municipalityId: v.id("municipalities"),
+    municipalityId: v.id('municipalities'),
     wardNo: v.string(),
     name: v.string(),
-  }).index("by_municipality_ward", ["municipalityId", "wardNo"]),
+  }).index('by_municipality_ward', ['municipalityId', 'wardNo']),
 
   /**
    * surveys — the main entity.
@@ -135,8 +124,8 @@ export default defineSchema({
    */
   surveys: defineTable({
     localId: v.string(),
-    surveyorId: v.id("users"),
-    municipalityId: v.id("municipalities"),
+    surveyorId: v.id('users'),
+    municipalityId: v.id('municipalities'),
     wardNo: v.string(),
 
     status: surveyStatus,
@@ -183,17 +172,17 @@ export default defineSchema({
     // Section 7 — GIS (inline)
     gps: v.optional(gpsCapture),
   })
-    .index("by_surveyor_localId", ["surveyorId", "localId"])     // idempotency lookup
-    .index("by_surveyor", ["surveyorId"])
-    .index("by_status", ["status"])
-    .index("by_qc_status", ["qcStatus"])
-    .index("by_municipality_ward", ["municipalityId", "wardNo"])
-    .index("by_municipality_status", ["municipalityId", "status"]),
+    .index('by_surveyor_localId', ['surveyorId', 'localId']) // idempotency lookup
+    .index('by_surveyor', ['surveyorId'])
+    .index('by_status', ['status'])
+    .index('by_qc_status', ['qcStatus'])
+    .index('by_municipality_ward', ['municipalityId', 'wardNo'])
+    .index('by_municipality_status', ['municipalityId', 'status']),
 
   /** floors — 1:N to a survey; ordered by `position`. */
   floors: defineTable({
-    surveyId: v.id("surveys"),
-    clientFloorId: v.string(),                    // client-generated id; idempotency
+    surveyId: v.id('surveys'),
+    clientFloorId: v.string(), // client-generated id; idempotency
     position: v.number(),
     floorName: v.string(),
     usageType: v.string(),
@@ -201,8 +190,8 @@ export default defineSchema({
     isOccupied: v.boolean(),
     areaSqft: v.number(),
   })
-    .index("by_survey", ["surveyId"])
-    .index("by_survey_clientFloorId", ["surveyId", "clientFloorId"]),
+    .index('by_survey', ['surveyId'])
+    .index('by_survey_clientFloorId', ['surveyId', 'clientFloorId']),
 
   /**
    * photos — pointers to Convex file storage. The actual JPEG bytes live in
@@ -214,55 +203,54 @@ export default defineSchema({
    *   3. mobile calls `photos.linkPhoto` with the resulting storageId
    */
   photos: defineTable({
-    surveyId: v.id("surveys"),
+    surveyId: v.id('surveys'),
     slot: photoSlot,
-    storageId: v.id("_storage"),
+    storageId: v.id('_storage'),
     sizeKb: v.number(),
     width: v.optional(v.number()),
     height: v.optional(v.number()),
     capturedAt: v.number(),
-    uploadedBy: v.id("users"),
+    uploadedBy: v.id('users'),
   })
-    .index("by_survey", ["surveyId"])
-    .index("by_survey_slot", ["surveyId", "slot"]),
+    .index('by_survey', ['surveyId'])
+    .index('by_survey_slot', ['surveyId', 'slot']),
 
   /**
    * qcRemarks — chat-style thread between supervisor and surveyor.
    * Append-only; resolution is tracked on the parent survey + qcDecisions row.
    */
   qcRemarks: defineTable({
-    surveyId: v.id("surveys"),
-    authorId: v.id("users"),
-    authorRole: v.string(),                       // snapshot at write-time
+    surveyId: v.id('surveys'),
+    authorId: v.id('users'),
+    authorRole: v.string(), // snapshot at write-time
     message: v.string(),
     taggedSections: v.array(v.string()),
-    status: v.union(v.literal("open"), v.literal("resolved")),
-  })
-    .index("by_survey", ["surveyId"]),
+    status: v.union(v.literal('open'), v.literal('resolved')),
+  }).index('by_survey', ['surveyId']),
 
   /** qcDecisions — formal approve/reject events. One row per decision. */
   qcDecisions: defineTable({
-    surveyId: v.id("surveys"),
-    reviewerId: v.id("users"),
-    decision: v.union(v.literal("approve"), v.literal("reject")),
+    surveyId: v.id('surveys'),
+    reviewerId: v.id('users'),
+    decision: v.union(v.literal('approve'), v.literal('reject')),
     comment: v.optional(v.string()),
     taggedSections: v.array(v.string()),
     decidedAt: v.number(),
-  }).index("by_survey", ["surveyId"]),
+  }).index('by_survey', ['surveyId']),
 
   /**
    * masters — every dropdown the mobile shows. Categorised so the bundle
    * query in `masters.bundle` can return them grouped.
    */
   masters: defineTable({
-    category: v.string(),                         // assessment_year, ownership_type, …
+    category: v.string(), // assessment_year, ownership_type, …
     value: v.string(),
     label: v.string(),
     position: v.number(),
     isActive: v.boolean(),
   })
-    .index("by_category_position", ["category", "isActive", "position"])
-    .index("by_category_value", ["category", "value"]),
+    .index('by_category_position', ['category', 'isActive', 'position'])
+    .index('by_category_value', ['category', 'value']),
 
   /**
    * auditLogs — append-only trail for compliance.
@@ -273,14 +261,14 @@ export default defineSchema({
    * update or delete. UI reads through `audit.list`.
    */
   auditLogs: defineTable({
-    actorId: v.optional(v.id("users")),
-    action: v.string(),                           // user.approved, survey.submitted, qc.rejected, …
-    entity: v.string(),                           // user | survey | qc | masters | …
+    actorId: v.optional(v.id('users')),
+    action: v.string(), // user.approved, survey.submitted, qc.rejected, …
+    entity: v.string(), // user | survey | qc | masters | …
     entityId: v.optional(v.string()),
-    metadata: v.optional(v.any()),                // JSON snapshot — before/after, IP, etc.
+    metadata: v.optional(v.any()), // JSON snapshot — before/after, IP, etc.
   })
-    .index("by_entity", ["entity", "entityId"])
-    .index("by_actor", ["actorId"]),
+    .index('by_entity', ['entity', 'entityId'])
+    .index('by_actor', ['actorId']),
 
   /**
    * notifications — destined for the mobile bell icon + in-app banners.
@@ -288,14 +276,14 @@ export default defineSchema({
    * count is a fast index scan.
    */
   notifications: defineTable({
-    userId: v.id("users"),
-    type: v.string(),                             // qc_rejected, qc_approved, account_approved, …
+    userId: v.id('users'),
+    type: v.string(), // qc_rejected, qc_approved, account_approved, …
     title: v.string(),
     body: v.string(),
     relatedEntity: v.optional(v.string()),
     relatedId: v.optional(v.string()),
     readAt: v.optional(v.number()),
   })
-    .index("by_user", ["userId"])
-    .index("by_user_read", ["userId", "readAt"]),
+    .index('by_user', ['userId'])
+    .index('by_user_read', ['userId', 'readAt']),
 });

@@ -58,6 +58,7 @@ export default function AppLayout() {
       <Tabs.Screen name="survey/[id]" options={{ href: null }} />
       <Tabs.Screen name="survey/wizard" options={{ href: null }} />
       <Tabs.Screen name="wizard" options={{ href: null }} />
+      <Tabs.Screen name="qc/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
