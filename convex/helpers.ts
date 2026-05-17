@@ -10,19 +10,17 @@
  * Anything that touches a user-scoped resource calls these first. Never
  * trust client-supplied userId — derive everything from `ctx.auth`.
  */
-import { ConvexError, v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import type {
-    ActionCtx,
-    MutationCtx,
-    QueryCtx,
-} from "./_generated/server";
+import { ConvexError, v } from 'convex/values';
+import type { Doc, Id } from './_generated/dataModel';
+import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server';
+
+export type { QueryCtx };
 
 export type AnyCtx = QueryCtx | MutationCtx | ActionCtx;
 
 /** Authenticated Clerk identity payload. */
 export interface Identity {
-  subject: string;          // Clerk user id (used as users.clerkId)
+  subject: string; // Clerk user id (used as users.clerkId)
   email?: string;
   name?: string;
   pictureUrl?: string;
@@ -32,8 +30,8 @@ export async function requireIdentity(ctx: AnyCtx): Promise<Identity> {
   const ident = await ctx.auth.getUserIdentity();
   if (!ident) {
     throw new ConvexError({
-      code: "UNAUTHORIZED",
-      message: "Authentication required",
+      code: 'UNAUTHORIZED',
+      message: 'Authentication required',
     });
   }
   return {
@@ -54,41 +52,41 @@ export async function requireIdentity(ctx: AnyCtx): Promise<Identity> {
 export async function requireUser(
   ctx: QueryCtx | MutationCtx,
   opts: { allowPending?: boolean } = {},
-): Promise<Doc<"users">> {
+): Promise<Doc<'users'>> {
   const ident = await requireIdentity(ctx);
   const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerkId", (q) => q.eq("clerkId", ident.subject))
+    .query('users')
+    .withIndex('by_clerkId', (q) => q.eq('clerkId', ident.subject))
     .unique();
 
   if (!user) {
     // Webhook hasn't landed yet OR was missed. The client should retry shortly.
     throw new ConvexError({
-      code: "USER_NOT_PROVISIONED",
-      message: "Your account is still being set up. Try again in a moment.",
+      code: 'USER_NOT_PROVISIONED',
+      message: 'Your account is still being set up. Try again in a moment.',
     });
   }
-  if (user.status === "disabled") {
+  if (user.status === 'disabled') {
     throw new ConvexError({
-      code: "ACCOUNT_DISABLED",
-      message: "This account has been disabled.",
+      code: 'ACCOUNT_DISABLED',
+      message: 'This account has been disabled.',
     });
   }
-  if (!opts.allowPending && user.status !== "active") {
+  if (!opts.allowPending && user.status !== 'active') {
     throw new ConvexError({
-      code: "AWAITING_APPROVAL",
-      message: "Your account is awaiting administrator approval.",
+      code: 'AWAITING_APPROVAL',
+      message: 'Your account is awaiting administrator approval.',
     });
   }
   return user;
 }
 
-export type Role = Doc<"users">["role"];
+export type Role = Doc<'users'>['role'];
 
-export function requireRole(user: Doc<"users">, ...allowed: Role[]): void {
+export function requireRole(user: Doc<'users'>, ...allowed: Role[]): void {
   if (!allowed.includes(user.role)) {
     throw new ConvexError({
-      code: "FORBIDDEN",
+      code: 'FORBIDDEN',
       message: "You don't have permission for this action.",
     });
   }
@@ -99,24 +97,15 @@ export function requireRole(user: Doc<"users">, ...allowed: Role[]): void {
  * inside their assigned municipality. Supervisors get ULB-wide access.
  * Admins bypass everything.
  */
-export function assertCanReadWard(
-  user: Doc<"users">,
-  municipalityId: Id<"municipalities">,
-  wardNo: string,
-): void {
-  if (user.role === "admin") return;
-  if (user.municipalityId && user.municipalityId !== municipalityId) {
+export function assertCanReadWard(user: Doc<'users'>, municipalityId: Id<'municipalities'>, wardNo: string): void {
+  if (user.role === 'admin') return;
+  // Municipality / district scope is enforced separately via assertMunicipalityInScope.
+  if (user.role === 'supervisor') return;
+  // surveyor — restrict to assigned wards when any are listed
+  if (user.role === 'surveyor' && user.wardAssignments.length > 0 && !user.wardAssignments.includes(wardNo)) {
     throw new ConvexError({
-      code: "FORBIDDEN",
-      message: "Cross-municipality access denied.",
-    });
-  }
-  if (user.role === "supervisor") return;
-  // surveyor — must own the ward
-  if (!user.wardAssignments.includes(wardNo)) {
-    throw new ConvexError({
-      code: "FORBIDDEN",
-      message: "This ward is not assigned to you.",
+      code: 'FORBIDDEN',
+      message: 'This ward is not assigned to you.',
     });
   }
 }
@@ -124,18 +113,15 @@ export function assertCanReadWard(
 /* ────────────────────────── audit helpers ────────────────────────── */
 
 interface AuditWriteInput {
-  actorId?: Id<"users">;
+  actorId?: Id<'users'>;
   action: string;
   entity: string;
   entityId?: string;
   metadata?: unknown;
 }
 
-export async function writeAudit(
-  ctx: MutationCtx,
-  input: AuditWriteInput,
-): Promise<void> {
-  await ctx.db.insert("auditLogs", {
+export async function writeAudit(ctx: MutationCtx, input: AuditWriteInput): Promise<void> {
+  await ctx.db.insert('auditLogs', {
     actorId: input.actorId,
     action: input.action,
     entity: input.entity,
@@ -156,12 +142,6 @@ export interface ConvexErrPayload {
   details?: Record<string, string[]>;
 }
 
-export function clientError(
-  code: string,
-  message: string,
-  details?: Record<string, string[]>,
-): never {
-  throw new ConvexError(
-    details ? { code, message, details } : { code, message },
-  );
+export function clientError(code: string, message: string, details?: Record<string, string[]>): never {
+  throw new ConvexError(details ? { code, message, details } : { code, message });
 }

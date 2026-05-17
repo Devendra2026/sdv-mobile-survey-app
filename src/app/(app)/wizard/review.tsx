@@ -20,6 +20,7 @@ import { clearDraft, draftToUpsertArgs, stepCompletion, useWizardDraft } from '@
 import { indicatorSteps, WIZARD_STEPS } from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, humanizeRole } from '@/utils/format';
+import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -43,11 +44,15 @@ export default function ReviewScreen() {
 
   if (loading || !draft || !masters) return <Spinner label="Loading…" />;
 
+  const bundle = normalizeMastersBundle(masters);
   const completion = stepCompletion(draft);
   const allComplete = Object.values(completion).every(Boolean);
   const args = allComplete ? draftToUpsertArgs(draft) : null;
 
-  const muniName = masters.ulbs.find((u) => u._id === draft.municipalityId)?.name ?? '—';
+  const selectedUlb = bundle.ulbs.find((u) => u._id === draft.municipalityId);
+  const muniName = selectedUlb?.name ?? '—';
+  const districtName =
+    bundle.districts.find((d) => d._id === draft.districtId)?.name ?? selectedUlb?.districtName ?? '—';
 
   const onSubmit = async () => {
     if (!args) return;
@@ -130,15 +135,29 @@ export default function ReviewScreen() {
           />
         )}
 
-        <SectionLabel>Property</SectionLabel>
+        <SectionLabel>Survey start</SectionLabel>
         <AppCard padded={false} className="mb-3">
           <ListRow
-            icon="business-outline"
+            icon="calendar-outline"
             iconTone="brand"
-            title="Municipality"
-            subtitle={muniName}
+            title="Assessment year"
+            subtitle={draft.assessmentYear ?? '—'}
             showChevron={false}
           />
+          <Divider />
+          <ListRow icon="map-outline" iconTone="neutral" title="District" subtitle={districtName} showChevron={false} />
+          <Divider />
+          <ListRow
+            icon="business-outline"
+            iconTone="neutral"
+            title="ULB"
+            subtitle={`${muniName} (${selectedUlb?.code ?? '—'})`}
+            showChevron={false}
+          />
+        </AppCard>
+
+        <SectionLabel>Property</SectionLabel>
+        <AppCard padded={false} className="mb-3">
           <Divider />
           <ListRow
             icon="map-outline"

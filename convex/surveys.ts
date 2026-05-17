@@ -12,6 +12,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { gpsCapture, qcStatus, surveyStatus } from './schema';
+import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
 /* ────────────────────────── shared input validator ────────────────────────── */
 
@@ -74,27 +75,49 @@ export const list = query({
 
     // Choose the cheapest index. Surveyors hit the by_surveyor index;
     // supervisors/admins use municipality-level indexes.
+    const scope = await resolveTenantScope(ctx, me);
+    const districtIds = tenantDistrictIds(scope);
+    const muniIds = tenantMunicipalityIds(scope);
+
     let rows: Doc<'surveys'>[];
     if (me.role === 'surveyor') {
       rows = await ctx.db
         .query('surveys')
         .withIndex('by_surveyor', (q) => q.eq('surveyorId', me._id))
         .order('desc')
-        .take(limit);
+        .take(limit * 2);
+      rows = rows.filter((r) => !r.districtId || districtIds.has(r.districtId)).slice(0, limit);
     } else if (me.role === 'supervisor') {
-      if (!me.municipalityId) return [];
-      rows = await ctx.db
-        .query('surveys')
-        .withIndex('by_municipality_status', (q) =>
-          args.status
-            ? q.eq('municipalityId', me.municipalityId!).eq('status', args.status)
-            : q.eq('municipalityId', me.municipalityId!),
-        )
-        .order('desc')
-        .take(limit);
-    } else {
+      if (scope.districts.length === 1) {
+        rows = await ctx.db
+          .query('surveys')
+          .withIndex('by_district_status', (q) =>
+            args.status
+              ? q.eq('districtId', scope.districts[0]!._id).eq('status', args.status)
+              : q.eq('districtId', scope.districts[0]!._id),
+          )
+          .order('desc')
+          .take(limit);
+      } else if (me.municipalityId) {
+        rows = await ctx.db
+          .query('surveys')
+          .withIndex('by_municipality_status', (q) =>
+            args.status
+              ? q.eq('municipalityId', me.municipalityId!).eq('status', args.status)
+              : q.eq('municipalityId', me.municipalityId!),
+          )
+          .order('desc')
+          .take(limit);
+      } else {
+        return [];
+      }
+    } else if (me.role === 'admin') {
       rows = await ctx.db.query('surveys').order('desc').take(limit);
+    } else {
+      rows = [];
     }
+
+    rows = rows.filter((r) => muniIds.has(r.municipalityId));
 
     // Apply remaining filters in memory — they're small once the index has narrowed.
     if (args.status && me.role !== 'supervisor') {
@@ -117,6 +140,7 @@ export const get = query({
     const me = await requireUser(ctx);
     const survey = await ctx.db.get(args.id);
     if (!survey) return null;
+    await assertMunicipalityInScope(ctx, me, survey.municipalityId);
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
 
     const [floors, photos, qcRemarks, surveyor] = await Promise.all([
@@ -145,8 +169,11 @@ export const get = query({
       })),
     );
 
+    const muni = await ctx.db.get(survey.municipalityId);
+
     return {
       ...survey,
+      districtId: muni?.districtId,
       floors,
       photos: hydratedPhotos,
       qcRemarks,
@@ -188,6 +215,7 @@ export const upsert = mutation({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     requireRole(me, 'surveyor', 'supervisor', 'admin');
+    const muni = await assertMunicipalityInScope(ctx, me, args.municipalityId);
     assertCanReadWard(me, args.municipalityId, args.wardNo);
 
     validateBusinessRules(args as unknown as typeof surveyInput);
@@ -205,7 +233,7 @@ export const upsert = mutation({
       .unique();
 
     const now = Date.now();
-    const writable = stripLocalId(args);
+    const writable = { ...stripLocalId(args), districtId: muni.districtId };
 
     if (existing) {
       // If the supervisor already approved this row, lock further edits unless
@@ -261,6 +289,7 @@ export const setGps = mutation({
     if (survey.surveyorId !== me._id && me.role === 'surveyor') {
       clientError('FORBIDDEN', 'Not your survey');
     }
+    await assertMunicipalityInScope(ctx, me, survey.municipalityId);
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
     if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
       clientError('LOCKED', 'Survey is locked');
@@ -293,6 +322,8 @@ export const submit = mutation({
     if (survey.status !== 'draft' && survey.status !== 'rejected') {
       clientError('BAD_STATE', 'Only drafts can be submitted');
     }
+    await assertMunicipalityInScope(ctx, me, survey.municipalityId);
+    assertCanReadWard(me, survey.municipalityId, survey.wardNo);
 
     const floors = await ctx.db
       .query('floors')
@@ -341,6 +372,7 @@ export const remove = mutation({
     if (survey.surveyorId !== me._id && me.role !== 'admin') {
       clientError('FORBIDDEN', 'Not your survey');
     }
+    await assertMunicipalityInScope(ctx, me, survey.municipalityId);
     if (survey.qcStatus === 'approved') {
       clientError('LOCKED', 'Cannot delete an approved survey');
     }

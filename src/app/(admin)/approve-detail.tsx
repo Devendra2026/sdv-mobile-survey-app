@@ -1,5 +1,5 @@
 /**
- * Approval detail — admin picks role + municipality + wards, then approves.
+ * Approval detail — admin picks role, district, ULB; ward is chosen at survey start.
  */
 import {
   AppButton,
@@ -12,58 +12,60 @@ import {
   Spinner,
   Tag,
   Toast,
-} from "@/components";
-import { AdminHeader } from "@/components/admin/admin-header";
-import { WorkflowSteps } from "@/components/admin/workflow-steps";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
-import { toUserMessage } from "@/utils/errors";
-import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQuery } from "convex/react";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from '@/components';
+import { AdminHeader } from '@/components/admin/admin-header';
+import { WorkflowSteps } from '@/components/admin/workflow-steps';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { toUserMessage } from '@/utils/errors';
+import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQuery } from 'convex/react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type Role = "surveyor" | "supervisor" | "admin";
+type Role = 'surveyor' | 'supervisor' | 'admin';
 
 export default function ApproveDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ userId?: string }>();
-  const userId = params.userId as Id<"users"> | undefined;
+  const userId = params.userId as Id<'users'> | undefined;
+  const { convexReady } = useClerkConvexAuth();
 
-  const masters = useQuery(api.masters.bundle, {});
-  const pendingList = useQuery(api.admin.listPendingApprovals, {});
+  const tree = useQuery(api.tenants.listForAdmin, convexReady ? {} : 'skip');
+  const pendingList = useQuery(api.admin.listPendingApprovals, convexReady ? {} : 'skip');
   const approve = useMutation(api.admin.approveUser);
   const rejectUser = useMutation(api.admin.rejectUser);
 
   const user = pendingList?.find((u) => u._id === userId);
 
-  const [role, setRole] = useState<Role>("surveyor");
-  const [municipalityCode, setMunicipalityCode] = useState<string>("");
-  const [selectedWards, setSelectedWards] = useState<string[]>([]);
+  const [role, setRole] = useState<Role>('surveyor');
+  const [districtId, setDistrictId] = useState('');
+  const [municipalityId, setMunicipalityId] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ title: string; tone: "success" | "danger" } | null>(null);
+  const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
-  const muniOptions = useMemo(
-    () =>
-      masters?.ulbs.map((m) => ({ value: m.code, label: `${m.name} · ${m.districtName}` })) ?? [],
-    [masters],
-  );
-  const selectedMuni = masters?.ulbs.find((m) => m.code === municipalityCode);
-  const wardsForMuni = useMemo(
-    () =>
-      selectedMuni
-        ? (masters?.wards.filter((w) => w.municipalityCode === municipalityCode) ?? [])
-        : [],
-    [masters, municipalityCode, selectedMuni],
+  const districtOptions = useMemo(
+    () => tree?.map((d) => ({ value: d._id, label: `${d.name} (${d.stateName})` })) ?? [],
+    [tree],
   );
 
-  const scopeReady =
-    role === "admin" ||
-    (!!selectedMuni && (role === "supervisor" || selectedWards.length > 0));
+  const ulbOptions = useMemo(() => {
+    if (!tree || !districtId) return [];
+    const district = tree.find((d) => d._id === districtId);
+    if (!district) return [];
+    return district.ulbs.map((u) => ({
+      value: u._id,
+      label: `${u.name} · ${u.code}`,
+    }));
+  }, [tree, districtId]);
 
+  const selectedUlb = tree?.flatMap((d) => d.ulbs).find((u) => u._id === municipalityId);
+
+  const scopeReady = role === 'admin' || (!!districtId && !!municipalityId);
   const workflowStep = scopeReady ? 2 : 1;
 
   if (!userId) {
@@ -78,7 +80,7 @@ export default function ApproveDetailScreen() {
       </View>
     );
   }
-  if (pendingList === undefined || masters === undefined) {
+  if (pendingList === undefined || tree === undefined) {
     return <Spinner label="Loading request…" />;
   }
   if (!user) {
@@ -93,46 +95,32 @@ export default function ApproveDetailScreen() {
           <Text className="text-helper text-ink-tertiary-light text-center mt-1">
             This sign-up was approved or rejected. Check Users for their status.
           </Text>
-          <AppButton
-            label="Back to approvals"
-            onPress={() => router.replace("/(admin)/approvals")}
-            className="mt-6"
-          />
+          <AppButton label="Back to approvals" onPress={() => router.replace('/(admin)/approvals')} className="mt-6" />
         </View>
       </View>
     );
   }
 
-  const toggleWard = (wardNo: string) => {
-    setSelectedWards((prev) =>
-      prev.includes(wardNo) ? prev.filter((w) => w !== wardNo) : [...prev, wardNo],
-    );
-  };
-
   const onReject = () => {
-    Alert.alert(
-      "Reject this request?",
-      `${user.name} will not receive access.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reject",
-          style: "destructive",
-          onPress: async () => {
-            setSubmitting(true);
-            try {
-              await rejectUser({ userId });
-              setToast({ title: "Request rejected", tone: "success" });
-              setTimeout(() => router.back(), 600);
-            } catch (e) {
-              setToast({ title: toUserMessage(e), tone: "danger" });
-            } finally {
-              setSubmitting(false);
-            }
-          },
+    Alert.alert('Reject this request?', `${user.name} will not receive access.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          setSubmitting(true);
+          try {
+            await rejectUser({ userId });
+            setToast({ title: 'Request rejected', tone: 'success' });
+            setTimeout(() => router.back(), 600);
+          } catch (e) {
+            setToast({ title: toUserMessage(e), tone: 'danger' });
+          } finally {
+            setSubmitting(false);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleApprove = async () => {
@@ -141,13 +129,14 @@ export default function ApproveDetailScreen() {
       await approve({
         userId,
         role,
-        municipalityId: selectedMuni?._id,
-        wardAssignments: selectedWards,
+        municipalityId: municipalityId ? (municipalityId as Id<'municipalities'>) : undefined,
+        districtId: districtId ? (districtId as Id<'districts'>) : undefined,
+        wardAssignments: [],
       });
-      setToast({ title: `${user.name} approved`, tone: "success" });
+      setToast({ title: `${user.name} approved`, tone: 'success' });
       setTimeout(() => router.back(), 700);
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: "danger" });
+      setToast({ title: toUserMessage(e), tone: 'danger' });
     } finally {
       setSubmitting(false);
     }
@@ -168,9 +157,9 @@ export default function ApproveDetailScreen() {
           <View className="mt-3 bg-white/10 rounded-xl px-2 py-2">
             <WorkflowSteps
               steps={[
-                { label: "Review", done: true },
-                { label: "Assign", active: workflowStep === 1, done: workflowStep === 2 },
-                { label: "Approve", active: workflowStep === 2, done: false },
+                { label: 'Review', done: true },
+                { label: 'Assign', active: workflowStep === 1, done: workflowStep === 2 },
+                { label: 'Approve', active: workflowStep === 2, done: false },
               ]}
             />
           </View>
@@ -185,16 +174,12 @@ export default function ApproveDetailScreen() {
           <View className="flex-row items-center">
             <Avatar name={user.name} tone="brand" size="lg" />
             <View className="flex-1 ml-3">
-              <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark">
-                {user.name}
-              </Text>
-              <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">
-                {user.email}
-              </Text>
+              <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark">{user.name}</Text>
+              <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">{user.email}</Text>
             </View>
           </View>
           <View className="flex-row gap-1.5 mt-3">
-            <Tag label={`Requested: ${user.requestedRole ?? "—"}`} tone="brand" icon="briefcase-outline" />
+            <Tag label={`Requested: ${user.requestedRole ?? '—'}`} tone="brand" icon="briefcase-outline" />
           </View>
           {user.requestedReason ? (
             <View className="mt-3 p-3 bg-page-light dark:bg-page-dark/40 rounded-lg">
@@ -209,103 +194,55 @@ export default function ApproveDetailScreen() {
         <AppCard padded className="mb-4">
           <RadioGroup<Role>
             items={[
-              { value: "surveyor", label: "Surveyor", helper: "Field work — assigned wards only" },
-              { value: "supervisor", label: "Supervisor", helper: "QC — full municipality access" },
-              { value: "admin", label: "Admin", helper: "Platform-wide administration" },
+              { value: 'surveyor', label: 'Surveyor', helper: 'Creates property surveys in assigned ULB' },
+              { value: 'supervisor', label: 'Supervisor', helper: 'Reviews surveys in assigned ULB' },
+              { value: 'admin', label: 'Admin', helper: 'Platform-wide administration' },
             ]}
             value={role}
             onChange={(r) => {
               setRole(r);
-              if (r === "admin") {
-                setMunicipalityCode("");
-                setSelectedWards([]);
+              if (r === 'admin') {
+                setDistrictId('');
+                setMunicipalityId('');
               }
             }}
           />
         </AppCard>
 
-        {role !== "admin" ? (
+        {role !== 'admin' ? (
           <>
-            <SectionLabel>2 · Municipality scope</SectionLabel>
-            <View className="mb-4">
-              <AppDropdown
-                placeholder="Select municipality (ULB)"
-                value={municipalityCode}
-                options={muniOptions}
-                onChange={(v) => {
-                  setMunicipalityCode(v);
-                  setSelectedWards([]);
-                }}
-              />
-            </View>
-
-            {role === "surveyor" && selectedMuni ? (
-              <>
-                <SectionLabel>3 · Ward assignments</SectionLabel>
-                <AppCard padded className="mb-4">
-                  {wardsForMuni.length === 0 ? (
-                    <View>
-                      <Banner
-                        tone="warning"
-                        title="No wards configured"
-                        message="Add wards under Masters before assigning this surveyor."
-                        icon="map-outline"
-                      />
-                      <AppButton
-                        label="Open Masters"
-                        variant="outline"
-                        size="sm"
-                        onPress={() => router.push("/(admin)/masters")}
-                        className="mt-3"
-                      />
-                    </View>
-                  ) : (
-                    <>
-                      <View className="flex-row flex-wrap gap-1.5">
-                        {wardsForMuni.map((w) => {
-                          const active = selectedWards.includes(w.wardNo);
-                          return (
-                            <Pressable
-                              key={w._id}
-                              onPress={() => toggleWard(w.wardNo)}
-                              className={[
-                                "px-3 py-1.5 rounded-full border",
-                                active
-                                  ? "bg-brand border-brand"
-                                  : "bg-surface-light dark:bg-surface-dark border-line-default",
-                              ].join(" ")}
-                            >
-                              <Text
-                                className={[
-                                  "text-[12px] font-medium",
-                                  active
-                                    ? "text-white"
-                                    : "text-ink-primary-light dark:text-ink-primary-dark",
-                                ].join(" ")}
-                              >
-                                Ward {w.wardNo} · {w.name}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      <Text className="text-caption text-ink-tertiary-light mt-2">
-                        {selectedWards.length} of {wardsForMuni.length} ward
-                        {wardsForMuni.length === 1 ? "" : "s"} selected
-                      </Text>
-                    </>
-                  )}
-                </AppCard>
-              </>
-            ) : role === "supervisor" && selectedMuni ? (
-              <Banner
-                tone="info"
-                title="ULB-wide access"
-                message={`${user.name} will review surveys across all wards in ${selectedMuni.name}.`}
-                icon="information-circle-outline"
-                className="mb-4"
-              />
-            ) : null}
+            <SectionLabel>2 · District & ULB</SectionLabel>
+            <AppCard padded className="mb-3">
+              <View style={{ gap: 12 }}>
+                <AppDropdown
+                  placeholder="District"
+                  value={districtId}
+                  options={districtOptions}
+                  onChange={(id) => {
+                    setDistrictId(id);
+                    setMunicipalityId('');
+                  }}
+                />
+                <AppDropdown
+                  placeholder="ULB name / code"
+                  value={municipalityId}
+                  options={ulbOptions}
+                  onChange={setMunicipalityId}
+                  disabled={!districtId}
+                />
+              </View>
+            </AppCard>
+            <Banner
+              tone="info"
+              title="Ward at survey start"
+              message={
+                selectedUlb
+                  ? `${user.name} will choose the ward when starting each survey in ${selectedUlb.name}.`
+                  : 'The user picks the ward on the Survey start screen for each property.'
+              }
+              icon="information-circle-outline"
+              className="mb-4"
+            />
           </>
         ) : (
           <Banner
@@ -323,7 +260,7 @@ export default function ApproveDetailScreen() {
         style={{ paddingBottom: insets.bottom + 12 }}
       >
         <AppButton
-          label={submitting ? "Approving…" : "Approve and grant access"}
+          label={submitting ? 'Approving…' : 'Approve and grant access'}
           loading={submitting}
           onPress={handleApprove}
           disabled={!scopeReady}
@@ -331,19 +268,11 @@ export default function ApproveDetailScreen() {
           iconRight="checkmark-circle"
         />
         {!scopeReady ? (
-          <Text className="text-caption text-ink-tertiary-light text-center mt-2">
-            {role === "surveyor"
-              ? "Select a municipality and at least one ward."
-              : role === "supervisor"
-                ? "Select a municipality."
-                : "Confirm admin access above."}
-          </Text>
+          <Text className="text-caption text-ink-tertiary-light text-center mt-2">Select district and ULB.</Text>
         ) : null}
       </View>
 
-      {toast ? (
-        <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} />
-      ) : null}
+      {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}
     </View>
   );
 }

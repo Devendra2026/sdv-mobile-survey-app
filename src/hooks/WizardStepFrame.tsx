@@ -7,38 +7,36 @@
  * scaffold what to do on save (`onSave`) which is also the next-step
  * action.
  */
-import { Spinner } from "@/components/index";
-import { FloatingSaveBar, WizardHeader } from "@/components/wizard";
-import { useWizardDraft, type WizardDraft } from "@/hooks/useWizardDraft";
-import {
-  indicatorSteps,
-  nextStep,
-  prevStep,
-  WIZARD_STEPS,
-  type StepConfig,
-} from "@/hooks/wizardSteps";
-import { useRouter } from "expo-router";
-import React, { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Spinner } from '@/components/index';
+import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
+import { useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
+import { indicatorSteps, nextStep, prevStep, WIZARD_STEPS, type StepConfig } from '@/hooks/wizardSteps';
+import { useRouter } from 'expo-router';
+import React, { ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface WizardStepFrameProps {
   localId: string;
-  activeKey: StepConfig["key"];
+  activeKey: StepConfig['key'];
   title: string;
   subtitle?: string;
-  nextDisabled?: boolean;
+  nextDisabled?: boolean | ((draft: WizardDraft) => boolean);
   loading?: boolean;
-  children: (ctx: {
-    draft: WizardDraft;
-    update: (patch: Partial<WizardDraft>) => Promise<void>;
-  }) => ReactNode;
+  children: (ctx: { draft: WizardDraft; update: (patch: Partial<WizardDraft>) => Promise<void> }) => ReactNode;
   /** Called on "Save & continue". Default routes forward; override to e.g. validate. */
   onNext?: (draft: WizardDraft) => Promise<boolean | void>;
 }
 
 export function WizardStepFrame({
-  localId, activeKey, title, subtitle, nextDisabled, loading, children, onNext,
+  localId,
+  activeKey,
+  title,
+  subtitle,
+  nextDisabled,
+  loading,
+  children,
+  onNext,
 }: WizardStepFrameProps) {
   const router = useRouter();
   const { draft, loading: loadingDraft, update } = useWizardDraft(localId);
@@ -50,6 +48,8 @@ export function WizardStepFrame({
       </View>
     );
   }
+
+  const nextBlocked = typeof nextDisabled === 'function' ? nextDisabled(draft) : Boolean(nextDisabled);
 
   const goBack = () => {
     const prev = prevStep(activeKey);
@@ -71,7 +71,7 @@ export function WizardStepFrame({
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
-      <SafeAreaView edges={["top"]} className="bg-brand">
+      <SafeAreaView edges={['top']} className="bg-brand">
         <WizardHeader
           title={title}
           subtitle={subtitle}
@@ -82,21 +82,15 @@ export function WizardStepFrame({
         />
       </SafeAreaView>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
           {children({ draft, update })}
         </ScrollView>
         <FloatingSaveBar
           onBack={prevStep(activeKey) ? goBack : undefined}
           onNext={goNext}
-          nextLabel={activeKey === "photos" ? "Continue to review" : "Save & continue"}
-          nextDisabled={nextDisabled}
+          nextLabel={activeKey === 'photos' ? 'Continue to review' : 'Save & continue'}
+          nextDisabled={nextBlocked}
           loading={loading}
         />
       </KeyboardAvoidingView>

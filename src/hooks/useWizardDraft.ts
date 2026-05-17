@@ -30,6 +30,10 @@ export interface WizardDraft {
   createdAt: number;
   updatedAt: number;
 
+  // Step 0 — Survey start
+  districtId?: Id<'districts'>;
+  assessmentYear?: string;
+
   // Step 1 — Property
   municipalityId?: Id<'municipalities'>;
   wardNo?: string;
@@ -51,7 +55,6 @@ export interface WizardDraft {
   pinCode?: string;
 
   // Step 4 — Taxation
-  assessmentYear?: string;
   ownershipType?: string;
   propertyType?: string;
   propertyUse?: string;
@@ -133,6 +136,7 @@ export async function persistDraft(draft: WizardDraft): Promise<void> {
 /** Hydrate a server survey into a local wizard draft (resume / edit). */
 export function surveyToDraft(survey: {
   localId: string;
+  districtId?: Id<'districts'>;
   municipalityId: Id<'municipalities'>;
   wardNo: string;
   propertyNo: string;
@@ -184,6 +188,7 @@ export function surveyToDraft(survey: {
     localId: survey.localId,
     createdAt: now,
     updatedAt: now,
+    districtId: survey.districtId,
     municipalityId: survey.municipalityId,
     wardNo: survey.wardNo,
     propertyNo: survey.propertyNo,
@@ -363,11 +368,11 @@ export function draftToUpsertArgs(d: WizardDraft) {
  */
 export function stepCompletion(d: WizardDraft) {
   return {
-    property: !!(d.municipalityId && d.wardNo && d.propertyNo),
+    start: !!(d.assessmentYear && d.districtId && d.municipalityId),
+    property: !!(d.wardNo && d.propertyNo),
     owner: !!(d.ownerName && d.respondentName && d.relationship && d.mobileNo),
     address: !!(d.houseNo && d.street && d.city && d.pinCode),
     taxation: !!(
-      d.assessmentYear &&
       d.ownershipType &&
       d.propertyType &&
       d.propertyUse &&

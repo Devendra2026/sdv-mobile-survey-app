@@ -8,7 +8,7 @@ import { Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { createNewDraft, persistDraft, surveyToDraft } from '@/hooks/useWizardDraft';
-import { WIZARD_STEPS } from '@/hooks/wizardSteps';
+import { FIRST_WIZARD_ROUTE } from '@/hooks/wizardSteps';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -43,7 +43,7 @@ export default function WizardEntry() {
       }
 
       router.replace({
-        pathname: WIZARD_STEPS[0].route as never,
+        pathname: FIRST_WIZARD_ROUTE as never,
         params: { localId },
       });
     })().catch(() => undefined);

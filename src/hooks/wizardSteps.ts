@@ -6,8 +6,8 @@
  *
  * Add a step → add a row here and a screen file. Nothing else to touch.
  */
-import type { WizardDraft } from "@/hooks/useWizardDraft";
-import { stepCompletion } from "@/hooks/useWizardDraft";
+import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { stepCompletion } from '@/hooks/useWizardDraft';
 
 export interface StepConfig {
   key: keyof ReturnType<typeof stepCompletion>;
@@ -17,17 +17,18 @@ export interface StepConfig {
 }
 
 export const WIZARD_STEPS: StepConfig[] = [
-  { key: "property",  label: "Property",  short: "P", route: "/(app)/wizard/property" },
-  { key: "owner",     label: "Owner",     short: "O", route: "/(app)/wizard/owner" },
-  { key: "address",   label: "Address",   short: "A", route: "/(app)/wizard/address" },
-  { key: "taxation",  label: "Taxation",  short: "T", route: "/(app)/wizard/taxation" },
-  { key: "floors",    label: "Floors",    short: "F", route: "/(app)/wizard/floors" },
-  { key: "services",  label: "Services",  short: "S", route: "/(app)/wizard/services" },
-  { key: "gps",       label: "GPS",       short: "G", route: "/(app)/wizard/gps" },
-  { key: "photos",    label: "Photos",    short: "C", route: "/(app)/wizard/photos" },
+  { key: 'start', label: 'Start', short: '0', route: '/(app)/wizard/start' },
+  { key: 'property', label: 'Property', short: 'P', route: '/(app)/wizard/property' },
+  { key: 'owner', label: 'Owner', short: 'O', route: '/(app)/wizard/owner' },
+  { key: 'address', label: 'Address', short: 'A', route: '/(app)/wizard/address' },
+  { key: 'taxation', label: 'Taxation', short: 'T', route: '/(app)/wizard/taxation' },
+  { key: 'floors', label: 'Floors', short: 'F', route: '/(app)/wizard/floors' },
+  { key: 'services', label: 'Services', short: 'S', route: '/(app)/wizard/services' },
+  { key: 'gps', label: 'GPS', short: 'G', route: '/(app)/wizard/gps' },
+  { key: 'photos', label: 'Photos', short: 'C', route: '/(app)/wizard/photos' },
 ];
 
-export const REVIEW_ROUTE = "/(app)/wizard/review";
+export const REVIEW_ROUTE = '/(app)/wizard/review';
 
 export function indicatorSteps(draft: WizardDraft, activeKey: string) {
   const c = stepCompletion(draft);
@@ -50,3 +51,6 @@ export function prevStep(activeKey: string): string | null {
   if (i <= 0) return null;
   return WIZARD_STEPS[i - 1].route;
 }
+
+/** First wizard screen after entry (survey start). */
+export const FIRST_WIZARD_ROUTE = WIZARD_STEPS[0].route;

@@ -3,15 +3,10 @@
  * `provisionCurrentUser` is the client fallback when webhooks are delayed or
  * missing (common in local dev before the endpoint is configured).
  */
-import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import {
-    internalMutation,
-    mutation,
-    type MutationCtx,
-    query,
-} from "./_generated/server";
-import { clientError, requireIdentity, writeAudit } from "./helpers";
+import { v } from 'convex/values';
+import type { Id } from './_generated/dataModel';
+import { internalMutation, mutation, type MutationCtx, query } from './_generated/server';
+import { clientError, requireIdentity, writeAudit } from './helpers';
 
 /** Current signed-in user's domain row, or null until provisioned. */
 export const currentUser = query({
@@ -21,8 +16,8 @@ export const currentUser = query({
     if (!ident) return null;
 
     const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", ident.subject))
+      .query('users')
+      .withIndex('by_clerkId', (q) => q.eq('clerkId', ident.subject))
       .unique();
 
     if (!user) return null;
@@ -30,13 +25,17 @@ export const currentUser = query({
     let municipality: { code: string; name: string } | null = null;
     let district: { code: string; name: string } | null = null;
 
+    if (user.districtId) {
+      const dist = await ctx.db.get(user.districtId);
+      if (dist) district = { code: dist.code, name: dist.name };
+    }
     if (user.municipalityId) {
       const muni = await ctx.db.get(user.municipalityId);
       if (muni) {
         municipality = { code: muni.code, name: muni.name };
-        const dist = await ctx.db.get(muni.districtId);
-        if (dist) {
-          district = { code: dist.code, name: dist.name };
+        if (!district) {
+          const dist = await ctx.db.get(muni.districtId);
+          if (dist) district = { code: dist.code, name: dist.name };
         }
       }
     }
@@ -62,10 +61,10 @@ async function upsertUserRecord(
   ctx: MutationCtx,
   args: UpsertUserArgs,
   opts: { fillSignupMetadataOnlyIfEmpty: boolean },
-): Promise<Id<"users">> {
+): Promise<Id<'users'>> {
   const existing = await ctx.db
-    .query("users")
-    .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+    .query('users')
+    .withIndex('by_clerkId', (q) => q.eq('clerkId', args.clerkId))
     .unique();
 
   if (existing) {
@@ -99,23 +98,23 @@ async function upsertUserRecord(
     return existing._id;
   }
 
-  const userId = await ctx.db.insert("users", {
+  const userId = await ctx.db.insert('users', {
     clerkId: args.clerkId,
     email: args.email,
     name: args.name,
     avatarUrl: args.avatarUrl,
-    role: "pending",
-    status: "pending_approval",
+    role: 'pending',
+    status: 'pending_approval',
     wardAssignments: [],
     requestedRole: args.requestedRole,
     requestedReason: args.requestedReason,
   });
 
   await writeAudit(ctx, {
-    action: "user.created",
-    entity: "user",
+    action: 'user.created',
+    entity: 'user',
     entityId: userId,
-    metadata: { clerkId: args.clerkId, email: args.email, source: "provision" },
+    metadata: { clerkId: args.clerkId, email: args.email, source: 'provision' },
   });
 
   return userId;
@@ -137,11 +136,11 @@ export const provisionCurrentUser = mutation({
   handler: async (ctx, args) => {
     const ident = await requireIdentity(ctx);
 
-    const email = (ident.email ?? args.email ?? "").trim();
+    const email = (ident.email ?? args.email ?? '').trim();
     if (!email) {
       clientError(
-        "PROFILE_INCOMPLETE",
-        "An email address is required. Finish sign-up in Clerk or add a primary email.",
+        'PROFILE_INCOMPLETE',
+        'An email address is required. Finish sign-up in Clerk or add a primary email.',
       );
     }
     const name = (ident.name ?? args.name ?? email).trim() || email;
@@ -181,20 +180,20 @@ export const softDeleteFromClerk = internalMutation({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
     const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .query('users')
+      .withIndex('by_clerkId', (q) => q.eq('clerkId', args.clerkId))
       .unique();
 
     if (!user) return;
 
     await ctx.db.patch(user._id, {
-      status: "disabled",
+      status: 'disabled',
       disabledAt: Date.now(),
     });
 
     await writeAudit(ctx, {
-      action: "user.deleted",
-      entity: "user",
+      action: 'user.deleted',
+      entity: 'user',
       entityId: user._id,
       metadata: { clerkId: args.clerkId },
     });

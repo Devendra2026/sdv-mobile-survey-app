@@ -34,6 +34,9 @@ export const qcStatus = v.union(v.literal('pending'), v.literal('approved'), v.l
 
 export const photoSlot = v.union(v.literal('front'), v.literal('inside'), v.literal('side'), v.literal('document'));
 
+/** ULB body types shown in admin setup and survey start. */
+export const ulbBodyType = v.union(v.literal('municipal_council'), v.literal('town_panchayat'));
+
 export const gpsCapture = v.object({
   latitude: v.number(),
   longitude: v.number(),
@@ -65,6 +68,8 @@ export default defineSchema({
 
     role: userRole,
     status: userStatus,
+    /** District-level scope — surveyors/supervisors with multiple ULBs in one district. */
+    districtId: v.optional(v.id('districts')),
     municipalityId: v.optional(v.id('municipalities')),
     wardAssignments: v.array(v.string()), // ward_no list ("12", "14A")
 
@@ -81,32 +86,43 @@ export default defineSchema({
     .index('by_clerkId', ['clerkId'])
     .index('by_status', ['status'])
     .index('by_role_status', ['role', 'status'])
-    .index('by_municipality', ['municipalityId']),
+    .index('by_municipality', ['municipalityId'])
+    .index('by_district', ['districtId']),
 
   /**
-   * Tenants — districts → municipalities → wards.
-   * Seeded by `convex/seed.ts` for dev; populate via admin actions in prod.
+   * Tenants — districts → municipalities (ULB) → wards.
+   * Admin manages via `tenants.*` mutations; surveyors see scoped subsets.
    */
   districts: defineTable({
     code: v.string(),
     name: v.string(),
     stateName: v.string(),
-  }).index('by_code', ['code']),
+    isActive: v.boolean(),
+  })
+    .index('by_code', ['code'])
+    .index('by_active', ['isActive']),
 
   municipalities: defineTable({
     code: v.string(),
     name: v.string(),
-    bodyType: v.string(), // nagar_panchayat | nagar_palika | mahanagar
+    bodyType: ulbBodyType,
     districtId: v.id('districts'),
+    isActive: v.boolean(),
   })
     .index('by_code', ['code'])
-    .index('by_district', ['districtId']),
+    .index('by_district', ['districtId'])
+    .index('by_district_active', ['districtId', 'isActive']),
 
   wards: defineTable({
     municipalityId: v.id('municipalities'),
+    /** Official ward number shown in dropdowns (e.g. "12", "14A"). */
     wardNo: v.string(),
+    /** Municipal ward code (e.g. AGR-W01) — unique per ULB. */
+    wardCode: v.string(),
     name: v.string(),
-  }).index('by_municipality_ward', ['municipalityId', 'wardNo']),
+  })
+    .index('by_municipality_ward', ['municipalityId', 'wardNo'])
+    .index('by_municipality_ward_code', ['municipalityId', 'wardCode']),
 
   /**
    * surveys — the main entity.
@@ -125,6 +141,8 @@ export default defineSchema({
   surveys: defineTable({
     localId: v.string(),
     surveyorId: v.id('users'),
+    /** Denormalized tenant key — Agra / Kasganj / … data is queried by district. */
+    districtId: v.id('districts'),
     municipalityId: v.id('municipalities'),
     wardNo: v.string(),
 
@@ -176,6 +194,8 @@ export default defineSchema({
     .index('by_surveyor', ['surveyorId'])
     .index('by_status', ['status'])
     .index('by_qc_status', ['qcStatus'])
+    .index('by_district', ['districtId'])
+    .index('by_district_status', ['districtId', 'status'])
     .index('by_municipality_ward', ['municipalityId', 'wardNo'])
     .index('by_municipality_status', ['municipalityId', 'status']),
 

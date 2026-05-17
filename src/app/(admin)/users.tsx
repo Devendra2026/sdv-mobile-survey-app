@@ -1,24 +1,26 @@
-import { AdminHeader } from "@/components/admin/admin-header";
-import { FilterChipItem, FilterChips } from "@/components/admin/filter-chips";
-import { Avatar, EmptyState, Spinner, Tag } from "@/components";
-import { api } from "@/convex/_generated/api";
-import { humanizeRole, timeAgo } from "@/utils/format";
-import { useQuery } from "convex/react";
-import { useMemo, useState } from "react";
-import { FlatList, RefreshControl, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Avatar, EmptyState, Spinner, Tag } from '@/components';
+import { AdminHeader } from '@/components/admin/admin-header';
+import { FilterChipItem, FilterChips } from '@/components/admin/filter-chips';
+import { api } from '@/convex/_generated/api';
+import { humanizeRole, timeAgo } from '@/utils/format';
+import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from 'convex/react';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 
 const ROLE_FILTERS = [
-  { value: undefined, label: "All" },
-  { value: "surveyor", label: "Surveyors" },
-  { value: "supervisor", label: "Supervisors" },
-  { value: "admin", label: "Admins" },
-  { value: "pending", label: "Pending" },
+  { value: undefined, label: 'All' },
+  { value: 'surveyor', label: 'Surveyors' },
+  { value: 'supervisor', label: 'Supervisors' },
+  { value: 'admin', label: 'Admins' },
+  { value: 'pending', label: 'Pending' },
 ] as const satisfies readonly FilterChipItem<string | undefined>[];
 
 export default function AdminUsersScreen() {
+  const router = useRouter();
   const [role, setRole] = useState<string | undefined>(undefined);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const users = useQuery(api.admin.listUsers, { role: role as never });
 
@@ -37,21 +39,16 @@ export default function AdminUsersScreen() {
   const roleCounts = useMemo(() => {
     if (!users) return {} as Record<string, number>;
     return {
-      surveyor: users.filter((u) => u.role === "surveyor").length,
-      supervisor: users.filter((u) => u.role === "supervisor").length,
-      admin: users.filter((u) => u.role === "admin").length,
-      pending: users.filter((u) => u.role === "pending").length,
+      surveyor: users.filter((u) => u.role === 'surveyor').length,
+      supervisor: users.filter((u) => u.role === 'supervisor').length,
+      admin: users.filter((u) => u.role === 'admin').length,
+      pending: users.filter((u) => u.role === 'pending').length,
     };
   }, [users]);
 
   const chips: FilterChipItem<string | undefined>[] = ROLE_FILTERS.map((r) => ({
     ...r,
-    count:
-      r.value === undefined
-        ? users?.length
-        : r.value
-          ? roleCounts[r.value]
-          : undefined,
+    count: r.value === undefined ? users?.length : r.value ? roleCounts[r.value] : undefined,
   }));
 
   return (
@@ -62,8 +59,8 @@ export default function AdminUsersScreen() {
         title="Users"
         subtitle={
           users === undefined
-            ? "Loading directory…"
-            : `${users.length} account${users.length === 1 ? "" : "s"} on platform`
+            ? 'Loading directory…'
+            : `${users.length} account${users.length === 1 ? '' : 's'} on platform`
         }
         footer={
           <View className="mt-3 flex-row items-center bg-page-light dark:bg-page-dark rounded-xl border border-line-default px-3 h-11">
@@ -89,13 +86,13 @@ export default function AdminUsersScreen() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="people-outline"
-          title={search ? "No matches" : "No users"}
+          title={search ? 'No matches' : 'No users'}
           message={
             search
-              ? "Try a different name or email."
+              ? 'Try a different name or email.'
               : role
-                ? "No users in this category yet."
-                : "Approved users will appear here."
+                ? 'No users in this category yet.'
+                : 'Approved users will appear here.'
           }
         />
       ) : (
@@ -115,17 +112,19 @@ export default function AdminUsersScreen() {
           }
           ItemSeparatorComponent={() => <View className="h-2.5" />}
           renderItem={({ item }) => (
-            <View className="p-3.5 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle">
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/(admin)/assign-user',
+                  params: { userId: item._id },
+                })
+              }
+              className="p-3.5 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle"
+            >
               <View className="flex-row items-center">
                 <Avatar
                   name={item.name}
-                  tone={
-                    item.status === "active"
-                      ? "brand"
-                      : item.status === "disabled"
-                        ? "danger"
-                        : "warning"
-                  }
+                  tone={item.status === 'active' ? 'brand' : item.status === 'disabled' ? 'danger' : 'warning'}
                   size="md"
                 />
                 <View className="flex-1 ml-3 min-w-0">
@@ -139,25 +138,21 @@ export default function AdminUsersScreen() {
                     {item.email}
                   </Text>
                 </View>
-                <Tag
-                  label={humanizeRole(item.role)}
-                  tone={item.role === "admin" ? "brand" : "neutral"}
-                />
+                <Tag label={humanizeRole(item.role)} tone={item.role === 'admin' ? 'brand' : 'neutral'} />
               </View>
               <View className="flex-row gap-1.5 mt-2.5 flex-wrap">
+                {item.districtName ? <Tag label={item.districtName} tone="neutral" icon="map-outline" /> : null}
                 {item.municipalityName ? (
                   <Tag label={item.municipalityName} tone="neutral" icon="business-outline" />
+                ) : (item.role === 'surveyor' || item.role === 'supervisor') && item.status === 'active' ? (
+                  <Tag label="Assign ULB" tone="warning" icon="alert-circle-outline" />
                 ) : null}
                 {item.wardAssignments.length > 0 ? (
-                  <Tag
-                    label={`Wards ${item.wardAssignments.join(", ")}`}
-                    tone="neutral"
-                    icon="map-outline"
-                  />
+                  <Tag label={`Wards ${item.wardAssignments.join(', ')}`} tone="neutral" icon="map-outline" />
                 ) : null}
-                {item.status === "active" ? (
+                {item.status === 'active' ? (
                   <Tag label="Active" tone="success" icon="checkmark-circle" />
-                ) : item.status === "disabled" ? (
+                ) : item.status === 'disabled' ? (
                   <Tag label="Disabled" tone="danger" icon="ban" />
                 ) : (
                   <Tag label="Awaiting approval" tone="warning" icon="time" />
@@ -166,7 +161,7 @@ export default function AdminUsersScreen() {
                   <Tag label={`Seen ${timeAgo(item.lastSeenAt)}`} tone="neutral" icon="eye-outline" />
                 ) : null}
               </View>
-            </View>
+            </Pressable>
           )}
         />
       )}

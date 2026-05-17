@@ -6,58 +6,56 @@
  * to audit. Components are pure (no hooks beyond local state) so they
  * can render anywhere in the tree.
  */
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { Ionicons } from '@expo/vector-icons';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  FlatList,
   Modal,
   Platform,
   Pressable,
-  PressableProps,
   ScrollView,
   Text,
   TextInput,
   TextInputProps,
   View,
   ViewProps,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+} from 'react-native';
 
 type IconName = keyof typeof Ionicons.glyphMap;
-type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "info";
+type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
 
 const TONE_BG: Record<Tone, string> = {
-  neutral: "bg-page-light dark:bg-page-dark",
-  brand: "bg-brand-soft",
-  success: "bg-success-soft",
-  warning: "bg-warning-soft",
-  danger: "bg-danger-soft",
-  info: "bg-info-soft",
+  neutral: 'bg-page-light dark:bg-page-dark',
+  brand: 'bg-brand-soft',
+  success: 'bg-success-soft',
+  warning: 'bg-warning-soft',
+  danger: 'bg-danger-soft',
+  info: 'bg-info-soft',
 };
 const TONE_FG: Record<Tone, string> = {
-  neutral: "text-ink-secondary-light dark:text-ink-secondary-dark",
-  brand: "text-brand",
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-  info: "text-info",
+  neutral: 'text-ink-secondary-light dark:text-ink-secondary-dark',
+  brand: 'text-brand',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  info: 'text-info',
 };
 const TONE_ICON_HEX: Record<Tone, string> = {
-  neutral: "#6B7280",
-  brand: "#003B8E",
-  success: "#16A34A",
-  warning: "#D97706",
-  danger: "#DC2626",
-  info: "#2563EB",
+  neutral: '#6B7280',
+  brand: '#003B8E',
+  success: '#16A34A',
+  warning: '#D97706',
+  danger: '#DC2626',
+  info: '#2563EB',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * AppButton
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
-type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface AppButtonProps {
   label: string;
@@ -75,8 +73,8 @@ interface AppButtonProps {
 export function AppButton({
   label,
   onPress,
-  variant = "primary",
-  size = "md",
+  variant = 'primary',
+  size = 'md',
   loading,
   disabled,
   fullWidth,
@@ -86,27 +84,27 @@ export function AppButton({
 }: AppButtonProps) {
   const isDisabled = disabled || loading;
   const baseHeights: Record<ButtonSize, string> = {
-    sm: "h-9 px-4",
-    md: "h-[44px] px-5",
-    lg: "h-[52px] px-6",
+    sm: 'h-9 px-4',
+    md: 'h-[44px] px-5',
+    lg: 'h-[52px] px-6',
   };
   const variantClass: Record<ButtonVariant, string> = {
-    primary: "bg-brand active:bg-brand/90",
-    outline: "border border-line-default bg-transparent active:bg-page-light dark:active:bg-page-dark",
-    ghost: "bg-transparent active:bg-page-light dark:active:bg-page-dark",
-    danger: "bg-danger active:bg-danger/90",
+    primary: 'bg-brand active:bg-brand/90',
+    outline: 'border border-line-default bg-transparent active:bg-page-light dark:active:bg-page-dark',
+    ghost: 'bg-transparent active:bg-page-light dark:active:bg-page-dark',
+    danger: 'bg-danger active:bg-danger/90',
   };
   const textColor: Record<ButtonVariant, string> = {
-    primary: "text-white",
-    outline: "text-ink-primary-light dark:text-ink-primary-dark",
-    ghost: "text-brand",
-    danger: "text-white",
+    primary: 'text-white',
+    outline: 'text-ink-primary-light dark:text-ink-primary-dark',
+    ghost: 'text-brand',
+    danger: 'text-white',
   };
   const iconColor: Record<ButtonVariant, string> = {
-    primary: "#FFFFFF",
-    outline: "#0B1220",
-    ghost: "#003B8E",
-    danger: "#FFFFFF",
+    primary: '#FFFFFF',
+    outline: '#0B1220',
+    ghost: '#003B8E',
+    danger: '#FFFFFF',
   };
 
   return (
@@ -114,21 +112,25 @@ export function AppButton({
       onPress={onPress}
       disabled={isDisabled}
       className={[
-        "flex-row items-center justify-center rounded-md",
+        'flex-row items-center justify-center rounded-md',
         baseHeights[size],
         variantClass[variant],
-        fullWidth ? "w-full" : "",
-        isDisabled ? "opacity-50" : "",
-        className ?? "",
-      ].join(" ")}
+        fullWidth ? 'w-full' : '',
+        isDisabled ? 'opacity-50' : '',
+        className ?? '',
+      ].join(' ')}
     >
       {loading ? (
         <ActivityIndicator size="small" color={iconColor[variant]} />
       ) : (
         <>
-          {iconLeft ? <Ionicons name={iconLeft} size={18} color={iconColor[variant]} style={{ marginRight: 8 }} /> : null}
+          {iconLeft ? (
+            <Ionicons name={iconLeft} size={18} color={iconColor[variant]} style={{ marginRight: 8 }} />
+          ) : null}
           <Text className={`text-[14px] font-medium ${textColor[variant]}`}>{label}</Text>
-          {iconRight ? <Ionicons name={iconRight} size={18} color={iconColor[variant]} style={{ marginLeft: 8 }} /> : null}
+          {iconRight ? (
+            <Ionicons name={iconRight} size={18} color={iconColor[variant]} style={{ marginLeft: 8 }} />
+          ) : null}
         </>
       )}
     </Pressable>
@@ -139,7 +141,7 @@ export function AppButton({
  * AppInput
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-interface AppInputProps extends Omit<TextInputProps, "style"> {
+interface AppInputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   required?: boolean;
   helperText?: string;
@@ -162,11 +164,7 @@ export function AppInput({
   ...rest
 }: AppInputProps) {
   const [focused, setFocused] = useState(false);
-  const border = errorText
-    ? "border-danger"
-    : focused
-    ? "border-brand"
-    : "border-line-default";
+  const border = errorText ? 'border-danger' : focused ? 'border-brand' : 'border-line-default';
   return (
     <View className={containerClassName}>
       {label ? (
@@ -185,15 +183,21 @@ export function AppInput({
         ) : null}
         <TextInput
           {...rest}
-          onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}
-          onBlur={(e) => { setFocused(false); rest.onBlur?.(e); }}
+          onFocus={(e) => {
+            setFocused(true);
+            rest.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            rest.onBlur?.(e);
+          }}
           placeholderTextColor="#9AA3AF"
           style={{
             flex: 1,
             paddingHorizontal: iconLeft ? 6 : 12,
-            paddingVertical: Platform.OS === "ios" ? 12 : 8,
+            paddingVertical: Platform.OS === 'ios' ? 12 : 8,
             fontSize: 15,
-            color: "#0B1220",
+            color: '#0B1220',
           }}
         />
         {iconRight ? (
@@ -205,9 +209,7 @@ export function AppInput({
       {errorText ? (
         <Text className="text-helper text-danger mt-1">{errorText}</Text>
       ) : helperText ? (
-        <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1">
-          {helperText}
-        </Text>
+        <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1">{helperText}</Text>
       ) : null}
     </View>
   );
@@ -229,21 +231,22 @@ interface AppDropdownProps {
   disabled?: boolean;
 }
 
-export function AppDropdown({ value, options, onChange, placeholder, disabled }: AppDropdownProps) {
+export function AppDropdown({ value, options = [], onChange, placeholder, disabled }: AppDropdownProps) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
+  const safeOptions = options ?? [];
+  const selected = safeOptions.find((o) => o.value === value);
   return (
     <>
       <Pressable
         onPress={() => !disabled && setOpen(true)}
-        className={`flex-row items-center rounded-md border border-line-default bg-surface-light dark:bg-surface-dark px-3 ${disabled ? "opacity-60" : ""}`}
+        className={`flex-row items-center rounded-md border border-line-default bg-surface-light dark:bg-surface-dark px-3 ${disabled ? 'opacity-60' : ''}`}
         style={{ minHeight: 48 }}
       >
         <Text
-          className={`flex-1 text-body ${selected ? "text-ink-primary-light dark:text-ink-primary-dark" : "text-ink-disabled-light"}`}
+          className={`flex-1 text-body ${selected ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
           numberOfLines={1}
         >
-          {selected ? selected.label : placeholder ?? "Select…"}
+          {selected ? selected.label : (placeholder ?? 'Select…')}
         </Text>
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
@@ -252,26 +255,29 @@ export function AppDropdown({ value, options, onChange, placeholder, disabled }:
         <Pressable onPress={() => setOpen(false)} className="flex-1 bg-black/40 justify-end">
           <Pressable
             onPress={() => undefined}
-            className="bg-sheet-light dark:bg-sheet-dark rounded-t-3xl max-h-[70%] pb-7"
+            className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle max-h-[70%] pb-7"
           >
             <View className="items-center pt-2 pb-1">
               <View className="w-9 h-1 rounded-full bg-line-default" />
             </View>
             <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark px-5 py-3">
-              {placeholder ?? "Select"}
+              {placeholder ?? 'Select'}
             </Text>
             <ScrollView className="px-2.5">
-              {options.map((o) => {
+              {safeOptions.map((o) => {
                 const active = o.value === value;
                 return (
                   <Pressable
                     key={o.value}
-                    onPress={() => { onChange(o.value); setOpen(false); }}
-                    className={`flex-row items-center justify-between rounded-md px-3 ${active ? "bg-brand-soft" : ""}`}
+                    onPress={() => {
+                      onChange(o.value);
+                      setOpen(false);
+                    }}
+                    className={`flex-row items-center justify-between rounded-md px-3 ${active ? 'bg-brand-soft' : ''}`}
                     style={{ minHeight: 48 }}
                   >
                     <Text
-                      className={`text-body ${active ? "text-brand font-medium" : "text-ink-primary-light dark:text-ink-primary-dark"}`}
+                      className={`text-body ${active ? 'text-brand font-medium' : 'text-ink-primary-light dark:text-ink-primary-dark'}`}
                     >
                       {o.label}
                     </Text>
@@ -300,10 +306,10 @@ export function AppCard({ children, padded = true, className, ...rest }: AppCard
     <View
       {...rest}
       className={[
-        "bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle",
-        padded ? "p-3.5" : "",
-        className ?? "",
-      ].join(" ")}
+        'bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle',
+        padded ? 'p-3.5' : '',
+        className ?? '',
+      ].join(' ')}
     >
       {children}
     </View>
@@ -328,7 +334,13 @@ interface ListRowProps {
   onPress?: () => void;
 }
 export function ListRow({
-  icon, iconTone = "neutral", title, subtitle, rightText, showChevron = true, onPress,
+  icon,
+  iconTone = 'neutral',
+  title,
+  subtitle,
+  rightText,
+  showChevron = true,
+  onPress,
 }: ListRowProps) {
   const content = (
     <View className="flex-row items-center px-3.5 py-3">
@@ -338,9 +350,7 @@ export function ListRow({
         </View>
       ) : null}
       <View className="flex-1 ml-3">
-        <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
-          {title}
-        </Text>
+        <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">{title}</Text>
         {subtitle ? (
           <Text className="text-caption text-ink-tertiary-light dark:text-ink-tertiary-dark mt-0.5" numberOfLines={2}>
             {subtitle}
@@ -353,7 +363,13 @@ export function ListRow({
       {showChevron && onPress ? <Ionicons name="chevron-forward" size={18} color="#9AA3AF" /> : null}
     </View>
   );
-  return onPress ? <Pressable onPress={onPress} className="active:bg-page-light dark:active:bg-page-dark">{content}</Pressable> : content;
+  return onPress ? (
+    <Pressable onPress={onPress} className="active:bg-page-light dark:active:bg-page-dark">
+      {content}
+    </Pressable>
+  ) : (
+    content
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -365,7 +381,7 @@ interface TagProps {
   tone?: Tone;
   icon?: IconName;
 }
-export function Tag({ label, tone = "neutral", icon }: TagProps) {
+export function Tag({ label, tone = 'neutral', icon }: TagProps) {
   return (
     <View className={`flex-row items-center px-2 py-1 rounded-full self-start ${TONE_BG[tone]}`}>
       {icon ? <Ionicons name={icon} size={12} color={TONE_ICON_HEX[tone]} style={{ marginRight: 4 }} /> : null}
@@ -383,7 +399,7 @@ interface BannerProps {
 }
 export function Banner({ tone, title, message, icon, className }: BannerProps) {
   return (
-    <View className={`rounded-lg p-3 ${TONE_BG[tone]} ${className ?? ""}`}>
+    <View className={`rounded-lg p-3 ${TONE_BG[tone]} ${className ?? ''}`}>
       <View className="flex-row items-start">
         {icon ? <Ionicons name={icon} size={18} color={TONE_ICON_HEX[tone]} style={{ marginRight: 8 }} /> : null}
         <View className="flex-1">
@@ -398,26 +414,29 @@ export function Banner({ tone, title, message, icon, className }: BannerProps) {
 interface AvatarProps {
   name: string;
   tone?: Tone;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   url?: string;
 }
-export function Avatar({ name, tone = "brand", size = "md", url }: AvatarProps) {
+export function Avatar({ name, tone = 'brand', size = 'md', url }: AvatarProps) {
   const dims = { sm: 28, md: 36, lg: 48, xl: 64 }[size];
   const fs = { sm: 11, md: 13, lg: 16, xl: 22 }[size];
-  const initials = name.split(" ").map((s) => s[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  const initials = name
+    .split(' ')
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
   return (
-    <View
-      className={`rounded-full items-center justify-center ${TONE_BG[tone]}`}
-      style={{ width: dims, height: dims }}
-    >
+    <View className={`rounded-full items-center justify-center ${TONE_BG[tone]}`} style={{ width: dims, height: dims }}>
       <Text className={`font-medium ${TONE_FG[tone]}`} style={{ fontSize: fs }}>
-        {initials || "?"}
+        {initials || '?'}
       </Text>
     </View>
   );
 }
 
-export function PulseDot({ tone = "success" }: { tone?: Tone }) {
+export function PulseDot({ tone = 'success' }: { tone?: Tone }) {
   const scale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -434,9 +453,13 @@ export function PulseDot({ tone = "success" }: { tone?: Tone }) {
     <View className="w-2 h-2 items-center justify-center">
       <Animated.View
         style={{
-          position: "absolute",
-          width: 8, height: 8, borderRadius: 4,
-          backgroundColor: color, opacity: 0.4, transform: [{ scale }],
+          position: 'absolute',
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: color,
+          opacity: 0.4,
+          transform: [{ scale }],
         }}
       />
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
@@ -489,25 +512,22 @@ interface ToastProps {
   onHide: () => void;
   duration?: number;
 }
-export function Toast({ visible, title, message, tone = "success", onHide, duration = 2400 }: ToastProps) {
+export function Toast({ visible, title, message, tone = 'success', onHide, duration = 2400 }: ToastProps) {
   const translateY = useRef(new Animated.Value(80)).current;
   useEffect(() => {
     if (!visible) return;
     Animated.spring(translateY, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
     const t = setTimeout(() => {
-      Animated.timing(translateY, { toValue: 80, duration: 200, useNativeDriver: true })
-        .start(() => onHide());
+      Animated.timing(translateY, { toValue: 80, duration: 200, useNativeDriver: true }).start(() => onHide());
     }, duration);
     return () => clearTimeout(t);
   }, [visible, translateY, duration, onHide]);
   if (!visible) return null;
   return (
-    <Animated.View
-      style={{ position: "absolute", bottom: 28, left: 14, right: 14, transform: [{ translateY }] }}
-    >
+    <Animated.View style={{ position: 'absolute', bottom: 28, left: 14, right: 14, transform: [{ translateY }] }}>
       <View className={`rounded-md p-3 flex-row items-start ${TONE_BG[tone]}`}>
         <Ionicons
-          name={tone === "success" ? "checkmark-circle" : tone === "danger" ? "alert-circle" : "information-circle"}
+          name={tone === 'success' ? 'checkmark-circle' : tone === 'danger' ? 'alert-circle' : 'information-circle'}
           size={18}
           color={TONE_ICON_HEX[tone]}
         />
@@ -527,39 +547,35 @@ interface KpiCardProps {
   icon?: IconName;
   onPress?: () => void;
 }
-export function KpiCard({ label, value, tone = "brand", icon, onPress }: KpiCardProps) {
+export function KpiCard({ label, value, tone = 'brand', icon, onPress }: KpiCardProps) {
   const C = onPress ? Pressable : View;
   return (
     <C onPress={onPress} className="flex-1">
       <View className="bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle p-3">
         <View className="flex-row items-center justify-between">
-          <Text className="text-label uppercase tracking-wider font-medium text-ink-tertiary-light">
-            {label}
-          </Text>
+          <Text className="text-label uppercase tracking-wider font-medium text-ink-tertiary-light">{label}</Text>
           {icon ? (
             <View className={`w-7 h-7 rounded-full items-center justify-center ${TONE_BG[tone]}`}>
               <Ionicons name={icon} size={14} color={TONE_ICON_HEX[tone]} />
             </View>
           ) : null}
         </View>
-        <Text className="text-h1 font-medium text-ink-primary-light dark:text-ink-primary-dark mt-1.5">
-          {value}
-        </Text>
+        <Text className="text-h1 font-medium text-ink-primary-light dark:text-ink-primary-dark mt-1.5">{value}</Text>
       </View>
     </C>
   );
 }
 
 interface StatusBadgeProps {
-  status: "draft" | "submitted" | "approved" | "rejected" | "pending";
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'pending';
 }
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const map: Record<StatusBadgeProps["status"], { tone: Tone; label: string; icon: IconName }> = {
-    draft: { tone: "neutral", label: "Draft", icon: "create-outline" },
-    submitted: { tone: "info", label: "Submitted", icon: "cloud-upload-outline" },
-    approved: { tone: "success", label: "Approved", icon: "checkmark-circle" },
-    rejected: { tone: "danger", label: "Rejected", icon: "close-circle" },
-    pending: { tone: "warning", label: "Pending", icon: "time-outline" },
+  const map: Record<StatusBadgeProps['status'], { tone: Tone; label: string; icon: IconName }> = {
+    draft: { tone: 'neutral', label: 'Draft', icon: 'create-outline' },
+    submitted: { tone: 'info', label: 'Submitted', icon: 'cloud-upload-outline' },
+    approved: { tone: 'success', label: 'Approved', icon: 'checkmark-circle' },
+    rejected: { tone: 'danger', label: 'Rejected', icon: 'close-circle' },
+    pending: { tone: 'warning', label: 'Pending', icon: 'time-outline' },
   };
   const m = map[status];
   return <Tag label={m.label} tone={m.tone} icon={m.icon} />;
@@ -588,15 +604,17 @@ export function RadioGroup<T extends string>({ items, value, onChange }: RadioGr
           <Pressable
             key={it.value}
             onPress={() => onChange(it.value)}
-            className={`flex-row items-start p-3 rounded-md border ${active ? "border-brand bg-brand-soft" : "border-line-default bg-surface-light dark:bg-surface-dark"} ${idx > 0 ? "mt-2" : ""}`}
+            className={`flex-row items-start p-3 rounded-md border ${active ? 'border-brand bg-brand-soft' : 'border-line-default bg-surface-light dark:bg-surface-dark'} ${idx > 0 ? 'mt-2' : ''}`}
           >
             <View
-              className={`w-5 h-5 rounded-full border-2 items-center justify-center mt-0.5 ${active ? "border-brand" : "border-line-default"}`}
+              className={`w-5 h-5 rounded-full border-2 items-center justify-center mt-0.5 ${active ? 'border-brand' : 'border-line-default'}`}
             >
               {active ? <View className="w-2.5 h-2.5 rounded-full bg-brand" /> : null}
             </View>
             <View className="flex-1 ml-3">
-              <Text className={`text-[14px] font-medium ${active ? "text-brand" : "text-ink-primary-light dark:text-ink-primary-dark"}`}>
+              <Text
+                className={`text-[14px] font-medium ${active ? 'text-brand' : 'text-ink-primary-light dark:text-ink-primary-dark'}`}
+              >
                 {it.label}
               </Text>
               {it.helper ? (
@@ -620,8 +638,8 @@ interface SurveyCardProps {
   propertyNo: string;
   ownerName: string;
   wardNo: string;
-  status: StatusBadgeProps["status"];
-  qcStatus?: "pending" | "approved" | "rejected";
+  status: StatusBadgeProps['status'];
+  qcStatus?: 'pending' | 'approved' | 'rejected';
   updatedAt: number;
   onPress: () => void;
 }
@@ -645,7 +663,7 @@ export function SurveyCard({ propertyNo, ownerName, wardNo, status, qcStatus, up
           <View className="flex-row gap-1.5 mt-2 items-center">
             <Tag label={`Ward ${wardNo}`} tone="neutral" icon="map-outline" />
             <StatusBadge status={status} />
-            {qcStatus === "rejected" ? <Tag label="QC: rejected" tone="danger" icon="alert" /> : null}
+            {qcStatus === 'rejected' ? <Tag label="QC: rejected" tone="danger" icon="alert" /> : null}
           </View>
         </View>
         <Ionicons name="chevron-forward" size={18} color="#9AA3AF" />
@@ -661,7 +679,7 @@ export function SurveyCard({ propertyNo, ownerName, wardNo, status, qcStatus, up
 export interface StepIndicatorStep {
   key: string;
   label: string;
-  short: string;          // 1–2 char label for the dot
+  short: string; // 1–2 char label for the dot
   completed: boolean;
 }
 interface StepIndicatorProps {
@@ -678,12 +696,8 @@ export function StepIndicator({ steps, activeKey, onSelect }: StepIndicatorProps
     >
       {steps.map((s, i) => {
         const active = s.key === activeKey;
-        const bg = active
-          ? "bg-brand"
-          : s.completed
-          ? "bg-success"
-          : "bg-line-subtle";
-        const fg = active || s.completed ? "text-white" : "text-ink-secondary-light";
+        const bg = active ? 'bg-brand' : s.completed ? 'bg-success' : 'bg-line-subtle';
+        const fg = active || s.completed ? 'text-white' : 'text-ink-secondary-light';
         return (
           <Pressable
             key={s.key}
@@ -748,19 +762,17 @@ interface FloatingSaveBarProps {
   loading?: boolean;
 }
 export function FloatingSaveBar({
-  onBack, onNext, nextLabel = "Save & continue", nextDisabled, loading,
+  onBack,
+  onNext,
+  nextLabel = 'Save & continue',
+  nextDisabled,
+  loading,
 }: FloatingSaveBarProps) {
   return (
     <View className="border-t border-line-subtle bg-surface-light dark:bg-surface-dark px-3.5 pt-2.5 pb-5">
       <View className="flex-row gap-2">
         {onBack ? (
-          <AppButton
-            label="Back"
-            variant="outline"
-            iconLeft="chevron-back"
-            onPress={onBack}
-            className="flex-1"
-          />
+          <AppButton label="Back" variant="outline" iconLeft="chevron-back" onPress={onBack} className="flex-1" />
         ) : null}
         <AppButton
           label={nextLabel}
@@ -768,7 +780,7 @@ export function FloatingSaveBar({
           iconRight="arrow-forward"
           disabled={nextDisabled}
           loading={loading}
-          className={onBack ? "flex-[1.5]" : "flex-1"}
+          className={onBack ? 'flex-[1.5]' : 'flex-1'}
         />
       </View>
     </View>
@@ -798,24 +810,14 @@ export function NumberStepper({ value, onChange, min = 0, max = 99, step = 1, la
         </Text>
       ) : null}
       <View className="flex-row items-center bg-surface-light dark:bg-surface-dark rounded-md border border-line-default">
-        <Pressable
-          onPress={dec}
-          disabled={value <= min}
-          className="w-12 h-12 items-center justify-center"
-        >
-          <Ionicons name="remove" size={20} color={value <= min ? "#9AA3AF" : "#003B8E"} />
+        <Pressable onPress={dec} disabled={value <= min} className="w-12 h-12 items-center justify-center">
+          <Ionicons name="remove" size={20} color={value <= min ? '#9AA3AF' : '#003B8E'} />
         </Pressable>
         <View className="flex-1 items-center">
-          <Text className="text-h2 font-medium text-ink-primary-light dark:text-ink-primary-dark">
-            {value}
-          </Text>
+          <Text className="text-h2 font-medium text-ink-primary-light dark:text-ink-primary-dark">{value}</Text>
         </View>
-        <Pressable
-          onPress={inc}
-          disabled={value >= max}
-          className="w-12 h-12 items-center justify-center"
-        >
-          <Ionicons name="add" size={20} color={value >= max ? "#9AA3AF" : "#003B8E"} />
+        <Pressable onPress={inc} disabled={value >= max} className="w-12 h-12 items-center justify-center">
+          <Ionicons name="add" size={20} color={value >= max ? '#9AA3AF' : '#003B8E'} />
         </Pressable>
       </View>
     </View>
@@ -839,9 +841,11 @@ export function ChipSelector({ value, options, onChange, scroll = true }: ChipSe
       <Pressable
         key={o.value}
         onPress={() => onChange(o.value)}
-        className={`px-3 py-1.5 rounded-full border ${active ? "bg-brand border-brand" : "bg-surface-light dark:bg-surface-dark border-line-default"}`}
+        className={`px-3 py-1.5 rounded-full border ${active ? 'bg-brand border-brand' : 'bg-surface-light dark:bg-surface-dark border-line-default'}`}
       >
-        <Text className={`text-[12px] font-medium ${active ? "text-white" : "text-ink-secondary-light dark:text-ink-secondary-dark"}`}>
+        <Text
+          className={`text-[12px] font-medium ${active ? 'text-white' : 'text-ink-secondary-light dark:text-ink-secondary-dark'}`}
+        >
           {o.label}
         </Text>
       </Pressable>
@@ -862,25 +866,36 @@ export function ChipSelector({ value, options, onChange, scroll = true }: ChipSe
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 interface GPSStatusProps {
-  state: "idle" | "locating" | "captured" | "error";
+  state: 'idle' | 'locating' | 'captured' | 'error';
   accuracy?: number;
 }
 export function GPSStatus({ state, accuracy }: GPSStatusProps) {
   const tone: Tone =
-    state === "captured" ? (accuracy && accuracy > 30 ? "warning" : "success") :
-    state === "error" ? "danger" :
-    state === "locating" ? "brand" :
-    "neutral";
+    state === 'captured'
+      ? accuracy && accuracy > 30
+        ? 'warning'
+        : 'success'
+      : state === 'error'
+        ? 'danger'
+        : state === 'locating'
+          ? 'brand'
+          : 'neutral';
   const label =
-    state === "locating" ? "Locating…" :
-    state === "captured" ? `±${Math.round(accuracy ?? 0)} m accuracy` :
-    state === "error" ? "GPS unavailable" :
-    "GPS not captured";
+    state === 'locating'
+      ? 'Locating…'
+      : state === 'captured'
+        ? `±${Math.round(accuracy ?? 0)} m accuracy`
+        : state === 'error'
+          ? 'GPS unavailable'
+          : 'GPS not captured';
   const icon: IconName =
-    state === "captured" ? "checkmark-circle" :
-    state === "error" ? "alert-circle" :
-    state === "locating" ? "compass" :
-    "location-outline";
+    state === 'captured'
+      ? 'checkmark-circle'
+      : state === 'error'
+        ? 'alert-circle'
+        : state === 'locating'
+          ? 'compass'
+          : 'location-outline';
   return <Tag label={label} tone={tone} icon={icon} />;
 }
 
@@ -889,7 +904,7 @@ export function GPSStatus({ state, accuracy }: GPSStatusProps) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 interface PhotoSlotProps {
-  slot: "front" | "inside" | "side" | "document";
+  slot: 'front' | 'inside' | 'side' | 'document';
   required?: boolean;
   thumbnailUrl?: string;
   onPick: () => void;
@@ -897,11 +912,11 @@ interface PhotoSlotProps {
   uploading?: boolean;
 }
 export function PhotoSlot({ slot, required, thumbnailUrl, onPick, onRemove, uploading }: PhotoSlotProps) {
-  const titles: Record<PhotoSlotProps["slot"], string> = {
-    front: "Front view",
-    inside: "Inside view",
-    side: "Side view",
-    document: "Document",
+  const titles: Record<PhotoSlotProps['slot'], string> = {
+    front: 'Front view',
+    inside: 'Inside view',
+    side: 'Side view',
+    document: 'Document',
   };
   const has = !!thumbnailUrl;
   return (

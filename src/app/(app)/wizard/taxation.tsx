@@ -5,12 +5,12 @@
  * `surveys.upsert`, but catching it here gives the surveyor instant feedback
  * before they leave the screen.
  */
-import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from 'convex/react';
 import { AppCard, AppDropdown, AppInput, SectionLabel, Spinner } from '@/components';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { api } from '@/convex/_generated/api';
+import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import { useQuery } from 'convex/react';
+import { useLocalSearchParams } from 'expo-router';
+import { View } from 'react-native';
 
 export default function StepTaxation() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
@@ -26,22 +26,14 @@ export default function StepTaxation() {
 
         return (
           <>
-            <SectionLabel>Year & ownership</SectionLabel>
+            <SectionLabel>Ownership</SectionLabel>
             <AppCard padded className="mb-3">
-              <View style={{ gap: 12 }}>
-                <AppDropdown
-                  placeholder="Assessment year"
-                  value={draft.assessmentYear ?? ''}
-                  options={masters.assessmentYears}
-                  onChange={(v) => update({ assessmentYear: v })}
-                />
-                <AppDropdown
-                  placeholder="Ownership type"
-                  value={draft.ownershipType ?? ''}
-                  options={masters.ownershipTypes}
-                  onChange={(v) => update({ ownershipType: v })}
-                />
-              </View>
+              <AppDropdown
+                placeholder="Ownership type"
+                value={draft.ownershipType ?? ''}
+                options={masters.ownershipTypes}
+                onChange={(v) => update({ ownershipType: v })}
+              />
             </AppCard>
 
             <SectionLabel>Property classification</SectionLabel>

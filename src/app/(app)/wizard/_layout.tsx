@@ -14,6 +14,7 @@ export default function WizardLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="start" />
       <Stack.Screen name="property" />
       <Stack.Screen name="owner" />
       <Stack.Screen name="address" />
