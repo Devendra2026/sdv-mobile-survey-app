@@ -28,8 +28,8 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { Slot, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { useEffect, useMemo } from "react";
+import { ActivityIndicator, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../../global.css";
@@ -41,6 +41,33 @@ const convex = new ConvexReactClient(env.convexUrl, {
 });
 
 /* ────────────────────────── Auth gate ────────────────────────── */
+
+function AuthLoadingView({ message }: { message: string }) {
+  return (
+    <View className="flex-1 items-center justify-center bg-page-light px-6 dark:bg-page-dark">
+      <View className="mb-6 h-20 w-20 items-center justify-center rounded-xl bg-brand-soft dark:bg-brand/20">
+        <Text className="text-[22px] font-medium text-brand">SDV</Text>
+      </View>
+      <ActivityIndicator color="#003B8E" size="large" />
+      <Text className="mt-4 text-center text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">
+        {message}
+      </Text>
+    </View>
+  );
+}
+
+function signedInLoadingMessage(
+  convexAuthLoading: boolean,
+  convexReady: boolean,
+  me: unknown,
+  needsSync: boolean,
+  syncing: boolean,
+): string {
+  if (convexAuthLoading || !convexReady) return "Securing your session…";
+  if (me === undefined) return "Loading your profile…";
+  if (needsSync && syncing) return "Setting up your account…";
+  return "Please wait…";
+}
 
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -64,7 +91,7 @@ function AuthGate() {
 
     if (!convexReady) return;
 
-    if (me === undefined || needsSync || syncing) return;
+    if (me === undefined) return;
 
     if (me === null) {
       if (segments[0] !== "(auth)" || segments[1] !== "setup") {
@@ -98,30 +125,34 @@ function AuthGate() {
     router,
   ]);
 
+  const loadingMessage = useMemo(
+    () =>
+      signedInLoadingMessage(convexAuthLoading, convexReady, me, needsSync, syncing),
+    [convexAuthLoading, convexReady, me, needsSync, syncing],
+  );
+
   if (!isLoaded) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color="#003B8E" size="large" />
-      </View>
-    );
+    return <AuthLoadingView message="Starting Survey field operations…" />;
   }
 
   if (isSignedIn && convexAuthFailed) {
     return <ConvexAuthError />;
   }
 
-  if (
+  const showSignedInLoading =
     isSignedIn &&
-    (convexAuthLoading || !convexReady || me === undefined || (needsSync && syncing))
-  ) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color="#003B8E" size="large" />
-      </View>
-    );
-  }
+    (convexAuthLoading || !convexReady || me === undefined || (needsSync && syncing));
 
-  return <Slot />;
+  return (
+    <View className="flex-1">
+      <Slot />
+      {showSignedInLoading ? (
+        <View className="absolute inset-0 z-10" pointerEvents="auto">
+          <AuthLoadingView message={loadingMessage} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 /* ────────────────────────── Root ────────────────────────── */
@@ -154,12 +185,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F5F7FA",
-  },
-});

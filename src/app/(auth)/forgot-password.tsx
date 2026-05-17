@@ -76,9 +76,7 @@ export default function ForgotPasswordScreen() {
         return;
       }
 
-      const { error: finalizeError } = await signIn.finalize({
-        navigate: () => router.replace("/(auth)/setup"),
-      });
+      const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) {
         setError(clerkErrorMessage(finalizeError));
       }

@@ -7,7 +7,7 @@
 import { AppButton, AppInput } from "@/components";
 import { clerkErrorMessage } from "@/components/auth/field-error";
 import { useSignIn } from "@clerk/expo";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -28,7 +28,6 @@ function incompleteSignInMessage(status: string): string {
 
 export default function SignInScreen() {
   const { signIn, fetchStatus } = useSignIn();
-  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,9 +57,7 @@ export default function SignInScreen() {
         return;
       }
 
-      const { error: finalizeError } = await signIn.finalize({
-        navigate: () => router.replace("/(auth)/setup"),
-      });
+      const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) {
         setError(clerkErrorMessage(finalizeError));
       }

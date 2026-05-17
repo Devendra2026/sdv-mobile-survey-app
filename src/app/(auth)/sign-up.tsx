@@ -68,9 +68,7 @@ export default function SignUpScreen() {
       }
 
       if (signUp.status === "complete") {
-        const { error: finalizeError } = await signUp.finalize({
-          navigate: () => router.replace("/(auth)/setup"),
-        });
+        const { error: finalizeError } = await signUp.finalize();
         if (finalizeError) setError(clerkErrorMessage(finalizeError));
         return;
       }
@@ -103,9 +101,7 @@ export default function SignUpScreen() {
         return;
       }
 
-      const { error: finalizeError } = await signUp.finalize({
-        navigate: () => router.replace("/(auth)/setup"),
-      });
+      const { error: finalizeError } = await signUp.finalize();
       if (finalizeError) {
         setError(clerkErrorMessage(finalizeError));
       }
