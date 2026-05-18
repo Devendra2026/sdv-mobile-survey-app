@@ -14,6 +14,7 @@ import type * as areaMasters from "../areaMasters.js";
 import type * as env from "../env.js";
 import type * as errors from "../errors.js";
 import type * as floors from "../floors.js";
+import type * as gpsAccuracy from "../gpsAccuracy.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
 import type * as masters from "../masters.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   env: typeof env;
   errors: typeof errors;
   floors: typeof floors;
+  gpsAccuracy: typeof gpsAccuracy;
   helpers: typeof helpers;
   http: typeof http;
   masters: typeof masters;

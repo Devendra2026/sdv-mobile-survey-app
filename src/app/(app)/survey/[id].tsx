@@ -5,8 +5,10 @@
  * Supervisor/admin: can leave QC remarks and approve/reject.
  */
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, Spinner, StatusBadge, Tag, Toast } from '@/components';
+import { SurveyPhotoGrid } from '@/components/survey/survey-photo-grid';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { gpsAccuracyTagLabel, gpsAccuracyTier } from '@/utils/captureGps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
@@ -297,23 +299,60 @@ export default function SurveyDetailScreen() {
           })()}
         </AppCard>
 
+        <SectionLabel>GPS</SectionLabel>
+        <AppCard padded={false} className="mb-3">
+          {survey.gps ? (
+            <>
+              <ListRow
+                icon="location-outline"
+                iconTone="brand"
+                title="Coordinates"
+                subtitle={`${survey.gps.latitude.toFixed(6)}, ${survey.gps.longitude.toFixed(6)}`}
+                showChevron={false}
+              />
+              <View className="h-px bg-line-subtle" />
+              <ListRow
+                icon="locate-outline"
+                iconTone={gpsAccuracyTier(survey.gps.accuracyMeters) === 'poor' ? 'danger' : 'neutral'}
+                title="Accuracy"
+                subtitle={gpsAccuracyTagLabel(survey.gps.accuracyMeters)}
+                showChevron={false}
+              />
+              {survey.gps.isMockLocation ? (
+                <>
+                  <View className="h-px bg-line-subtle" />
+                  <ListRow
+                    icon="warning-outline"
+                    iconTone="danger"
+                    title="Location source"
+                    subtitle="Mock / simulated GPS detected"
+                    showChevron={false}
+                  />
+                </>
+              ) : null}
+            </>
+          ) : (
+            <View className="p-4 items-center">
+              <Text className="text-helper text-ink-tertiary-light">No GPS captured</Text>
+            </View>
+          )}
+        </AppCard>
+
         <SectionLabel>Photos ({survey.photos.length})</SectionLabel>
         <AppCard padded className="mb-3">
           {survey.photos.length === 0 ? (
             <Text className="text-helper text-ink-tertiary-light text-center py-2">
-              No photos yet. Front + inside photos are required to submit.
+              No photos yet. Front and side view photos are required to submit.
             </Text>
           ) : (
-            <View className="flex-row gap-1.5 flex-wrap">
-              {survey.photos.map((p) => (
-                <View key={p._id} className="items-center">
-                  <View className="w-20 h-20 rounded-md bg-page-light dark:bg-page-dark items-center justify-center border border-line-subtle">
-                    <Ionicons name="image-outline" size={28} color="#003B8E" />
-                  </View>
-                  <Text className="text-caption text-ink-tertiary-light mt-1">{humanizeRole(p.slot)}</Text>
-                </View>
-              ))}
-            </View>
+            <SurveyPhotoGrid
+              canRetake={canContinueWizard}
+              photos={survey.photos.map((p) => ({
+                _id: p._id,
+                slot: p.slot,
+                url: p.url ?? null,
+              }))}
+            />
           )}
         </AppCard>
 

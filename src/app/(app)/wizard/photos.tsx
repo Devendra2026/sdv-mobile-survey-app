@@ -1,41 +1,26 @@
 /**
- * Step 8 — Photos.
- *
- * Real workflow:
- *   1. expo-image-picker → camera or library
- *   2. expo-image-manipulator → resize to 1280px max + JPEG q=0.7 (≈ 150–250 KB)
- *   3. fetch → blob
- *   4. `photos.generateUploadUrl` → POST blob → storageId
- *   5. write storageId into the draft's `photos[]`
- *
- * Front + inside are required; side + document are optional.
+ * Step 8 — Photos (front + side required).
  */
-import { Banner, PhotoSlot, SectionLabel, Toast } from '@/components';
-import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
+import { AppCard, Banner, PhotoSlot, Tag, Toast } from '@/components';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
-import { useMutation } from 'convex/react';
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
+import { useWizardPhotoCapture } from '@/hooks/useWizardPhotoCapture';
+import { REQUIRED_SURVEY_PHOTO_SLOTS, type SurveyPhotoSlot } from '@/utils/surveyPhotos';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Text, View } from 'react-native';
 
-type Slot = 'front' | 'inside' | 'side' | 'document';
-const SLOTS: { key: Slot; required: boolean }[] = [
-  { key: 'front', required: true },
-  { key: 'inside', required: true },
-  { key: 'side', required: false },
-  { key: 'document', required: false },
-];
+const SLOT_SUBTITLE: Record<SurveyPhotoSlot, string> = {
+  front: 'Full front of the building from the street',
+  side: 'Side elevation along the property boundary',
+};
 
 export default function StepPhotos() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
   if (!localId) return null;
 
   return (
-    <WizardStepFrame localId={localId} activeKey="photos" title="Photos" subtitle="Front + inside required">
+    <WizardStepFrame localId={localId} activeKey="photos" title="Photos" subtitle="Front + side view required">
       {({ draft, update }) => <PhotoFields draft={draft} update={update} />}
     </WizardStepFrame>
   );
@@ -48,121 +33,80 @@ function PhotoFields({
   draft: WizardDraft;
   update: (patch: Partial<WizardDraft>) => Promise<void>;
 }) {
-  const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
-  const [uploadingSlot, setUploadingSlot] = useState<Slot | null>(null);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
-  const photoBySlot = new Map((draft.photos ?? []).map((p) => [p.slot, p]));
+  const { photoBySlot, previewBySlot, uploadingSlot, capturedCount, requiredCount, capture, confirmRemove } =
+    useWizardPhotoCapture({
+      draft,
+      update,
+      serverSurveyId: draft.serverSurveyId,
+    });
 
-  const capture = useCallback(
-    async (slot: Slot) => {
-      try {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Camera permission needed', 'Allow camera access in settings to capture survey photos.');
-          return;
-        }
-        const picked = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.9,
-          exif: false,
-        });
-        if (picked.canceled || picked.assets.length === 0) return;
-        const asset = picked.assets[0];
-        setUploadingSlot(slot);
+  const allCaptured = capturedCount === requiredCount;
 
-        const compressed = await ImageManipulator.manipulateAsync(asset.uri, [{ resize: { width: 1280 } }], {
-          compress: 0.7,
-          format: ImageManipulator.SaveFormat.JPEG,
-        });
-
-        const uploadUrl = await generateUploadUrl({});
-        const blob = await (await fetch(compressed.uri)).blob();
-        const res = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: blob,
-        });
-        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-        const { storageId } = (await res.json()) as { storageId: Id<'_storage'> };
-
-        const next = (draft.photos ?? []).filter((p) => p.slot !== slot);
-        next.push({
-          slot,
-          storageId,
-          sizeKb: Math.round(blob.size / 1024),
-          width: compressed.width,
-          height: compressed.height,
-          capturedAt: Date.now(),
-        });
-        await update({ photos: next });
-        setToast({ title: `${slot} photo uploaded`, tone: 'success' });
-      } catch (e) {
-        setToast({
-          title: e instanceof Error ? e.message : 'Upload failed',
-          tone: 'danger',
-        });
-      } finally {
-        setUploadingSlot(null);
-      }
-    },
-    [draft.photos, update, generateUploadUrl],
-  );
-
-  const removeSlot = (slot: Slot) => {
-    Alert.alert('Remove this photo?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await update({ photos: (draft.photos ?? []).filter((p) => p.slot !== slot) });
-        },
-      },
-    ]);
+  const onCapture = async (slot: SurveyPhotoSlot) => {
+    const result = await capture(slot);
+    if (result?.ok) {
+      setToast({ title: `${result.label} saved`, tone: 'success' });
+    } else if (result && !result.ok) {
+      setToast({ title: result.message, tone: 'danger' });
+    }
   };
 
   return (
     <>
+      <AppCard padded className="mb-3">
+        <View className="flex-row items-center justify-between mb-2">
+          <Text className="text-[14px] font-semibold text-ink-primary-light dark:text-ink-primary-dark">Progress</Text>
+          <Tag
+            label={`${capturedCount} / ${requiredCount}`}
+            tone={allCaptured ? 'success' : 'brand'}
+            icon={allCaptured ? 'checkmark-circle' : 'camera-outline'}
+          />
+        </View>
+        <View className="h-2 rounded-full bg-page-light dark:bg-page-dark overflow-hidden">
+          <View
+            className="h-full rounded-full bg-brand"
+            style={{ width: `${(capturedCount / requiredCount) * 100}%` }}
+          />
+        </View>
+        <Text className="text-caption text-ink-tertiary-light mt-2">
+          {allCaptured
+            ? 'Both exterior photos captured — continue to review to verify them.'
+            : 'Capture both exterior views before submitting the survey.'}
+        </Text>
+      </AppCard>
+
       <Banner
         tone="info"
-        title="Photo guidelines"
-        message="Capture from outside (front view) and from inside the property (inside view). Side and document photos are optional."
-        icon="information-circle-outline"
+        title="Exterior photos only"
+        message="Take front and side views from outside the property. You can check and retake on the review screen."
+        icon="sunny-outline"
         className="mb-3"
       />
 
-      <SectionLabel>Required</SectionLabel>
-      <View style={{ gap: 10 }} className="mb-3">
-        {SLOTS.filter((s) => s.required).map((s) => (
-          <PhotoSlot
-            key={s.key}
-            slot={s.key}
-            required
-            thumbnailUrl={photoBySlot.has(s.key) ? '✓' : undefined}
-            uploading={uploadingSlot === s.key}
-            onPick={() => capture(s.key)}
-            onRemove={() => removeSlot(s.key)}
-          />
-        ))}
+      <View className="flex-row flex-wrap gap-3 mb-3">
+        {REQUIRED_SURVEY_PHOTO_SLOTS.map((slot, i) => {
+          const captured = photoBySlot.has(slot);
+          return (
+            <PhotoSlot
+              key={slot}
+              slot={slot}
+              required
+              step={i + 1}
+              subtitle={SLOT_SUBTITLE[slot]}
+              previewUri={previewBySlot[slot]}
+              captured={captured}
+              uploading={uploadingSlot === slot}
+              onPick={() => void onCapture(slot)}
+              onRemove={captured ? () => confirmRemove(slot) : undefined}
+            />
+          );
+        })}
       </View>
 
-      <SectionLabel>Optional</SectionLabel>
-      <View style={{ gap: 10 }}>
-        {SLOTS.filter((s) => !s.required).map((s) => (
-          <PhotoSlot
-            key={s.key}
-            slot={s.key}
-            thumbnailUrl={photoBySlot.has(s.key) ? '✓' : undefined}
-            uploading={uploadingSlot === s.key}
-            onPick={() => capture(s.key)}
-            onRemove={() => removeSlot(s.key)}
-          />
-        ))}
-      </View>
-
-      <Text className="text-caption text-ink-tertiary-light text-center mt-4">
-        Photos upload immediately. Compressed to ~250 KB for sync.
+      <Text className="text-caption text-ink-tertiary-light text-center">
+        Photos upload immediately · compressed to ~250 KB for sync
       </Text>
 
       {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}

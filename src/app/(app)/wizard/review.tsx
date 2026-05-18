@@ -15,7 +15,9 @@
  * fix and retry without losing data.
  */
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, Spinner, StepIndicator, Tag, Toast } from '@/components';
+import { ReviewPhotosSection } from '@/components/wizard/review-photos-section';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import {
   clearDraft,
@@ -25,6 +27,7 @@ import {
   useWizardDraft,
 } from '@/hooks/useWizardDraft';
 import { indicatorSteps, STEP_BEFORE_REVIEW_ROUTE, WIZARD_STEPS } from '@/hooks/wizardSteps';
+import { gpsAccuracyTagLabel, gpsAccuracyTagTone } from '@/utils/captureGps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
@@ -39,7 +42,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function ReviewScreen() {
   const router = useRouter();
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const { draft, loading } = useWizardDraft(localId);
+  const { draft, loading, update } = useWizardDraft(localId);
   const masters = useQuery(api.masters.bundle, {});
 
   const { save: saveToServer, saving: savingDraft } = useSaveSurveyDraft();
@@ -60,13 +63,20 @@ export default function ReviewScreen() {
   const districtName =
     bundle.districts.find((d) => d._id === draft.districtId)?.name ?? selectedUlb?.districtName ?? '—';
 
+  const persistServerSurveyId = async (surveyId: Id<'surveys'>) => {
+    if (draft.serverSurveyId !== surveyId) {
+      await update({ serverSurveyId: surveyId });
+    }
+  };
+
   const onSaveDraft = async () => {
     if (!draftToSaveDraftPayload(draft)) {
       setToast({ title: 'Select district and ULB first', tone: 'danger' });
       return;
     }
     try {
-      await saveToServer(draft);
+      const surveyId = await saveToServer(draft);
+      if (surveyId) await persistServerSurveyId(surveyId);
       setToast({ title: 'Draft saved — you can continue later', tone: 'success' });
     } catch (e) {
       setToast({ title: toUserMessage(e), tone: 'danger' });
@@ -82,6 +92,7 @@ export default function ReviewScreen() {
         setToast({ title: 'Complete all required steps before submitting', tone: 'danger' });
         return;
       }
+      await persistServerSurveyId(surveyId);
       await submit({ id: surveyId });
       await clearDraft(draft.localId);
       setToast({ title: 'Submitted for review', tone: 'success' });
@@ -135,7 +146,7 @@ export default function ReviewScreen() {
           <Banner
             tone="success"
             title="Ready to submit"
-            message="All required fields, photos, and GPS are captured. The supervisor will review next."
+            message="Verify your photos below, then submit. The supervisor will review next."
             icon="checkmark-done-circle-outline"
             className="mb-3"
           />
@@ -387,7 +398,11 @@ export default function ReviewScreen() {
                 {draft.gps.latitude.toFixed(6)}, {draft.gps.longitude.toFixed(6)}
               </Text>
               <View className="flex-row gap-1.5 mt-2">
-                <Tag label={`±${Math.round(draft.gps.accuracyMeters)} m`} tone="success" icon="locate-outline" />
+                <Tag
+                  label={gpsAccuracyTagLabel(draft.gps.accuracyMeters)}
+                  tone={gpsAccuracyTagTone(draft.gps.accuracyMeters)}
+                  icon="locate-outline"
+                />
               </View>
             </>
           ) : (
@@ -395,18 +410,14 @@ export default function ReviewScreen() {
           )}
         </AppCard>
 
-        <SectionLabel>Photos ({draft.photos?.length ?? 0})</SectionLabel>
-        <AppCard padded className="mb-4">
-          {!draft.photos || draft.photos.length === 0 ? (
-            <Text className="text-helper text-ink-tertiary-light text-center py-2">No photos</Text>
-          ) : (
-            <View className="flex-row gap-1.5 flex-wrap">
-              {draft.photos.map((p) => (
-                <Tag key={p.slot} label={humanizeRole(p.slot)} tone="success" icon="image-outline" />
-              ))}
-            </View>
-          )}
-        </AppCard>
+        <ReviewPhotosSection
+          draft={draft}
+          update={update}
+          serverSurveyId={draft.serverSurveyId}
+          onEditStep={() =>
+            router.replace({ pathname: '/(app)/wizard/photos' as never, params: { localId: draft.localId } })
+          }
+        />
 
         <View className="gap-2">
           <AppButton

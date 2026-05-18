@@ -6,6 +6,7 @@
  * to audit. Components are pure (no hooks beyond local state) so they
  * can render anywhere in the tree.
  */
+import { GPS_TARGET_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
 import { formatSurveyParcelLabel } from '@/utils/format';
 import { optionLabel } from '@/utils/services';
@@ -14,6 +15,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -912,21 +914,27 @@ interface GPSStatusProps {
 export function GPSStatus({ state, accuracy }: GPSStatusProps) {
   const tone: Tone =
     state === 'captured'
-      ? accuracy && accuracy > 30
+      ? accuracy != null && accuracy > GPS_TARGET_ACCURACY_METERS
         ? 'warning'
         : 'success'
       : state === 'error'
-        ? 'danger'
+        ? accuracy != null
+          ? 'warning'
+          : 'danger'
         : state === 'locating'
           ? 'brand'
           : 'neutral';
   const label =
     state === 'locating'
-      ? 'Locating…'
+      ? accuracy != null
+        ? `Sampling… ±${Math.round(accuracy)} m`
+        : 'Sampling GPS…'
       : state === 'captured'
         ? `±${Math.round(accuracy ?? 0)} m accuracy`
         : state === 'error'
-          ? 'GPS unavailable'
+          ? accuracy != null
+            ? `±${Math.round(accuracy)} m — retry`
+            : 'GPS unavailable'
           : 'GPS not captured';
   const icon: IconName =
     state === 'captured'
@@ -946,7 +954,10 @@ export function GPSStatus({ state, accuracy }: GPSStatusProps) {
 interface PhotoSlotProps {
   slot: 'front' | 'inside' | 'side' | 'document';
   required?: boolean;
-  thumbnailUrl?: string;
+  step?: number;
+  subtitle?: string;
+  previewUri?: string;
+  captured?: boolean;
   onPick: () => void;
   onRemove?: () => void;
   uploading?: boolean;
@@ -1057,51 +1068,104 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly }:
   );
 }
 
-export function PhotoSlot({ slot, required, thumbnailUrl, onPick, onRemove, uploading }: PhotoSlotProps) {
-  const titles: Record<PhotoSlotProps['slot'], string> = {
-    front: 'Front view',
-    inside: 'Inside view',
-    side: 'Side view',
-    document: 'Document',
-  };
-  const has = !!thumbnailUrl;
+const PHOTO_SLOT_META: Record<PhotoSlotProps['slot'], { title: string; icon: IconName; hint: string }> = {
+  front: {
+    title: 'Front view',
+    icon: 'home-outline',
+    hint: 'Stand across the street — full façade visible',
+  },
+  side: {
+    title: 'Side view',
+    icon: 'swap-horizontal-outline',
+    hint: 'Along the side boundary — length of the building',
+  },
+  inside: {
+    title: 'Inside view',
+    icon: 'enter-outline',
+    hint: 'Interior of the property',
+  },
+  document: {
+    title: 'Document',
+    icon: 'document-text-outline',
+    hint: 'Tax notice or ownership paper',
+  },
+};
+
+export function PhotoSlot({
+  slot,
+  required,
+  step,
+  subtitle,
+  previewUri,
+  captured,
+  onPick,
+  onRemove,
+  uploading,
+}: PhotoSlotProps) {
+  const meta = PHOTO_SLOT_META[slot];
+  const has = !!previewUri || !!captured;
+  const borderTone = has ? 'border-success/40' : required ? 'border-brand/25' : 'border-line-subtle';
+
   return (
-    <View className="bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle p-3">
-      <View className="flex-row items-center justify-between mb-2">
-        <View className="flex-row items-center gap-1.5">
-          <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
-            {titles[slot]}
-          </Text>
-          {required ? <Tag label="Required" tone="danger" /> : null}
-          {has ? <Tag label="Captured" tone="success" icon="checkmark" /> : null}
+    <View
+      className={`flex-1 min-w-[140px] rounded-xl border ${borderTone} bg-surface-light dark:bg-surface-dark overflow-hidden`}
+    >
+      <View className="px-3 pt-3 pb-2">
+        <View className="flex-row items-start gap-2">
+          <View className="w-9 h-9 rounded-full bg-brand-soft items-center justify-center">
+            {step != null ? (
+              <Text className="text-[13px] font-semibold text-brand">{step}</Text>
+            ) : (
+              <Ionicons name={meta.icon} size={18} color="#003B8E" />
+            )}
+          </View>
+          <View className="flex-1">
+            <Text className="text-[14px] font-semibold text-ink-primary-light dark:text-ink-primary-dark">
+              {meta.title}
+            </Text>
+            <Text className="text-[11px] text-ink-tertiary-light mt-0.5 leading-4">{subtitle ?? meta.hint}</Text>
+          </View>
+        </View>
+        <View className="flex-row flex-wrap gap-1.5 mt-2">
+          {required ? <Tag label="Required" tone="brand" /> : null}
+          {has ? <Tag label="Done" tone="success" icon="checkmark" /> : null}
         </View>
       </View>
-      <Pressable
-        onPress={onPick}
-        disabled={uploading}
-        className="h-32 rounded-md bg-page-light dark:bg-page-dark border border-dashed border-line-default items-center justify-center"
-      >
-        {uploading ? (
-          <>
-            <ActivityIndicator color="#003B8E" />
-            <Text className="text-caption text-ink-tertiary-light mt-1.5">Uploading…</Text>
-          </>
-        ) : has ? (
-          <View className="flex-row items-center">
-            <Ionicons name="image" size={32} color="#003B8E" />
-            <Text className="ml-2 text-helper text-ink-secondary-light">Tap to replace</Text>
-          </View>
-        ) : (
-          <View className="items-center">
-            <Ionicons name="camera-outline" size={28} color="#003B8E" />
-            <Text className="text-helper text-brand font-medium mt-1.5">Capture photo</Text>
-          </View>
-        )}
+
+      <Pressable onPress={onPick} disabled={uploading} className="mx-3 mb-3">
+        <View className="h-36 rounded-lg overflow-hidden bg-page-light dark:bg-page-dark border border-dashed border-line-default">
+          {uploading ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator color="#003B8E" />
+              <Text className="text-caption text-ink-tertiary-light mt-2">Uploading…</Text>
+            </View>
+          ) : previewUri ? (
+            <>
+              <Image source={{ uri: previewUri }} className="w-full h-full" resizeMode="cover" />
+              <View className="absolute inset-x-0 bottom-0 bg-black/45 py-1.5 items-center">
+                <Text className="text-[11px] font-medium text-white">Tap to retake</Text>
+              </View>
+            </>
+          ) : has ? (
+            <View className="flex-1 items-center justify-center bg-brand-soft/40">
+              <Ionicons name="checkmark-circle" size={40} color="#16A34A" />
+              <Text className="text-helper text-ink-secondary-light mt-2 text-center px-3">Saved · tap to retake</Text>
+            </View>
+          ) : (
+            <View className="flex-1 items-center justify-center px-3">
+              <View className="w-12 h-12 rounded-full bg-brand-soft items-center justify-center mb-2">
+                <Ionicons name="camera-outline" size={26} color="#003B8E" />
+              </View>
+              <Text className="text-helper text-brand font-medium text-center">Open camera</Text>
+            </View>
+          )}
+        </View>
       </Pressable>
+
       {has && onRemove ? (
-        <Pressable onPress={onRemove} className="mt-2 flex-row items-center justify-center">
+        <Pressable onPress={onRemove} className="pb-3 flex-row items-center justify-center gap-1">
           <Ionicons name="trash-outline" size={14} color="#DC2626" />
-          <Text className="text-helper text-danger ml-1">Remove</Text>
+          <Text className="text-helper text-danger">Remove</Text>
         </Pressable>
       ) : null}
     </View>

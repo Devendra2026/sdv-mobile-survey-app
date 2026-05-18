@@ -12,6 +12,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { addressTenantContext, normalizeAddressFields, validateAddressSection } from './addressRules';
 import { validateAreaSection } from './areaMasters';
+import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_TARGET_ACCURACY_METERS } from './gpsAccuracy';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
 import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from './schema';
@@ -454,9 +455,9 @@ export const setGps = mutation({
     if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
       clientError('LOCKED', 'Survey is locked');
     }
-    if (args.gps.accuracyMeters > 500) {
-      clientError('VALIDATION', 'GPS accuracy too poor; retake outside', {
-        gps: ['GPS accuracy too poor; retake outside'],
+    if (args.gps.accuracyMeters > GPS_ACCEPT_MAX_ACCURACY_METERS) {
+      clientError('VALIDATION', `GPS must be within ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m — retake outside`, {
+        gps: [`GPS must be within ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m — retake in open sky`],
       });
     }
     await ctx.db.patch(args.id, {
@@ -468,7 +469,7 @@ export const setGps = mutation({
 
 /**
  * Transitions a draft to `submitted`. Requires at least one floor and
- * both required photos (front + inside).
+ * both required photos (front + side).
  */
 export const submit = mutation({
   args: { id: v.id('surveys') },
@@ -505,7 +506,7 @@ export const submit = mutation({
     const slots = new Set(photos.map((p) => p.slot));
     const missing: string[] = [];
     if (!slots.has('front')) missing.push('front photo required');
-    if (!slots.has('inside')) missing.push('inside photo required');
+    if (!slots.has('side')) missing.push('side photo required');
     if (missing.length > 0) {
       clientError('VALIDATION', 'Required photos missing', { photos: missing });
     }
@@ -819,8 +820,14 @@ function validateBusinessRules(
       details.constructedYear = [`Enter a year between 1800 and ${currentYear}`];
     }
   }
-  if (strict && in_.gps && (in_.gps as unknown as { accuracyMeters: number }).accuracyMeters > 500) {
-    details.gps = ['GPS accuracy too poor; retake outside'];
+  if (
+    strict &&
+    in_.gps &&
+    (in_.gps as unknown as { accuracyMeters: number }).accuracyMeters > GPS_ACCEPT_MAX_ACCURACY_METERS
+  ) {
+    details.gps = [
+      `GPS must be within ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m (target ±${GPS_TARGET_ACCURACY_METERS} m) — retake in open sky`,
+    ];
   }
   if (Object.keys(details).length > 0) {
     throw new ConvexError({

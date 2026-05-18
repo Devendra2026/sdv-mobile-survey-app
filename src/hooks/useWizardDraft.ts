@@ -22,6 +22,7 @@
  */
 import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
+import { surveyPhotosComplete } from '@/utils/surveyPhotos';
 import { taxationSubcategoryComplete } from '@/utils/taxation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
@@ -85,6 +86,8 @@ function migrateWizardDraft(
 
 export interface WizardDraft {
   localId: string;
+  /** Convex survey row after first `saveDraft` — used to sync photos on review. */
+  serverSurveyId?: Id<'surveys'>;
   createdAt: number;
   updatedAt: number;
 
@@ -610,11 +613,6 @@ export function stepCompletion(d: WizardDraft) {
     ),
     services: servicesStepComplete(d),
     gps: !!d.gps,
-    photos: !!(
-      d.photos &&
-      d.photos.length >= 2 &&
-      d.photos.some((p) => p.slot === 'front') &&
-      d.photos.some((p) => p.slot === 'inside')
-    ),
+    photos: surveyPhotosComplete(d.photos),
   };
 }

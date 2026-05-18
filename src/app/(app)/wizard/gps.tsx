@@ -1,19 +1,18 @@
 'use no memo';
 
 /**
- * Step 7 — GPS capture.
- *
- * Real expo-location integration with permission handling and a tight
- * accuracy budget:
- *   - we accept ≤ 30 m (good)
- *   - 30–100 m is "fair" with a yellow warning
- *   - > 100 m blocked → ask the surveyor to step outside
- *
- * Mock locations (Android dev tools / fake-GPS apps) are detected when the
- * platform exposes them; the upsert path can reject them server-side.
+ * Step 7 — GPS capture. Target ±2–3 m outdoors; accepts up to ±20 m on phones.
  */
 import { AppButton, AppCard, Banner, GPSStatus, SectionLabel, Spinner, Tag } from '@/components';
+import { GPS_EXCELLENT_ACCURACY_METERS, GPS_TARGET_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import {
+  captureGpsWithTargetAccuracy,
+  GpsAccuracyError,
+  gpsAccuracyTagLabel,
+  gpsAccuracyTagTone,
+  type GpsCaptureProgress,
+} from '@/utils/captureGps';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -21,18 +20,12 @@ import { Text, View } from 'react-native';
 
 type State = 'idle' | 'locating' | 'captured' | 'error';
 
-const MAX_ACCEPTABLE_M = 500;
-const GOOD_M = 30;
-const FAIR_M = 100;
-
-function isMockLocation(loc: { mocked?: boolean }): boolean {
-  return Boolean(loc.mocked);
-}
-
 function StepGPS() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
   const [state, setState] = useState<State>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [sampling, setSampling] = useState<GpsCaptureProgress | null>(null);
+  const [lastAttemptMeters, setLastAttemptMeters] = useState<number | null>(null);
 
   if (!localId) {
     return <Spinner label="Loading…" />;
@@ -43,52 +36,30 @@ function StepGPS() {
       {({ draft, update }) => {
         const capture = async () => {
           setError(null);
+          setLastAttemptMeters(null);
+          setSampling(null);
           setState('locating');
           try {
-            const Location = await import('expo-location');
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-              setError('Location permission is required to continue');
-              setState('error');
-              return;
-            }
-            const services = await Location.hasServicesEnabledAsync();
-            if (!services) {
-              setError('Turn on device location services');
-              setState('error');
-              return;
-            }
-            const loc = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.BestForNavigation,
-              mayShowUserSettingsDialog: true,
-            });
-            if (loc.coords.accuracy != null && loc.coords.accuracy > MAX_ACCEPTABLE_M) {
-              setError(
-                `Accuracy too poor (±${Math.round(loc.coords.accuracy)} m). Step outside any covered area and retry.`,
-              );
-              setState('error');
-              return;
-            }
-            await update({
-              gps: {
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-                accuracyMeters: loc.coords.accuracy ?? 0,
-                capturedAt: Date.now(),
-                provider: isMockLocation(loc) ? 'mock' : 'device',
-                isMockLocation: isMockLocation(loc),
-              },
-            });
+            const gps = await captureGpsWithTargetAccuracy((p) => setSampling(p));
+            await update({ gps });
             setState('captured');
+            setSampling(null);
           } catch (e) {
+            if (e instanceof GpsAccuracyError) setLastAttemptMeters(e.accuracyMeters);
             setError(e instanceof Error ? e.message : 'Could not get location');
             setState('error');
+            setSampling(null);
           }
         };
 
         const gps = draft.gps;
         const ui: State = state === 'idle' && gps ? 'captured' : state;
-        const acc = gps?.accuracyMeters;
+        const statusAccuracy =
+          ui === 'locating'
+            ? (sampling?.bestAccuracyMeters ?? undefined)
+            : ui === 'error'
+              ? (lastAttemptMeters ?? undefined)
+              : gps?.accuracyMeters;
 
         return (
           <>
@@ -98,6 +69,16 @@ function StepGPS() {
                 title="Mock location detected"
                 message="The captured coordinates appear to come from a fake-GPS source. Retake using a real device location."
                 icon="warning-outline"
+                className="mb-3"
+              />
+            ) : null}
+
+            {ui === 'captured' && gps && gps.accuracyMeters > GPS_TARGET_ACCURACY_METERS ? (
+              <Banner
+                tone="warning"
+                title="Captured with reduced accuracy"
+                message={`Reading is ±${Math.round(gps.accuracyMeters)} m. For best results, retake in open sky (target ±${GPS_TARGET_ACCURACY_METERS} m).`}
+                icon="locate-outline"
                 className="mb-3"
               />
             ) : null}
@@ -126,21 +107,22 @@ function StepGPS() {
                   />
                 </View>
                 <View className="mt-3">
-                  <GPSStatus state={ui} accuracy={acc} />
+                  <GPSStatus state={ui} accuracy={statusAccuracy} />
                 </View>
-                {gps ? (
+                {ui === 'locating' && sampling ? (
+                  <Text className="text-caption text-ink-tertiary-light text-center mt-2">
+                    {sampling.sampleCount} samples · {Math.round(sampling.elapsedMs / 1000)}s
+                  </Text>
+                ) : null}
+                {gps && ui === 'captured' ? (
                   <View className="mt-3 items-center">
                     <Text className="text-body font-mono text-ink-primary-light dark:text-ink-primary-dark">
                       {gps.latitude.toFixed(6)}, {gps.longitude.toFixed(6)}
                     </Text>
                     <View className="flex-row gap-1.5 mt-2">
                       <Tag
-                        label={
-                          acc != null && acc <= GOOD_M ? 'Excellent' : acc != null && acc <= FAIR_M ? 'Fair' : 'Poor'
-                        }
-                        tone={
-                          acc != null && acc <= GOOD_M ? 'success' : acc != null && acc <= FAIR_M ? 'warning' : 'danger'
-                        }
+                        label={gpsAccuracyTagLabel(gps.accuracyMeters)}
+                        tone={gpsAccuracyTagTone(gps.accuracyMeters)}
                         icon="locate-outline"
                       />
                     </View>
@@ -152,7 +134,7 @@ function StepGPS() {
             {error ? (
               <Banner
                 tone="danger"
-                title="Capture failed"
+                title={lastAttemptMeters != null ? 'Accuracy not met' : 'Capture failed'}
                 message={error}
                 icon="alert-circle-outline"
                 className="mb-3"
@@ -160,7 +142,7 @@ function StepGPS() {
             ) : null}
 
             <AppButton
-              label={state === 'locating' ? 'Locating…' : gps ? 'Retake location' : 'Capture GPS'}
+              label={state === 'locating' ? 'Sampling GPS…' : gps ? 'Retake location' : 'Capture GPS'}
               loading={state === 'locating'}
               iconLeft={gps ? 'refresh' : 'locate'}
               size="lg"
@@ -170,8 +152,8 @@ function StepGPS() {
 
             <Banner
               tone="info"
-              title="Best practice"
-              message="Stand directly outside the main entrance with a clear sky view. Wait a few seconds before tapping capture for better accuracy."
+              title="±2–3 m target"
+              message={`Stand outside with a clear sky view. The app samples up to 30 seconds. Target ±${GPS_TARGET_ACCURACY_METERS} m (±${GPS_EXCELLENT_ACCURACY_METERS} m is excellent). Readings up to ±20 m are accepted when the signal is weak.`}
               icon="information-circle-outline"
               className="mt-3"
             />
