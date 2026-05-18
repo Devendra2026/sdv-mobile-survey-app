@@ -1,5 +1,5 @@
 /**
- * Use Expo's @expo/ws-tunnel when EXPO_USE_WS_TUNNEL=1 (set by `bun run start:tunnel`).
+ * Use Expo's @expo/ws-tunnel when EXPO_USE_WS_TUNNEL=1 (set by `npm run dev:tunnel`).
  * Avoids broken ngrok v2 in @expo/ngrok-bin (error 103 / remote gone away).
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";

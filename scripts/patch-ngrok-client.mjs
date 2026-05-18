@@ -53,7 +53,7 @@ export function patchNgrokClient(cwd = process.cwd()) {
         const hint =
           process.env.NGROK_AUTHTOKEN
             ? "Ngrok agent failed before responding. Restart the dev server or run ngrok config check."
-            : "Expo's shared ngrok tunnel failed. Add NGROK_AUTHTOKEN to .env.local and run: bun run start:tunnel";
+            : "Expo's shared ngrok tunnel failed. Add NGROK_AUTHTOKEN to .env.local and run: npm run dev:tunnel";
         throw new NgrokClientError(
           error.message || hint,
           error.response,

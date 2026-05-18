@@ -51,7 +51,7 @@ const CONNECT_BLOCK_V3 = `            const authtoken = _surveyAppResolveNgrokAu
                     "Tunnel requires your own ngrok authtoken (Expo's shared tunnel is disabled).",
                     _chalk().default.yellow("1. https://dashboard.ngrok.com/get-started/your-authtoken"),
                     _chalk().default.yellow("2. ngrok config add-authtoken YOUR_TOKEN   (or NGROK_AUTHTOKEN in .env.local)"),
-                    _chalk().default.yellow("3. Run: bun run start:tunnel")
+                    _chalk().default.yellow("3. Run: npm run dev:tunnel")
                 ].join("\\n\\n"));
             }
             const url = await instance.connect({
@@ -73,7 +73,7 @@ const ASSERT_NGROK_OLD = `            const assertNgrok = ()=>{
 
 const ASSERT_NGROK_NEW = `            const assertNgrok = ()=>{
                 const byotHint = !_surveyAppResolveNgrokAuthtoken()
-                    ? _chalk().default.yellow('Run: ngrok config add-authtoken YOUR_TOKEN   or add NGROK_AUTHTOKEN to .env.local, then: bun run start:tunnel')
+                    ? _chalk().default.yellow('Run: ngrok config add-authtoken YOUR_TOKEN   or add NGROK_AUTHTOKEN to .env.local, then: npm run dev:tunnel')
                     : '';
                 if ((0, _NgrokResolver.isNgrokClientError)(error) && error.body) {
                     var _error_body_details;

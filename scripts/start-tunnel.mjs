@@ -32,9 +32,9 @@ try {
 }
 
 console.log("Starting Expo with WebSocket tunnel (no ngrok token needed).\n");
-console.log("Same Wi‑Fi without tunnel:  bun run start\n");
+console.log("Same Wi‑Fi without tunnel:  npm run dev\n");
 
-const child = spawn("bunx", ["expo", "start", "--tunnel"], {
+const child = spawn("npx", ["expo", "start", "--tunnel"], {
   stdio: "inherit",
   shell: true,
   env: process.env,

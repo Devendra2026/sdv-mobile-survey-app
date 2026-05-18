@@ -4,7 +4,7 @@ import { join } from "node:path";
 /**
  * Load `.env.local` into process.env (does not override existing vars).
  * Mirrors what Expo prints as `env: load .env.local` — used by start scripts
- * so `bun run start` and `bun run start:tunnel` behave the same as `bunx expo start`.
+ * so `npm run dev` and `npm run dev:tunnel` load the same keys as Expo.
  */
 export function loadEnvLocal(cwd = process.cwd()) {
   const path = join(cwd, ".env.local");

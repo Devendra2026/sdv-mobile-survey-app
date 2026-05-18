@@ -5,8 +5,7 @@
  * - Sets REACT_NATIVE_PACKAGER_HOSTNAME to the best LAN IPv4 (fixes wrong IP on Windows)
  * - Uses `--lan` explicitly
  *
- * Prefer:  bun run start
- * Not:     bunx expo start --tunnel  (only needed when phone and PC are on different networks)
+ * Started by `npm run dev` (with Convex). Use `npm run dev:tunnel` on different networks.
  */
 import { spawn } from "node:child_process";
 import { loadEnvLocal } from "./load-env-local.mjs";
@@ -37,11 +36,10 @@ if (!process.env.EXPO_PUBLIC_CONVEX_URL || !process.env.EXPO_PUBLIC_CLERK_PUBLIS
 console.log("Tips if Expo Go cannot connect:");
 console.log("  • Phone and PC on the same Wi‑Fi (not mobile data)");
 console.log("  • Allow Node.js through Windows Firewall on port 8081");
-console.log("  • Android USB: bun run android:usb");
-console.log("  • Different networks only: bun run start:tunnel\n");
+console.log("  • Different networks: npm run dev:tunnel\n");
 
 const expoArgs = ["expo", "start", ...(hasHostFlag ? [] : ["--lan"]), ...extraArgs];
-const child = spawn("bunx", expoArgs, {
+const child = spawn("npx", expoArgs, {
   stdio: "inherit",
   shell: true,
   env: process.env,
