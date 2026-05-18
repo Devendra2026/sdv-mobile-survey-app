@@ -83,7 +83,7 @@ function AuthGate() {
       return;
     }
 
-    if (me.status !== 'active') {
+    if (me.status !== 'active' || me.role === 'pending') {
       if (segments[0] !== '(auth)' || segments[1] !== 'awaiting-approval') {
         router.replace('/(auth)/awaiting-approval');
       }

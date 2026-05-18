@@ -8,6 +8,21 @@ import type { Id } from './_generated/dataModel';
 import { internalMutation, mutation, type MutationCtx, query } from './_generated/server';
 import { clientError, requireIdentity, writeAudit } from './helpers';
 
+const ALLOWED_REQUESTED_ROLES = new Set(['surveyor', 'supervisor']);
+const MAX_REQUESTED_REASON_LEN = 500;
+
+/** Only surveyor/supervisor may be requested at sign-up; ignore spoofed values. */
+export function normalizeSignupMetadata(input: { requestedRole?: string; requestedReason?: string }): {
+  requestedRole?: string;
+  requestedReason?: string;
+} {
+  const requestedRole =
+    input.requestedRole && ALLOWED_REQUESTED_ROLES.has(input.requestedRole) ? input.requestedRole : undefined;
+  const trimmed = input.requestedReason?.trim();
+  const requestedReason = trimmed && trimmed.length > 0 ? trimmed.slice(0, MAX_REQUESTED_REASON_LEN) : undefined;
+  return { requestedRole, requestedReason };
+}
+
 /** Current signed-in user's domain row, or null until provisioned. */
 export const currentUser = query({
   args: {},
@@ -62,9 +77,12 @@ async function upsertUserRecord(
   args: UpsertUserArgs,
   opts: { fillSignupMetadataOnlyIfEmpty: boolean },
 ): Promise<Id<'users'>> {
+  const meta = normalizeSignupMetadata(args);
+  const normalized: UpsertUserArgs = { ...args, ...meta };
+
   const existing = await ctx.db
     .query('users')
-    .withIndex('by_clerkId', (q) => q.eq('clerkId', args.clerkId))
+    .withIndex('by_clerkId', (q) => q.eq('clerkId', normalized.clerkId))
     .unique();
 
   if (existing) {
@@ -75,22 +93,22 @@ async function upsertUserRecord(
       requestedRole?: string;
       requestedReason?: string;
     } = {
-      email: args.email,
-      name: args.name,
-      avatarUrl: args.avatarUrl,
+      email: normalized.email,
+      name: normalized.name,
+      avatarUrl: normalized.avatarUrl,
     };
 
     if (opts.fillSignupMetadataOnlyIfEmpty) {
-      if (args.requestedRole && !existing.requestedRole) {
-        patch.requestedRole = args.requestedRole;
+      if (normalized.requestedRole && !existing.requestedRole) {
+        patch.requestedRole = normalized.requestedRole;
       }
-      if (args.requestedReason && !existing.requestedReason) {
-        patch.requestedReason = args.requestedReason;
+      if (normalized.requestedReason && !existing.requestedReason) {
+        patch.requestedReason = normalized.requestedReason;
       }
     } else {
-      if (args.requestedRole !== undefined) patch.requestedRole = args.requestedRole;
-      if (args.requestedReason !== undefined) {
-        patch.requestedReason = args.requestedReason;
+      if (normalized.requestedRole !== undefined) patch.requestedRole = normalized.requestedRole;
+      if (normalized.requestedReason !== undefined) {
+        patch.requestedReason = normalized.requestedReason;
       }
     }
 
@@ -99,22 +117,22 @@ async function upsertUserRecord(
   }
 
   const userId = await ctx.db.insert('users', {
-    clerkId: args.clerkId,
-    email: args.email,
-    name: args.name,
-    avatarUrl: args.avatarUrl,
+    clerkId: normalized.clerkId,
+    email: normalized.email,
+    name: normalized.name,
+    avatarUrl: normalized.avatarUrl,
     role: 'pending',
     status: 'pending_approval',
     wardAssignments: [],
-    requestedRole: args.requestedRole,
-    requestedReason: args.requestedReason,
+    requestedRole: normalized.requestedRole,
+    requestedReason: normalized.requestedReason,
   });
 
   await writeAudit(ctx, {
     action: 'user.created',
     entity: 'user',
     entityId: userId,
-    metadata: { clerkId: args.clerkId, email: args.email, source: 'provision' },
+    metadata: { clerkId: normalized.clerkId, email: normalized.email, source: 'provision' },
   });
 
   return userId;

@@ -40,9 +40,9 @@ export function ConvexAuthError() {
           <Step
             n={4}
             title="Redeploy Convex auth"
-            body="Run bun run dev or npx convex dev --once so auth.config.ts is deployed."
+            body="Run npm run deploy (production) or npm run dev (local) so auth.config.ts is deployed."
           />
-          <Step n={5} title="Restart app" body="Stop Metro, run bun run dev again, then sign out and sign back in." />
+          <Step n={5} title="Restart app" body="Stop Metro, restart the app, then sign out and sign back in." />
         </View>
       </ScrollView>
     </SafeAreaView>

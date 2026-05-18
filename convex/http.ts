@@ -19,6 +19,7 @@ import { httpRouter } from 'convex/server';
 import { Webhook } from 'svix';
 import { internal } from './_generated/api';
 import { httpAction } from './_generated/server';
+import { normalizeSignupMetadata } from './users';
 
 interface ClerkWebhookEvent {
   type: string;
@@ -74,15 +75,15 @@ const clerkWebhook = httpAction(async (ctx, request) => {
       }
       const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || email;
 
-      const requested = readRequestedMetadata(data);
+      const requested = normalizeSignupMetadata(readRequestedMetadata(data));
 
       await ctx.runMutation(internal.users.upsertFromClerk, {
         clerkId: data.id,
         email,
         name,
         avatarUrl: data.image_url ?? undefined,
-        requestedRole: requested.role,
-        requestedReason: requested.reason,
+        requestedRole: requested.requestedRole,
+        requestedReason: requested.requestedReason,
       });
       break;
     }
@@ -103,11 +104,14 @@ const clerkWebhook = httpAction(async (ctx, request) => {
   return new Response(null, { status: 200 });
 });
 
-function readRequestedMetadata(d: ClerkUserData): { role?: string; reason?: string } {
+function readRequestedMetadata(d: ClerkUserData): {
+  requestedRole?: string;
+  requestedReason?: string;
+} {
   const meta = (d.unsafe_metadata ?? d.public_metadata ?? {}) as Record<string, unknown>;
-  const role = typeof meta.requestedRole === 'string' ? meta.requestedRole : undefined;
-  const reason = typeof meta.requestedReason === 'string' ? meta.requestedReason : undefined;
-  return { role, reason };
+  const requestedRole = typeof meta.requestedRole === 'string' ? meta.requestedRole : undefined;
+  const requestedReason = typeof meta.requestedReason === 'string' ? meta.requestedReason : undefined;
+  return { requestedRole, requestedReason };
 }
 
 const http = httpRouter();

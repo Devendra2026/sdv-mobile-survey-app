@@ -19,18 +19,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function AwaitingApprovalScreen() {
   const { signOut } = useAuth();
   const { me, syncing } = useSyncConvexUser();
-  const [now, setNow] = useState(Date.now());
+  const [, setRefreshTick] = useState(0);
 
-  // Refresh the "Submitted N min ago" line every minute so it stays accurate
-  // even though `me._creationTime` doesn't change.
+  // Refresh the "Submitted N min ago" line every minute (`timeAgo` uses Date.now()).
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000);
+    const t = setInterval(() => setRefreshTick((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, []);
 
   if (!me) {
     return <AppLoadingView message={syncing ? 'Setting up your account…' : 'Loading your profile…'} />;
   }
+
+  const isDisabled = me.status === 'disabled';
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
@@ -40,8 +41,10 @@ export default function AwaitingApprovalScreen() {
           <Text className="text-h2 font-medium text-white mt-2.5">{me.name}</Text>
           <Text className="text-caption text-white/75 mt-0.5">{me.email}</Text>
           <View className="flex-row items-center bg-white/15 px-2.5 py-1 rounded-full mt-3 gap-1.5">
-            <PulseDot tone="warning" />
-            <Text className="text-[11px] font-medium text-white">Awaiting approval</Text>
+            <PulseDot tone={isDisabled ? 'danger' : 'warning'} />
+            <Text className="text-[11px] font-medium text-white">
+              {isDisabled ? 'Access not granted' : 'Awaiting approval'}
+            </Text>
           </View>
         </View>
       </SafeAreaView>
@@ -49,67 +52,78 @@ export default function AwaitingApprovalScreen() {
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32 }}>
         <AppCard padded className="mb-4">
           <View className="flex-row items-start">
-            <View className="w-9 h-9 rounded-full bg-warning-soft items-center justify-center">
-              <Ionicons name="hourglass-outline" size={18} color="#92400E" />
+            <View
+              className={`w-9 h-9 rounded-full items-center justify-center ${isDisabled ? 'bg-danger-soft' : 'bg-warning-soft'}`}
+            >
+              <Ionicons
+                name={isDisabled ? 'close-circle-outline' : 'hourglass-outline'}
+                size={18}
+                color={isDisabled ? '#B91C1C' : '#92400E'}
+              />
             </View>
             <View className="flex-1 ml-3">
               <Text className="text-body font-medium text-ink-primary-light dark:text-ink-primary-dark">
-                Your account is being reviewed
+                {isDisabled ? 'Your access request was not approved' : 'Your account is being reviewed'}
               </Text>
               <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1">
-                An administrator from your municipality will approve access shortly. This page will update automatically
-                once you&apos;re approved — no need to refresh.
+                {isDisabled
+                  ? 'Contact your municipality administrator if you believe this was a mistake.'
+                  : "An administrator from your municipality will approve access shortly. This page will update automatically once you're approved — no need to refresh."}
               </Text>
             </View>
           </View>
         </AppCard>
 
-        <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light mb-2">
-          Your request
-        </Text>
-        <AppCard padded={false} className="mb-4">
-          <ListRow
-            icon="briefcase-outline"
-            iconTone="brand"
-            title="Role"
-            subtitle={me.requestedRole ?? 'Not specified'}
-            showChevron={false}
-          />
-          <View className="h-px bg-line-subtle" />
-          <ListRow
-            icon="chatbubble-outline"
-            iconTone="neutral"
-            title="Reason"
-            subtitle={me.requestedReason || '—'}
-            showChevron={false}
-          />
-          <View className="h-px bg-line-subtle" />
-          <ListRow
-            icon="time-outline"
-            iconTone="neutral"
-            title="Submitted"
-            subtitle={timeAgo(new Date(me._id ? Date.now() : now).toISOString())}
-            showChevron={false}
-          />
-        </AppCard>
+        {!isDisabled ? (
+          <>
+            <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light mb-2">
+              Your request
+            </Text>
+            <AppCard padded={false} className="mb-4">
+              <ListRow
+                icon="briefcase-outline"
+                iconTone="brand"
+                title="Role"
+                subtitle={me.requestedRole ?? 'Not specified'}
+                showChevron={false}
+              />
+              <View className="h-px bg-line-subtle" />
+              <ListRow
+                icon="chatbubble-outline"
+                iconTone="neutral"
+                title="Reason"
+                subtitle={me.requestedReason || '—'}
+                showChevron={false}
+              />
+              <View className="h-px bg-line-subtle" />
+              <ListRow
+                icon="time-outline"
+                iconTone="neutral"
+                title="Submitted"
+                subtitle={timeAgo(me._creationTime)}
+                showChevron={false}
+              />
+            </AppCard>
 
-        <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light mb-2">
-          What happens next
-        </Text>
-        <AppCard padded className="mb-4">
-          <Step n={1} title="Administrator reviews your request" body="Typically within 1 business day." />
-          <Step
-            n={2}
-            title="Role and wards are assigned"
-            body="You'll be given access to specific wards in your municipality."
-          />
-          <Step n={3} title="You're notified and routed to the app" body="This screen will change automatically." />
-        </AppCard>
+            <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light mb-2">
+              What happens next
+            </Text>
+            <AppCard padded className="mb-4">
+              <Step n={1} title="Administrator reviews your request" body="Typically within 1 business day." />
+              <Step
+                n={2}
+                title="Role and wards are assigned"
+                body="You'll be given access to specific wards in your municipality."
+              />
+              <Step n={3} title="You're notified and routed to the app" body="This screen will change automatically." />
+            </AppCard>
 
-        <View className="flex-row gap-1.5 mb-4">
-          <Tag label="Sign-up complete" tone="success" icon="checkmark-circle" />
-          <Tag label="Email verified" tone="success" icon="mail-open" />
-        </View>
+            <View className="flex-row gap-1.5 mb-4">
+              <Tag label="Sign-up complete" tone="success" icon="checkmark-circle" />
+              <Tag label="Email verified" tone="success" icon="mail-open" />
+            </View>
+          </>
+        ) : null}
 
         <AppButton label="Sign out" variant="outline" iconLeft="log-out-outline" onPress={() => signOut()} fullWidth />
       </ScrollView>

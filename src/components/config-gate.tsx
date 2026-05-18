@@ -16,7 +16,8 @@ export function ConfigGate({ children }: { children: ReactNode }) {
       <ScrollView contentContainerStyle={authStyles.scroll}>
         <Text style={authStyles.title}>Configuration required</Text>
         <Text style={authStyles.subtitle}>
-          Add these keys to `.env.local` in the project root, then run `npm run dev`:
+          Add these keys to `.env.local` for local dev, or set them as EAS / build secrets for production
+          (`EXPO_PUBLIC_*` is inlined at build time):
         </Text>
         {missing.map((key) => (
           <Text key={key} style={[authStyles.label, { fontFamily: 'monospace' }]}>
