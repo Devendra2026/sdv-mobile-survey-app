@@ -23,7 +23,6 @@ const LOOKUP_GROUPS: {
     | 'relationships'
     | 'waterSources'
     | 'sanitationTypes'
-    | 'solidWasteTypes'
     | 'usageTypes'
     | 'constructionTypes'
     | 'floors';
@@ -39,7 +38,6 @@ const LOOKUP_GROUPS: {
   { key: 'relationships', label: 'Relationships', icon: 'people-outline' },
   { key: 'waterSources', label: 'Water sources', icon: 'water-outline' },
   { key: 'sanitationTypes', label: 'Sanitation', icon: 'medkit-outline' },
-  { key: 'solidWasteTypes', label: 'Solid waste', icon: 'trash-outline' },
   { key: 'usageTypes', label: 'Usage types', icon: 'grid-outline' },
   { key: 'constructionTypes', label: 'Construction', icon: 'hammer-outline' },
   { key: 'floors', label: 'Floors', icon: 'business-outline' },

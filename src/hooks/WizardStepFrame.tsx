@@ -11,6 +11,7 @@ import { Spinner } from '@/components/index';
 import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
 import { useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
 import { indicatorSteps, nextStep, prevStep, WIZARD_STEPS, type StepConfig } from '@/hooks/wizardSteps';
+import { backOrReplace } from '@/utils/navigation';
 import { useRouter } from 'expo-router';
 import React, { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
@@ -54,7 +55,7 @@ export function WizardStepFrame({
   const goBack = () => {
     const prev = prevStep(activeKey);
     if (prev) router.replace({ pathname: prev as never, params: { localId } });
-    else router.back();
+    else backOrReplace(router);
   };
 
   const goNext = async () => {

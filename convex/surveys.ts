@@ -14,7 +14,8 @@ import { addressTenantContext, normalizeAddressFields, validateAddressSection } 
 import { validateAreaSection } from './areaMasters';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
-import { gpsCapture, qcStatus, surveyOwnerEntry, surveyStatus } from './schema';
+import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from './schema';
+import { validateServicesSection } from './serviceMasters';
 import { validateTaxationSection } from './taxationMasters';
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
@@ -57,9 +58,10 @@ const surveyInput = {
   plotSqft: v.number(),
   plinthSqft: v.number(),
 
-  waterSource: v.string(),
-  sanitationType: v.string(),
-  solidWasteType: v.string(),
+  municipalWaterConnection: v.boolean(),
+  waterSource,
+  sanitationType,
+  municipalWasteCollection: v.boolean(),
   electricityNo: v.optional(v.string()),
 
   gps: v.optional(gpsCapture),
@@ -520,6 +522,15 @@ function validateBusinessRules(
       situation: in_.situation as string | undefined,
       roadType: in_.roadType as string | undefined,
       taxRateZone: in_.taxRateZone as string | undefined,
+    }),
+  );
+  Object.assign(
+    details,
+    validateServicesSection({
+      municipalWaterConnection: in_.municipalWaterConnection as boolean | undefined,
+      waterSource: in_.waterSource as string | undefined,
+      sanitationType: in_.sanitationType as string | undefined,
+      municipalWasteCollection: in_.municipalWasteCollection as boolean | undefined,
     }),
   );
   const constructedYear = in_.constructedYear as unknown as number | undefined;

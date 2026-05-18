@@ -9,6 +9,9 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/utils/format';
+import { normalizeMastersBundle } from '@/utils/mastersBundle';
+import { backOrReplace } from '@/utils/navigation';
+import { optionLabel, yesNoLabel } from '@/utils/services';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,12 +25,13 @@ export default function SurveyDetailScreen() {
   const id = params.id as Id<'surveys'> | undefined;
   const me = useQuery(api.users.currentUser, {});
   const survey = useQuery(api.surveys.get, id ? { id } : 'skip');
+  const masters = useQuery(api.masters.bundle, {});
   const submit = useMutation(api.surveys.submit);
   const decide = useMutation(api.qc.decide);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (!id || me === undefined) return <Spinner label="Loading…" />;
+  if (!id || me === undefined || masters === undefined) return <Spinner label="Loading…" />;
   if (survey === undefined) return <Spinner label="Loading survey…" />;
   if (survey === null) {
     return (
@@ -91,7 +95,7 @@ export default function SurveyDetailScreen() {
     <View className="flex-1 bg-page-light dark:bg-page-dark">
       <SafeAreaView edges={['top']} className="bg-brand">
         <View className="px-4 py-3 flex-row items-center">
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" onPress={() => router.back()} />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" onPress={() => backOrReplace(router)} />
           <View className="flex-1 ml-2">
             <Text className="text-helper text-white/75">Survey · v{survey.serverVersion}</Text>
             <Text className="text-h3 font-medium text-white" numberOfLines={1}>
@@ -257,6 +261,40 @@ export default function SurveyDetailScreen() {
               </View>
             ))
           )}
+        </AppCard>
+
+        <SectionLabel>Services</SectionLabel>
+        <AppCard padded={false} className="mb-3">
+          {(() => {
+            const bundle = normalizeMastersBundle(masters);
+            return (
+              <>
+                <ListRow
+                  title="Municipal water connection"
+                  subtitle={yesNoLabel(survey.municipalWaterConnection)}
+                  showChevron={false}
+                />
+                <View className="h-px bg-line-subtle" />
+                <ListRow
+                  title="Source of water"
+                  subtitle={optionLabel(survey.waterSource, bundle.waterSources)}
+                  showChevron={false}
+                />
+                <View className="h-px bg-line-subtle" />
+                <ListRow
+                  title="Sanitation"
+                  subtitle={optionLabel(survey.sanitationType, bundle.sanitationTypes)}
+                  showChevron={false}
+                />
+                <View className="h-px bg-line-subtle" />
+                <ListRow
+                  title="Door-to-door waste collection"
+                  subtitle={yesNoLabel(survey.municipalWasteCollection)}
+                  showChevron={false}
+                />
+              </>
+            );
+          })()}
         </AppCard>
 
         <SectionLabel>Photos ({survey.photos.length})</SectionLabel>

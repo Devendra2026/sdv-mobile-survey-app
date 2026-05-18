@@ -17,10 +17,11 @@
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, Spinner, StepIndicator, Tag, Toast } from '@/components';
 import { api } from '@/convex/_generated/api';
 import { clearDraft, draftToUpsertArgs, stepCompletion, useWizardDraft } from '@/hooks/useWizardDraft';
-import { indicatorSteps, WIZARD_STEPS } from '@/hooks/wizardSteps';
+import { indicatorSteps, STEP_BEFORE_REVIEW_ROUTE, WIZARD_STEPS } from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
+import { optionLabel, yesNoLabel } from '@/utils/services';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -100,7 +101,14 @@ export default function ReviewScreen() {
     <View className="flex-1 bg-page-light dark:bg-page-dark">
       <SafeAreaView edges={['top']} className="bg-brand">
         <View className="px-4 pt-2 pb-2.5 flex-row items-center">
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" onPress={() => router.back()} />
+          <Ionicons
+            name="chevron-back"
+            size={22}
+            color="#FFFFFF"
+            onPress={() =>
+              router.replace({ pathname: STEP_BEFORE_REVIEW_ROUTE as never, params: { localId: draft.localId } })
+            }
+          />
           <View className="flex-1 ml-2">
             <Text className="text-helper text-white/70">New survey</Text>
             <Text className="text-h3 font-medium text-white">Review & submit</Text>
@@ -344,6 +352,33 @@ export default function ReviewScreen() {
               </View>
             ))
           )}
+        </AppCard>
+
+        <SectionLabel>Services</SectionLabel>
+        <AppCard padded={false} className="mb-3">
+          <ListRow
+            title="Municipal water connection"
+            subtitle={yesNoLabel(draft.municipalWaterConnection)}
+            showChevron={false}
+          />
+          <View className="h-px bg-line-subtle" />
+          <ListRow
+            title="Source of water"
+            subtitle={optionLabel(draft.waterSource, bundle.waterSources)}
+            showChevron={false}
+          />
+          <View className="h-px bg-line-subtle" />
+          <ListRow
+            title="Sanitation"
+            subtitle={optionLabel(draft.sanitationType, bundle.sanitationTypes)}
+            showChevron={false}
+          />
+          <View className="h-px bg-line-subtle" />
+          <ListRow
+            title="Door-to-door waste collection"
+            subtitle={yesNoLabel(draft.municipalWasteCollection)}
+            showChevron={false}
+          />
         </AppCard>
 
         <SectionLabel>GPS</SectionLabel>

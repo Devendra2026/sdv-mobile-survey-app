@@ -1,17 +1,56 @@
 /**
- * Step 6 — Municipal services. Three required dropdowns + optional
- * electricity meter number.
+ * Step 6 — Municipal services: water supply, sanitation, solid waste.
  */
-import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from 'convex/react';
-import { AppCard, AppDropdown, AppInput, SectionLabel, Spinner } from '@/components';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import { AppCard, AppDropdown, ChipSelector, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
+import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import { normalizeMastersBundle } from '@/utils/mastersBundle';
+import { servicesStepComplete } from '@/utils/services';
+import { useQuery } from 'convex/react';
+import { useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
+import { Text, View } from 'react-native';
+
+const FIELD_GAP = 16;
+
+const YES_NO_OPTIONS = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+] as const;
+
+function yesNoChipValue(value: boolean | undefined): string {
+  if (value === undefined) return '';
+  return value ? 'yes' : 'no';
+}
+
+function YesNoField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | undefined;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text className="text-label uppercase tracking-wider font-medium text-ink-secondary-light dark:text-ink-secondary-dark">
+        {label} <Text className="text-danger">*</Text>
+      </Text>
+      <ChipSelector
+        value={yesNoChipValue(value)}
+        options={[...YES_NO_OPTIONS]}
+        onChange={(v) => onChange(v === 'yes')}
+        scroll={false}
+      />
+    </View>
+  );
+}
 
 export default function StepServices() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const masters = useQuery(api.masters.bundle, {});
+  const mastersRaw = useQuery(api.masters.bundle, {});
+  const masters = useMemo(() => (mastersRaw ? normalizeMastersBundle(mastersRaw) : undefined), [mastersRaw]);
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
   return (
@@ -19,44 +58,56 @@ export default function StepServices() {
       localId={localId}
       activeKey="services"
       title="Municipal services"
-      subtitle="Connections to civic services"
+      subtitle="Water, sanitation & waste"
+      nextDisabled={(d) => !servicesStepComplete(d)}
     >
       {({ draft, update }) => (
         <>
-          <SectionLabel>Connections</SectionLabel>
-          <AppCard padded className="mb-3">
-            <View style={{ gap: 12 }}>
+          <SectionLabel>Water supply</SectionLabel>
+          <AppCard padded className="mb-4">
+            <View style={{ gap: FIELD_GAP }}>
+              <YesNoField
+                label="Municipal / Town Panchayat water connection"
+                value={draft.municipalWaterConnection}
+                onChange={(v) => update({ municipalWaterConnection: v })}
+              />
               <AppDropdown
-                placeholder="Water source"
+                label="Source of water"
+                required
+                placeholder="Select source"
+                modalTitle="Source of water"
                 value={draft.waterSource ?? ''}
                 options={masters.waterSources}
                 onChange={(v) => update({ waterSource: v })}
               />
-              <AppDropdown
-                placeholder="Sanitation"
-                value={draft.sanitationType ?? ''}
-                options={masters.sanitationTypes}
-                onChange={(v) => update({ sanitationType: v })}
-              />
-              <AppDropdown
-                placeholder="Solid waste"
-                value={draft.solidWasteType ?? ''}
-                options={masters.solidWasteTypes}
-                onChange={(v) => update({ solidWasteType: v })}
-              />
             </View>
           </AppCard>
 
-          <SectionLabel>Electricity</SectionLabel>
-          <AppCard padded>
-            <AppInput
-              label="Electricity meter number"
-              value={draft.electricityNo ?? ''}
-              onChangeText={(v) => update({ electricityNo: v })}
-              placeholder="Optional"
-              helperText="From the utility bill or meter face"
+          <SectionLabel>Sanitation</SectionLabel>
+          <AppCard padded className="mb-4">
+            <AppDropdown
+              label="Sanitation"
+              required
+              placeholder="Select sanitation type"
+              modalTitle="Sanitation"
+              value={draft.sanitationType ?? ''}
+              options={masters.sanitationTypes}
+              onChange={(v) => update({ sanitationType: v })}
             />
           </AppCard>
+
+          <SectionLabel>Solid waste management</SectionLabel>
+          <AppCard padded className="mb-4">
+            <YesNoField
+              label="Municipal / Town Panchayat door-to-door collection"
+              value={draft.municipalWasteCollection}
+              onChange={(v) => update({ municipalWasteCollection: v })}
+            />
+          </AppCard>
+
+          <Text className="text-helper text-ink-tertiary-light px-1">
+            All fields on this step are required before you can continue.
+          </Text>
         </>
       )}
     </WizardStepFrame>

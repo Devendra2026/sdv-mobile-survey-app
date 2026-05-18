@@ -1,6 +1,7 @@
 import type { FunctionReturnType } from 'convex/server';
 
 import { api } from '@/convex/_generated/api';
+import { mergeMasterOptions, SANITATION_TYPES, WATER_SOURCES } from '@/utils/services';
 
 export type MastersBundle = FunctionReturnType<typeof api.masters.bundle>;
 
@@ -24,9 +25,8 @@ export function normalizeMastersBundle(bundle: MastersBundle): MastersBundle {
     roadTypes: bundle.roadTypes ?? emptyOptions,
     taxRateZones: bundle.taxRateZones ?? emptyOptions,
     relationships: bundle.relationships ?? emptyOptions,
-    waterSources: bundle.waterSources ?? emptyOptions,
-    sanitationTypes: bundle.sanitationTypes ?? emptyOptions,
-    solidWasteTypes: bundle.solidWasteTypes ?? emptyOptions,
+    waterSources: mergeMasterOptions([...WATER_SOURCES], bundle.waterSources),
+    sanitationTypes: mergeMasterOptions([...SANITATION_TYPES], bundle.sanitationTypes),
     usageTypes: bundle.usageTypes ?? emptyOptions,
     constructionTypes: bundle.constructionTypes ?? emptyOptions,
     floors: bundle.floors ?? emptyOptions,

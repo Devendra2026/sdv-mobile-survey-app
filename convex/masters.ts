@@ -7,6 +7,7 @@ import { mutation, query } from './_generated/server';
 import { CONSTRUCTION_TYPES, FLOOR_NAMES, FLOOR_USAGE_TYPES } from './areaMasters';
 import { requireUser } from './helpers';
 import { RESPONDENT_RELATIONSHIPS } from './ownerRules';
+import { mergeMasterOptions, SANITATION_TYPES, WATER_SOURCES } from './serviceMasters';
 import {
   OWNERSHIP_TYPES,
   PROPERTY_USE_SUBCATEGORIES,
@@ -98,9 +99,8 @@ export const bundle = query({
       roadTypes: grouped['road_type']?.length ? grouped['road_type']! : ROAD_TYPES,
       taxRateZones: grouped['tax_rate_zone']?.length ? grouped['tax_rate_zone']! : TAX_RATE_ZONES,
       relationships: RESPONDENT_RELATIONSHIPS,
-      waterSources: grouped['water_source'] ?? [],
-      sanitationTypes: grouped['sanitation_type'] ?? [],
-      solidWasteTypes: grouped['solid_waste_type'] ?? [],
+      waterSources: mergeMasterOptions(WATER_SOURCES, grouped['water_source']),
+      sanitationTypes: mergeMasterOptions(SANITATION_TYPES, grouped['sanitation_type']),
       usageTypes: grouped['usage_type']?.length ? grouped['usage_type']! : FLOOR_USAGE_TYPES,
       constructionTypes: grouped['construction_type']?.length ? grouped['construction_type']! : CONSTRUCTION_TYPES,
       floors: grouped['floor_name']?.length ? grouped['floor_name']! : FLOOR_NAMES,

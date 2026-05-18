@@ -13,6 +13,7 @@ import { mutation, query } from './_generated/server';
 import { seedAreaMasters } from './areaMasters';
 import { clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { ulbBodyType } from './schema';
+import { seedServiceMasters } from './serviceMasters';
 import { seedTaxationMasters } from './taxationMasters';
 
 export { resolveTenantScope } from './tenancy';
@@ -527,6 +528,7 @@ export const seedReferenceData = mutation({
 
     await seedTaxationMasters(ctx);
     await seedAreaMasters(ctx);
+    await seedServiceMasters(ctx);
 
     await writeAudit(ctx, {
       actorId: me._id,

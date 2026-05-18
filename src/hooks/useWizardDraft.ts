@@ -20,6 +20,7 @@
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
 import { isValidIndianMobile } from '@/utils/format';
+import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
 import { taxationSubcategoryComplete } from '@/utils/taxation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
@@ -76,6 +77,8 @@ function migrateWizardDraft(
   delete raw.fatherOrHusbandName;
   delete raw.mobileNo;
   delete raw.altMobileNo;
+  if (raw.waterSource) raw.waterSource = coerceWaterSource(raw.waterSource);
+  if (raw.sanitationType) raw.sanitationType = coerceSanitationType(raw.sanitationType);
   return raw;
 }
 
@@ -132,9 +135,10 @@ export interface WizardDraft {
   }>;
 
   // Step 6 — Services
+  municipalWaterConnection?: boolean;
   waterSource?: string;
   sanitationType?: string;
-  solidWasteType?: string;
+  municipalWasteCollection?: boolean;
   electricityNo?: string;
 
   // Step 7 — GPS
@@ -226,9 +230,10 @@ export function surveyToDraft(survey: {
   taxRateZone: string;
   plotSqft: number;
   plinthSqft: number;
+  municipalWaterConnection: boolean;
   waterSource: string;
   sanitationType: string;
-  solidWasteType: string;
+  municipalWasteCollection: boolean;
   electricityNo?: string;
   gps?: WizardDraft['gps'];
   floors: Array<{
@@ -303,9 +308,10 @@ export function surveyToDraft(survey: {
     taxRateZone: survey.taxRateZone,
     plotSqft: survey.plotSqft,
     plinthSqft: survey.plinthSqft,
-    waterSource: survey.waterSource,
-    sanitationType: survey.sanitationType,
-    solidWasteType: survey.solidWasteType,
+    municipalWaterConnection: survey.municipalWaterConnection,
+    waterSource: coerceWaterSource(survey.waterSource),
+    sanitationType: coerceSanitationType(survey.sanitationType),
+    municipalWasteCollection: survey.municipalWasteCollection,
     electricityNo: survey.electricityNo,
     floors: survey.floors.map((f) => ({
       clientFloorId: f.clientFloorId,
@@ -429,9 +435,10 @@ export function draftToUpsertArgs(d: WizardDraft) {
     !d.situation ||
     !d.roadType ||
     !d.taxRateZone ||
+    typeof d.municipalWaterConnection !== 'boolean' ||
     !d.waterSource ||
     !d.sanitationType ||
-    !d.solidWasteType
+    typeof d.municipalWasteCollection !== 'boolean'
   ) {
     return null;
   }
@@ -475,9 +482,10 @@ export function draftToUpsertArgs(d: WizardDraft) {
     taxRateZone: d.taxRateZone,
     plotSqft: d.plotSqft ?? 0,
     plinthSqft: d.plinthSqft ?? 0,
+    municipalWaterConnection: d.municipalWaterConnection,
     waterSource: d.waterSource,
     sanitationType: d.sanitationType,
-    solidWasteType: d.solidWasteType,
+    municipalWasteCollection: d.municipalWasteCollection,
     electricityNo: d.electricityNo,
     gps: d.gps,
     clientUpdatedAt: Date.now(),
@@ -540,7 +548,7 @@ export function stepCompletion(d: WizardDraft) {
         return !!(f.usageType && f.constructionType);
       })
     ),
-    services: !!(d.waterSource && d.sanitationType && d.solidWasteType),
+    services: servicesStepComplete(d),
     gps: !!d.gps,
     photos: !!(
       d.photos &&

@@ -30,6 +30,9 @@ export const WIZARD_STEPS: StepConfig[] = [
 
 export const REVIEW_ROUTE = '/(app)/wizard/review';
 
+/** Last wizard step before review (photos). */
+export const STEP_BEFORE_REVIEW_ROUTE = WIZARD_STEPS[WIZARD_STEPS.length - 1]!.route;
+
 export function indicatorSteps(draft: WizardDraft, activeKey: string) {
   const c = stepCompletion(draft);
   return WIZARD_STEPS.map((s) => ({

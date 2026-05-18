@@ -37,6 +37,10 @@ export const photoSlot = v.union(v.literal('front'), v.literal('inside'), v.lite
 /** ULB body types shown in admin setup and survey start. */
 export const ulbBodyType = v.union(v.literal('municipal_council'), v.literal('town_panchayat'));
 
+import { sanitationType, waterSource } from './serviceMasters';
+
+export { sanitationType, waterSource };
+
 export const gpsCapture = v.object({
   latitude: v.number(),
   longitude: v.number(),
@@ -200,9 +204,10 @@ export default defineSchema({
     plinthSqft: v.number(),
 
     // Section 6 — Services
-    waterSource: v.string(),
-    sanitationType: v.string(),
-    solidWasteType: v.string(),
+    municipalWaterConnection: v.boolean(),
+    waterSource,
+    sanitationType,
+    municipalWasteCollection: v.boolean(),
     electricityNo: v.optional(v.string()),
 
     // Section 7 — GIS (inline)

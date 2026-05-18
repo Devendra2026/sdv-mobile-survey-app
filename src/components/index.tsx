@@ -8,6 +8,7 @@
  */
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
 import { formatSurveyParcelLabel } from '@/utils/format';
+import { optionLabel } from '@/utils/services';
 import { Ionicons } from '@expo/vector-icons';
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import {
@@ -251,6 +252,7 @@ export function AppDropdown({
   const [open, setOpen] = useState(false);
   const safeOptions = options ?? [];
   const selected = safeOptions.find((o) => o.value === value);
+  const displayLabel = selected?.label ?? (value.trim() ? optionLabel(value, safeOptions) : undefined);
   const sheetTitle = modalTitle ?? label ?? placeholder ?? 'Select';
   return (
     <View>
@@ -264,13 +266,13 @@ export function AppDropdown({
         className={`flex-row items-center rounded-md border border-line-default bg-surface-light dark:bg-surface-dark px-3 ${disabled ? 'opacity-60' : ''}`}
         style={{ minHeight: 48 }}
         accessibilityRole="button"
-        accessibilityLabel={label ? `${label}, ${selected?.label ?? 'not selected'}` : selected?.label}
+        accessibilityLabel={label ? `${label}, ${displayLabel ?? 'not selected'}` : displayLabel}
       >
         <Text
-          className={`flex-1 text-body ${selected ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
+          className={`flex-1 text-body ${displayLabel ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
           numberOfLines={1}
         >
-          {selected ? selected.label : placeholder}
+          {displayLabel ?? placeholder}
         </Text>
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
