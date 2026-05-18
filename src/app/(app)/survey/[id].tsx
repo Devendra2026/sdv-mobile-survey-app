@@ -224,16 +224,19 @@ export default function SurveyDetailScreen() {
           <ListRow title="Road type" subtitle={humanizeRole(survey.roadType)} showChevron={false} />
           <View className="h-px bg-line-subtle" />
           <ListRow title="Road size tax zone" subtitle={humanizeRole(survey.taxRateZone)} showChevron={false} />
-          {survey.plotSqft > 0 || survey.plinthSqft > 0 ? (
-            <>
-              <View className="h-px bg-line-subtle" />
-              <ListRow
-                title="Plot · Plinth"
-                subtitle={`${formatArea(survey.plotSqft)} · ${formatArea(survey.plinthSqft)}`}
-                showChevron={false}
-              />
-            </>
-          ) : null}
+        </AppCard>
+
+        <SectionLabel>Area detail</SectionLabel>
+        <AppCard padded={false} className="mb-3">
+          <ListRow title="Plot area" subtitle={formatArea(survey.plotSqft)} showChevron={false} />
+          <View className="h-px bg-line-subtle" />
+          <ListRow title="Plinth area" subtitle={formatArea(survey.plinthSqft)} showChevron={false} />
+          <View className="h-px bg-line-subtle" />
+          <ListRow
+            title="Total built-up"
+            subtitle={formatArea(survey.floors.reduce((s, f) => s + f.areaSqft, 0))}
+            showChevron={false}
+          />
         </AppCard>
 
         <SectionLabel>Floors ({survey.floors.length})</SectionLabel>

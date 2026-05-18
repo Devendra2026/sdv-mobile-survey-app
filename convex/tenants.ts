@@ -10,6 +10,7 @@
 import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
+import { seedAreaMasters } from './areaMasters';
 import { clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { ulbBodyType } from './schema';
 import { seedTaxationMasters } from './taxationMasters';
@@ -525,6 +526,7 @@ export const seedReferenceData = mutation({
     }
 
     await seedTaxationMasters(ctx);
+    await seedAreaMasters(ctx);
 
     await writeAudit(ctx, {
       actorId: me._id,

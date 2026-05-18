@@ -11,6 +11,7 @@ import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { addressTenantContext, normalizeAddressFields, validateAddressSection } from './addressRules';
+import { validateAreaSection } from './areaMasters';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
 import { gpsCapture, qcStatus, surveyOwnerEntry, surveyStatus } from './schema';
@@ -345,8 +346,13 @@ export const submit = mutation({
       .query('floors')
       .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
       .collect();
-    if (floors.length === 0) {
-      clientError('VALIDATION', 'Add at least one floor', { floors: ['required'] });
+    const areaErrors = validateAreaSection({
+      plotSqft: survey.plotSqft,
+      plinthSqft: survey.plinthSqft,
+      floorAreasSqft: floors.map((f) => f.areaSqft),
+    });
+    if (Object.keys(areaErrors).length > 0) {
+      clientError('VALIDATION', 'Area details incomplete', areaErrors);
     }
 
     const photos = await ctx.db
@@ -489,7 +495,7 @@ function validateBusinessRules(
   );
   const plot = in_.plotSqft as unknown as number;
   const plinth = in_.plinthSqft as unknown as number;
-  if (typeof plot === 'number' && typeof plinth === 'number' && plinth > plot) {
+  if (typeof plot === 'number' && typeof plinth === 'number' && plinth > plot && plot > 0) {
     details.plinthSqft = ['Plinth area cannot exceed plot area'];
   }
   const familySize = in_.familySize as unknown as number | undefined;

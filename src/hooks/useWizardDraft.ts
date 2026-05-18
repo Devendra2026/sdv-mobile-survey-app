@@ -530,7 +530,16 @@ export function stepCompletion(d: WizardDraft) {
       d.roadType &&
       d.taxRateZone
     ),
-    floors: !!(d.floors && d.floors.length > 0),
+    floors: !!(
+      (d.plotSqft ?? 0) > 0 &&
+      d.floors &&
+      d.floors.length > 0 &&
+      d.floors.every((f) => {
+        if (!f.floorName || !(f.areaSqft > 0)) return false;
+        if (f.floorName === 'open_land') return true;
+        return !!(f.usageType && f.constructionType);
+      })
+    ),
     services: !!(d.waterSource && d.sanitationType && d.solidWasteType),
     gps: !!d.gps,
     photos: !!(

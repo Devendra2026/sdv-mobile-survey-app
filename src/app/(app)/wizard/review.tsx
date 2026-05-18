@@ -301,12 +301,19 @@ export default function ReviewScreen() {
           <ListRow title="Road type" subtitle={humanizeRole(draft.roadType)} showChevron={false} />
           <Divider />
           <ListRow title="Road size tax zone" subtitle={humanizeRole(draft.taxRateZone)} showChevron={false} />
-          {(draft.plotSqft ?? 0) > 0 || (draft.plinthSqft ?? 0) > 0 ? (
+        </AppCard>
+
+        <SectionLabel>Area detail</SectionLabel>
+        <AppCard padded={false} className="mb-3">
+          <ListRow title="Plot area" subtitle={formatArea(draft.plotSqft ?? 0)} showChevron={false} />
+          {(draft.floors ?? []).some((f) => f.floorName === 'open_land') ? (
             <>
               <Divider />
+              <ListRow title="Plinth area" subtitle={formatArea(draft.plinthSqft ?? 0)} showChevron={false} />
+              <Divider />
               <ListRow
-                title="Plot · Plinth"
-                subtitle={`${formatArea(draft.plotSqft ?? 0)} · ${formatArea(draft.plinthSqft ?? 0)}`}
+                title="Total built-up"
+                subtitle={formatArea((draft.floors ?? []).reduce((s, f) => s + (f.areaSqft > 0 ? f.areaSqft : 0), 0))}
                 showChevron={false}
               />
             </>
@@ -322,8 +329,16 @@ export default function ReviewScreen() {
               <View key={f.clientFloorId}>
                 {i > 0 ? <Divider /> : null}
                 <ListRow
-                  title={`${humanizeRole(f.floorName)} · ${humanizeRole(f.usageType)}`}
-                  subtitle={`${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}`}
+                  title={
+                    f.floorName === 'open_land'
+                      ? humanizeRole(f.floorName)
+                      : `${humanizeRole(f.floorName)} · ${humanizeRole(f.usageType)}`
+                  }
+                  subtitle={
+                    f.floorName === 'open_land'
+                      ? formatArea(f.areaSqft)
+                      : `${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}`
+                  }
                   showChevron={false}
                 />
               </View>

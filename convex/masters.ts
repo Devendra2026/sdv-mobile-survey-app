@@ -4,6 +4,7 @@
  */
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { CONSTRUCTION_TYPES, FLOOR_NAMES, FLOOR_USAGE_TYPES } from './areaMasters';
 import { requireUser } from './helpers';
 import { RESPONDENT_RELATIONSHIPS } from './ownerRules';
 import {
@@ -100,9 +101,9 @@ export const bundle = query({
       waterSources: grouped['water_source'] ?? [],
       sanitationTypes: grouped['sanitation_type'] ?? [],
       solidWasteTypes: grouped['solid_waste_type'] ?? [],
-      usageTypes: grouped['usage_type'] ?? [],
-      constructionTypes: grouped['construction_type'] ?? [],
-      floors: grouped['floor_name'] ?? [],
+      usageTypes: grouped['usage_type']?.length ? grouped['usage_type']! : FLOOR_USAGE_TYPES,
+      constructionTypes: grouped['construction_type']?.length ? grouped['construction_type']! : CONSTRUCTION_TYPES,
+      floors: grouped['floor_name']?.length ? grouped['floor_name']! : FLOOR_NAMES,
     };
   },
 });

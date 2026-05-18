@@ -5,25 +5,21 @@
  * Idempotency: `clientFloorId` is the key. The mobile generates it once
  * and resends on every save — duplicate sends update in place.
  */
-import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import {
-  assertCanReadWard,
-  clientError,
-  requireUser,
-  writeAudit,
-} from "./helpers";
+import { v } from 'convex/values';
+import { mutation, query } from './_generated/server';
+import { isOpenLandFloor, usageTypeToOccupied, validateFloorRow } from './areaMasters';
+import { assertCanReadWard, clientError, requireUser, writeAudit } from './helpers';
 
 export const list = query({
-  args: { surveyId: v.id("surveys") },
+  args: { surveyId: v.id('surveys') },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     const survey = await ctx.db.get(args.surveyId);
     if (!survey) return [];
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
     const rows = await ctx.db
-      .query("floors")
-      .withIndex("by_survey", (q) => q.eq("surveyId", args.surveyId))
+      .query('floors')
+      .withIndex('by_survey', (q) => q.eq('surveyId', args.surveyId))
       .collect();
     return rows.sort((a, b) => a.position - b.position);
   },
@@ -31,7 +27,7 @@ export const list = query({
 
 export const upsert = mutation({
   args: {
-    surveyId: v.id("surveys"),
+    surveyId: v.id('surveys'),
     clientFloorId: v.string(),
     position: v.number(),
     floorName: v.string(),
@@ -43,21 +39,27 @@ export const upsert = mutation({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     const survey = await ctx.db.get(args.surveyId);
-    if (!survey) clientError("NOT_FOUND", "Survey not found");
+    if (!survey) clientError('NOT_FOUND', 'Survey not found');
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
-    if (survey.qcStatus === "approved" && me.role === "surveyor") {
-      clientError("LOCKED", "Survey is locked");
+    if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
+      clientError('LOCKED', 'Survey is locked');
     }
-    if (args.areaSqft <= 0) {
-      clientError("VALIDATION", "Floor area must be > 0", {
-        areaSqft: ["must be greater than 0"],
-      });
+    const floorErrors = validateFloorRow({
+      floorName: args.floorName,
+      usageType: args.usageType,
+      constructionType: args.constructionType,
+      areaSqft: args.areaSqft,
+    });
+    if (Object.keys(floorErrors).length > 0) {
+      clientError('VALIDATION', 'Invalid floor row', floorErrors);
     }
+    const isOccupied = isOpenLandFloor(args.floorName) ? false : usageTypeToOccupied(args.usageType);
 
     const existing = await ctx.db
-      .query("floors")
-      .withIndex("by_survey_clientFloorId", (q) =>
-        q.eq("surveyId", args.surveyId).eq("clientFloorId", args.clientFloorId))
+      .query('floors')
+      .withIndex('by_survey_clientFloorId', (q) =>
+        q.eq('surveyId', args.surveyId).eq('clientFloorId', args.clientFloorId),
+      )
       .unique();
 
     if (existing) {
@@ -66,16 +68,16 @@ export const upsert = mutation({
         floorName: args.floorName,
         usageType: args.usageType,
         constructionType: args.constructionType,
-        isOccupied: args.isOccupied,
+        isOccupied,
         areaSqft: args.areaSqft,
       });
       return existing._id;
     }
-    const id = await ctx.db.insert("floors", args);
+    const id = await ctx.db.insert('floors', { ...args, isOccupied });
     await writeAudit(ctx, {
       actorId: me._id,
-      action: "floor.added",
-      entity: "survey",
+      action: 'floor.added',
+      entity: 'survey',
       entityId: args.surveyId,
       metadata: { clientFloorId: args.clientFloorId },
     });
@@ -84,7 +86,7 @@ export const upsert = mutation({
 });
 
 export const remove = mutation({
-  args: { id: v.id("floors") },
+  args: { id: v.id('floors') },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     const floor = await ctx.db.get(args.id);
@@ -92,8 +94,8 @@ export const remove = mutation({
     const survey = await ctx.db.get(floor.surveyId);
     if (!survey) return;
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
-    if (survey.qcStatus === "approved" && me.role === "surveyor") {
-      clientError("LOCKED", "Survey is locked");
+    if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
+      clientError('LOCKED', 'Survey is locked');
     }
     await ctx.db.delete(args.id);
   },
@@ -105,13 +107,13 @@ export const remove = mutation({
  */
 export const reorder = mutation({
   args: {
-    surveyId: v.id("surveys"),
-    order: v.array(v.object({ id: v.id("floors"), position: v.number() })),
+    surveyId: v.id('surveys'),
+    order: v.array(v.object({ id: v.id('floors'), position: v.number() })),
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     const survey = await ctx.db.get(args.surveyId);
-    if (!survey) clientError("NOT_FOUND", "Survey not found");
+    if (!survey) clientError('NOT_FOUND', 'Survey not found');
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
     for (const o of args.order) {
       const f = await ctx.db.get(o.id);

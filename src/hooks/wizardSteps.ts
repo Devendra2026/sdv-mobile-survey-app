@@ -22,7 +22,7 @@ export const WIZARD_STEPS: StepConfig[] = [
   { key: 'owner', label: 'Owner', short: 'O', route: '/(app)/wizard/owner' },
   { key: 'address', label: 'Address', short: 'A', route: '/(app)/wizard/address' },
   { key: 'taxation', label: 'Taxation', short: 'T', route: '/(app)/wizard/taxation' },
-  { key: 'floors', label: 'Floors', short: 'F', route: '/(app)/wizard/floors' },
+  { key: 'floors', label: 'Area', short: '5', route: '/(app)/wizard/floors' },
   { key: 'services', label: 'Services', short: 'S', route: '/(app)/wizard/services' },
   { key: 'gps', label: 'GPS', short: 'G', route: '/(app)/wizard/gps' },
   { key: 'photos', label: 'Photos', short: 'C', route: '/(app)/wizard/photos' },
