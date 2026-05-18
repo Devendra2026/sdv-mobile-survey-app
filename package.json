@@ -15,7 +15,8 @@
     "dev:build:android": "expo run:android",
     "dev:build:ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "generate:logo": "node scripts/generate-logo-assets.mjs"
   },
   "dependencies": {
     "@clerk/expo": "^3.2.12",
@@ -64,6 +65,7 @@
     "eslint-config-expo": "~10.0.0",
     "expo-docs-mcp": "^1.0.0",
     "prettier-plugin-tailwindcss": "^0.5.11",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.9.2"
   },

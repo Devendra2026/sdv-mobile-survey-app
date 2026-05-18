@@ -22,7 +22,7 @@ export function AuthHero({ onBack }: AuthHeroProps) {
         </View>
       ) : null}
 
-      <BrandLogo width={248} framed />
+      <BrandLogo width={260} />
       <Text className="mt-4 text-h2 font-medium text-white">Property Survey</Text>
       <Text className="mt-0.5 text-caption text-white/75">Nagar Panchayat · GIS field operations</Text>
     </SafeAreaView>

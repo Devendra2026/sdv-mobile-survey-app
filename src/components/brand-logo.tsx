@@ -2,8 +2,8 @@ import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Animated, View, type ViewProps } from 'react-native';
 
-/** Wide SDV Edutech mark (~2.1:1) — `assets/images/logo.png` */
-const LOGO_SOURCE = require('../../assets/images/logo.png');
+/** Trimmed SDV Edutech mark — regenerate via `node scripts/generate-logo-assets.mjs` */
+const LOGO_SOURCE = require('../../assets/images/logo-display.png');
 
 const LOGO_ASPECT = 2.1;
 
@@ -12,7 +12,7 @@ export type BrandLogoProps = {
   width?: number;
   /** Gentle opacity pulse for splash / loading states. */
   animated?: boolean;
-  /** White card behind the logo (recommended on brand-colored headers). */
+  /** Extra white card + shadow (usually unnecessary — logo PNG already has a white field). */
   framed?: boolean;
   className?: string;
 } & Pick<ViewProps, 'accessibilityLabel'>;

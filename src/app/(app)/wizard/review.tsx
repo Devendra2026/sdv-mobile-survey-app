@@ -15,7 +15,7 @@
  * fix and retry without losing data.
  */
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, Spinner, StepIndicator, Tag, Toast } from '@/components';
-import { ReviewPhotosSection } from '@/components/wizard/review-photos-section';
+import { ReviewPhotosSection } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';

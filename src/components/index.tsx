@@ -6,7 +6,6 @@
  * to audit. Components are pure (no hooks beyond local state) so they
  * can render anywhere in the tree.
  */
-import { BrandLogo } from '@/components/brand-logo';
 import { GPS_TARGET_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
 import { formatSurveyParcelLabel } from '@/utils/format';
@@ -502,15 +501,10 @@ export function PulseDot({ tone = 'success' }: { tone?: Tone }) {
 
 export function Spinner({ label }: { label?: string }) {
   return (
-    <View className="flex-1 items-center justify-center px-6 py-10">
-      <BrandLogo width={180} framed />
-      <View className="mt-5">
-        <ActivityIndicator size="large" color="#003B8E" />
-      </View>
+    <View className="flex-1 items-center justify-center py-10">
+      <ActivityIndicator size="large" color="#003B8E" />
       {label ? (
-        <Text className="mt-3 text-center text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">
-          {label}
-        </Text>
+        <Text className="mt-3 text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">{label}</Text>
       ) : null}
     </View>
   );

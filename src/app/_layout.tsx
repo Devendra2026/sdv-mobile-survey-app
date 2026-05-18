@@ -104,8 +104,9 @@ function AuthGate() {
     [convexAuthLoading, convexReady, me, needsSync, syncing],
   );
 
+  // Native splash (solid brand color, no image) stays visible until Clerk is ready.
   if (!isLoaded) {
-    return <AppLoadingView message="Starting property survey operations…" />;
+    return <View className="flex-1 bg-brand" />;
   }
 
   if (isSignedIn && convexAuthFailed) {
