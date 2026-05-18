@@ -1,11 +1,11 @@
 /**
  * Account setup — shows progress while `useSyncConvexUser` creates the Convex row.
  */
-import { AppButton } from "@/components";
-import { useSyncConvexUser } from "@/hooks/use-sync-convex-user";
-import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { AppButton } from '@/components';
+import { useSyncConvexUser } from '@/hooks/use-sync-convex-user';
+import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SetupScreen() {
   const { syncing, error, sync, needsSync } = useSyncConvexUser();
@@ -22,18 +22,16 @@ export default function SetupScreen() {
         </Text>
 
         <Text className="mb-8 max-w-[300px] text-center text-body text-ink-secondary-light dark:text-ink-secondary-dark">
-          We're saving your Clerk profile to Survey field operations.
+          We&apos;re saving your Clerk profile to Survey field operations.
         </Text>
 
         {needsSync && !error ? (
           <ActivityIndicator color="#003B8E" size="large" />
         ) : error ? (
           <>
-            <Text className="mb-6 max-w-[300px] text-center text-body text-danger">
-              {error}
-            </Text>
+            <Text className="mb-6 max-w-[300px] text-center text-body text-danger">{error}</Text>
             <AppButton
-              label={syncing ? "Retrying…" : "Try again"}
+              label={syncing ? 'Retrying…' : 'Try again'}
               loading={syncing}
               onPress={() => void sync()}
               fullWidth
@@ -44,7 +42,7 @@ export default function SetupScreen() {
         )}
 
         <Text className="mt-6 text-center text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">
-          {error ? "Still having trouble? Contact your administrator." : "Please wait…"}
+          {error ? 'Still having trouble? Contact your administrator.' : 'Please wait…'}
         </Text>
       </View>
     </SafeAreaView>

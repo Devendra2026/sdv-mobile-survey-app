@@ -58,7 +58,7 @@ export default function AwaitingApprovalScreen() {
               </Text>
               <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1">
                 An administrator from your municipality will approve access shortly. This page will update automatically
-                once you're approved — no need to refresh.
+                once you&apos;re approved — no need to refresh.
               </Text>
             </View>
           </View>

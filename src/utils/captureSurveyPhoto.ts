@@ -1,4 +1,5 @@
 import type { Id } from '@/convex/_generated/dataModel';
+import { toPhotoErrorMessage, uploadJpegBytesToConvexUrl } from '@/utils/convex-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
@@ -21,14 +22,7 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 function toCaptureError(e: unknown): Error {
-  const raw = e instanceof Error ? e.message : String(e);
-  if (/split bundle|ERR_NGROK|ngrok|offline|Unable to resolve module/i.test(raw)) {
-    return new Error(
-      'Camera could not open. Restart the dev server and reopen the app, or use a release build in the field.',
-    );
-  }
-  if (e instanceof Error) return e;
-  return new Error(raw || 'Photo capture failed');
+  return new Error(toPhotoErrorMessage(e));
 }
 
 /** Opens the device camera and returns a compressed JPEG ready to upload. */
@@ -83,14 +77,6 @@ export async function uploadSurveyPhotoBytes(
   uploadUrl: string,
   jpegBytes: Uint8Array,
 ): Promise<{ storageId: Id<'_storage'>; sizeKb: number }> {
-  const res = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'image/jpeg' },
-    body: new Blob([Uint8Array.from(jpegBytes)], { type: 'image/jpeg' }),
-  });
-  if (!res.ok) {
-    throw new Error(`Photo upload failed (${res.status})`);
-  }
-  const { storageId } = (await res.json()) as { storageId: Id<'_storage'> };
+  const { storageId } = await uploadJpegBytesToConvexUrl(uploadUrl, jpegBytes);
   return { storageId, sizeKb: Math.max(1, Math.ceil(jpegBytes.byteLength / 1024)) };
 }

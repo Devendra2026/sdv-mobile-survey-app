@@ -12,8 +12,6 @@
  *   - signed in + approved + admin role → /(admin)
  *   - signed in + approved + surveyor/supervisor → /dashboard
  */
-import 'react-native-gesture-handler';
-
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { AppLoadingView } from '@/components/app-loading-view';
 import { ConfigGate } from '@/components/config-gate';

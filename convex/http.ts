@@ -15,10 +15,10 @@
  *   3. Copy the Signing Secret.
  *   4. `npx convex env set CLERK_WEBHOOK_SECRET whsec_xxx`
  */
-import { httpRouter } from "convex/server";
-import { Webhook } from "svix";
-import { internal } from "./_generated/api";
-import { httpAction } from "./_generated/server";
+import { httpRouter } from 'convex/server';
+import { Webhook } from 'svix';
+import { internal } from './_generated/api';
+import { httpAction } from './_generated/server';
 
 interface ClerkWebhookEvent {
   type: string;
@@ -40,15 +40,15 @@ interface ClerkUserData {
 const clerkWebhook = httpAction(async (ctx, request) => {
   const payloadText = await request.text();
   const headers: Record<string, string> = {
-    "svix-id": request.headers.get("svix-id") ?? "",
-    "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
-    "svix-signature": request.headers.get("svix-signature") ?? "",
+    'svix-id': request.headers.get('svix-id') ?? '',
+    'svix-timestamp': request.headers.get('svix-timestamp') ?? '',
+    'svix-signature': request.headers.get('svix-signature') ?? '',
   };
 
   const secret = process.env.CLERK_WEBHOOK_SECRET;
   if (!secret) {
-    console.error("CLERK_WEBHOOK_SECRET not configured");
-    return new Response("Server misconfigured", { status: 500 });
+    console.error('CLERK_WEBHOOK_SECRET not configured');
+    return new Response('Server misconfigured', { status: 500 });
   }
 
   let event: ClerkWebhookEvent;
@@ -56,20 +56,23 @@ const clerkWebhook = httpAction(async (ctx, request) => {
     const wh = new Webhook(secret);
     event = wh.verify(payloadText, headers) as ClerkWebhookEvent;
   } catch (err) {
-    console.error("Webhook signature verification failed", err);
-    return new Response("Invalid signature", { status: 400 });
+    console.error('Webhook signature verification failed', err);
+    return new Response('Invalid signature', { status: 400 });
   }
 
   // Route the event
   switch (event.type) {
-    case "user.created":
-    case "user.updated": {
+    case 'user.created':
+    case 'user.updated': {
       const data = event.data;
       const primaryEmailId = data.primary_email_address_id;
-      const primary = data.email_addresses?.find((e) => e.id === primaryEmailId)
-        ?? data.email_addresses?.[0];
-      const email = primary?.email_address ?? "";
-      const name = [data.first_name, data.last_name].filter(Boolean).join(" ") || data.username || email;
+      const primary = data.email_addresses?.find((e) => e.id === primaryEmailId) ?? data.email_addresses?.[0];
+      const email = (primary?.email_address ?? '').trim();
+      if (!email) {
+        console.error('Clerk webhook: user has no primary email — skipping upsert', data.id);
+        break;
+      }
+      const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || email;
 
       const requested = readRequestedMetadata(data);
 
@@ -84,7 +87,7 @@ const clerkWebhook = httpAction(async (ctx, request) => {
       break;
     }
 
-    case "user.deleted": {
+    case 'user.deleted': {
       await ctx.runMutation(internal.users.softDeleteFromClerk, {
         clerkId: event.data.id,
       });
@@ -102,16 +105,16 @@ const clerkWebhook = httpAction(async (ctx, request) => {
 
 function readRequestedMetadata(d: ClerkUserData): { role?: string; reason?: string } {
   const meta = (d.unsafe_metadata ?? d.public_metadata ?? {}) as Record<string, unknown>;
-  const role = typeof meta.requestedRole === "string" ? meta.requestedRole : undefined;
-  const reason = typeof meta.requestedReason === "string" ? meta.requestedReason : undefined;
+  const role = typeof meta.requestedRole === 'string' ? meta.requestedRole : undefined;
+  const reason = typeof meta.requestedReason === 'string' ? meta.requestedReason : undefined;
   return { role, reason };
 }
 
 const http = httpRouter();
 
 http.route({
-  path: "/clerk-webhook",
-  method: "POST",
+  path: '/clerk-webhook',
+  method: 'POST',
   handler: clerkWebhook,
 });
 

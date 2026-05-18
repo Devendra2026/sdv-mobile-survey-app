@@ -1,7 +1,7 @@
 /**
  * Review-step photo verification — preview, remove, and retake before submit.
  */
-import { AppButton, AppCard, Banner, Tag } from '@/components';
+import { AppButton, AppCard, Banner, Tag, Toast } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
@@ -11,7 +11,7 @@ import { REQUIRED_SURVEY_PHOTO_SLOTS, SURVEY_PHOTO_SLOT_LABEL, type SurveyPhotoS
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { Image } from 'expo-image';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 const SLOT_HINT: Record<SurveyPhotoSlot, string> = {
@@ -32,6 +32,17 @@ export function ReviewPhotosSection({
 }) {
   const { photoBySlot, previewBySlot, uploadingSlot, capturedCount, requiredCount, capture, confirmRemove } =
     useWizardPhotoCapture({ draft, update, serverSurveyId });
+  const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
+
+  const onCapture = async (slot: SurveyPhotoSlot) => {
+    if (uploadingSlot) return;
+    const result = await capture(slot);
+    if (result?.ok) {
+      setToast({ title: `${result.label} saved`, tone: 'success' });
+    } else if (result && !result.ok) {
+      setToast({ title: result.message, tone: 'danger' });
+    }
+  };
 
   useEffect(() => {
     void warmCameraModule();
@@ -81,7 +92,7 @@ export function ReviewPhotosSection({
             captured={photoBySlot.has(slot)}
             loadingUrls={!!photoBySlot.get(slot) && urlRows === undefined && !previewBySlot[slot]}
             uploading={uploadingSlot === slot}
-            onCapture={() => void capture(slot)}
+            onCapture={() => void onCapture(slot)}
             onRemove={() => confirmRemove(slot)}
           />
         ))}
@@ -95,6 +106,8 @@ export function ReviewPhotosSection({
         onPress={onEditStep}
         className="mb-2"
       />
+
+      {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}
     </View>
   );
 }

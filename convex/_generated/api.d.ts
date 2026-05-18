@@ -12,8 +12,6 @@ import type * as addressRules from "../addressRules.js";
 import type * as admin from "../admin.js";
 import type * as analytics from "../analytics.js";
 import type * as areaMasters from "../areaMasters.js";
-import type * as env from "../env.js";
-import type * as errors from "../errors.js";
 import type * as floors from "../floors.js";
 import type * as gpsAccuracy from "../gpsAccuracy.js";
 import type * as helpers from "../helpers.js";
@@ -27,7 +25,6 @@ import type * as surveys from "../surveys.js";
 import type * as taxationMasters from "../taxationMasters.js";
 import type * as tenancy from "../tenancy.js";
 import type * as tenants from "../tenants.js";
-import type * as tokenCache from "../tokenCache.js";
 import type * as users from "../users.js";
 
 import type {
@@ -41,8 +38,6 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   analytics: typeof analytics;
   areaMasters: typeof areaMasters;
-  env: typeof env;
-  errors: typeof errors;
   floors: typeof floors;
   gpsAccuracy: typeof gpsAccuracy;
   helpers: typeof helpers;
@@ -56,7 +51,6 @@ declare const fullApi: ApiFromModules<{
   taxationMasters: typeof taxationMasters;
   tenancy: typeof tenancy;
   tenants: typeof tenants;
-  tokenCache: typeof tokenCache;
   users: typeof users;
 }>;
 

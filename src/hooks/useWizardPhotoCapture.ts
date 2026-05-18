@@ -5,6 +5,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { pickSurveyPhotoFromCamera, uploadSurveyPhotoBytes } from '@/utils/captureSurveyPhoto';
+import { toPhotoErrorMessage } from '@/utils/convex-storage';
 import {
   filterSurveyPhotos,
   REQUIRED_SURVEY_PHOTO_SLOTS,
@@ -101,7 +102,7 @@ export function useWizardPhotoCapture({
       } catch (e) {
         return {
           ok: false as const,
-          message: e instanceof Error ? e.message : 'Upload failed',
+          message: toPhotoErrorMessage(e),
         };
       } finally {
         setUploadingSlot(null);
