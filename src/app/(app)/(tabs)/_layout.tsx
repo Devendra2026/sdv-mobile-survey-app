@@ -1,13 +1,14 @@
 import { TAB_BAR_CONTENT_HEIGHT, tabBarBottomInset } from '@/constants/tabBar';
 import { useTheme } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Main tab bar — wizard, survey detail, and QC live on the parent stack. */
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const bottomInset = tabBarBottomInset(insets);
 
@@ -15,6 +16,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: theme.brand.primary,
         tabBarInactiveTintColor: theme.ink.disabled,
         tabBarStyle: {
@@ -23,6 +25,7 @@ export default function TabsLayout() {
           height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
           paddingTop: 6,
           paddingBottom: bottomInset + 4,
+          ...(Platform.OS === 'android' ? { elevation: 12, shadowOpacity: 0 } : undefined),
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -50,6 +53,12 @@ export default function TabsLayout() {
         options={{
           title: 'New',
           tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 6} color="#003B8E" />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push('/(app)/wizard');
+          },
         }}
       />
       <Tabs.Screen

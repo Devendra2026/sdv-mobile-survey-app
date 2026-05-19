@@ -9,5 +9,5 @@ export function tabBarBottomInset(insets: EdgeInsets): number {
   if (Platform.OS === 'ios') {
     return insets.bottom;
   }
-  return Math.max(insets.bottom, 8);
+  return Math.max(insets.bottom, 12);
 }

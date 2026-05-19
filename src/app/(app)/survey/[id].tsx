@@ -16,6 +16,7 @@ import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { backOrReplace } from '@/utils/navigation';
 import { optionLabel, yesNoLabel } from '@/utils/services';
 import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
+import { scrollViewProps } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -120,7 +121,7 @@ export default function SurveyDetailScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, flexGrow: 1 }} {...scrollViewProps}>
         {survey.qcStatus === 'rejected' ? (
           <Banner
             tone="danger"

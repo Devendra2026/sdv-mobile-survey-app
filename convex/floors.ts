@@ -85,6 +85,33 @@ export const upsert = mutation({
   },
 });
 
+/** Drop server floor rows whose client ids are no longer in the local draft. */
+export const removeOrphans = mutation({
+  args: {
+    surveyId: v.id('surveys'),
+    keepClientFloorIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const me = await requireUser(ctx);
+    const survey = await ctx.db.get(args.surveyId);
+    if (!survey) clientError('NOT_FOUND', 'Survey not found');
+    assertCanReadWard(me, survey.municipalityId, survey.wardNo);
+    if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
+      clientError('LOCKED', 'Survey is locked');
+    }
+    const keep = new Set(args.keepClientFloorIds);
+    const rows = await ctx.db
+      .query('floors')
+      .withIndex('by_survey', (q) => q.eq('surveyId', args.surveyId))
+      .collect();
+    for (const row of rows) {
+      if (!keep.has(row.clientFloorId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id('floors') },
   handler: async (ctx, args) => {

@@ -9,14 +9,16 @@
  */
 import { Spinner, Toast } from '@/components/index';
 import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import { draftToSaveDraftPayload, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
 import { indicatorSteps, nextStep, prevStep, WIZARD_STEPS, type StepConfig } from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { backOrReplace } from '@/utils/navigation';
+import { keyboardAvoidingProps, scrollViewProps } from '@/utils/ui-layout';
 import { useRouter } from 'expo-router';
 import React, { ReactNode, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface WizardStepFrameProps {
@@ -78,6 +80,9 @@ export function WizardStepFrame({
         setToast({ title: 'Select district and ULB first', tone: 'danger' });
         return;
       }
+      if (draft.serverSurveyId !== surveyId) {
+        await update({ serverSurveyId: surveyId as Id<'surveys'> });
+      }
       setToast({ title: 'Draft saved to cloud', tone: 'success' });
     } catch (e) {
       setToast({ title: toUserMessage(e), tone: 'danger' });
@@ -102,8 +107,12 @@ export function WizardStepFrame({
         />
       </SafeAreaView>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={{ flex: 1 }} {...keyboardAvoidingProps()}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 14, paddingBottom: 24, flexGrow: 1 }}
+          {...scrollViewProps}
+        >
           {children({ draft, update })}
         </ScrollView>
         <FloatingSaveBar

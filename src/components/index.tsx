@@ -10,6 +10,7 @@ import { GPS_TARGET_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
 import { formatSurveyParcelLabel } from '@/utils/format';
 import { optionLabel } from '@/utils/services';
+import { androidRipple, horizontalScrollProps } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,6 +22,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
@@ -114,10 +116,16 @@ export function AppButton({
     danger: '#FFFFFF',
   };
 
+  const ripple =
+    variant === 'primary' || variant === 'danger'
+      ? androidRipple('rgba(255,255,255,0.25)')
+      : androidRipple('rgba(0, 59, 142, 0.12)');
+
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      android_ripple={isDisabled ? undefined : ripple}
       className={[
         'flex-row items-center justify-center rounded-md',
         baseHeights[size],
@@ -202,9 +210,10 @@ export function AppInput({
           style={{
             flex: 1,
             paddingHorizontal: iconLeft ? 6 : 12,
-            paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+            paddingVertical: Platform.OS === 'ios' ? 12 : 10,
             fontSize: 15,
             color: '#0B1220',
+            ...(Platform.OS === 'android' ? { includeFontPadding: false, textAlignVertical: 'center' as const } : {}),
           }}
         />
         {iconRight ? (
@@ -271,6 +280,7 @@ export function AppDropdown({
       ) : null}
       <Pressable
         onPress={() => !disabled && setOpen(true)}
+        android_ripple={disabled ? undefined : androidRipple('rgba(0, 59, 142, 0.1)')}
         className={`flex-row items-center rounded-md border border-line-default bg-surface-light dark:bg-surface-dark px-3 ${disabled ? 'opacity-60' : ''}`}
         style={{ minHeight: 48 }}
         accessibilityRole="button"
@@ -285,10 +295,22 @@ export function AppDropdown({
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <Pressable onPress={() => setOpen(false)} className="flex-1 bg-black/40 justify-end">
+      <Modal
+        visible={open}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+        statusBarTranslucent={Platform.OS === 'android'}
+      >
+        <View className="flex-1 justify-end">
           <Pressable
-            onPress={() => undefined}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            className="bg-black/40"
+          />
+          <View
             className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle"
             style={{ maxHeight: '78%', paddingBottom: sheetBottomPad }}
           >
@@ -322,6 +344,7 @@ export function AppDropdown({
                       onChange(o.value);
                       setOpen(false);
                     }}
+                    android_ripple={androidRipple('rgba(0, 59, 142, 0.1)')}
                     className={`flex-row items-center justify-between rounded-md px-3 py-2.5 ${active ? 'bg-brand-soft' : ''}`}
                     style={{ minHeight: 48 }}
                     accessibilityRole="button"
@@ -337,8 +360,8 @@ export function AppDropdown({
                 );
               }}
             />
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -754,7 +777,7 @@ export function StepIndicator({ steps, activeKey, onSelect }: StepIndicatorProps
   return (
     <ScrollView
       horizontal
-      showsHorizontalScrollIndicator={false}
+      {...horizontalScrollProps}
       contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
     >
       {steps.map((s, i) => {
@@ -1046,6 +1069,8 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly, h
 
   const inputClass =
     'flex-1 text-body leading-5 text-ink-primary-light dark:text-ink-primary-dark px-3 py-3 min-h-[48px]';
+  const androidInputStyle =
+    Platform.OS === 'android' ? ({ includeFontPadding: false, textAlignVertical: 'center' } as const) : undefined;
   const unitClass = 'text-[11px] leading-4 text-ink-tertiary-light text-center mt-1 px-0.5';
   const fieldShell = readOnly
     ? 'rounded-xl border border-line-subtle bg-page-light dark:bg-page-dark'
@@ -1070,6 +1095,7 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly, h
               placeholder="Sq feet"
               placeholderTextColor="#9CA3AF"
               className={inputClass}
+              style={androidInputStyle}
             />
           </View>
           <Text className={unitClass}>Sq feet</Text>
@@ -1085,6 +1111,7 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly, h
               placeholder="Sq meter"
               placeholderTextColor="#9CA3AF"
               className={inputClass}
+              style={androidInputStyle}
             />
           </View>
           <Text className={unitClass}>Sq meter</Text>

@@ -5,6 +5,7 @@
 import { EmptyState, Spinner, SurveyCard } from '@/components';
 import { api } from '@/convex/_generated/api';
 import { surveyOwnerListLabel } from '@/utils/format';
+import { flatListProps, useTabScreenPadding } from '@/utils/ui-layout';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -23,6 +24,7 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
 
 export default function SurveysScreen() {
   const router = useRouter();
+  const tabPad = useTabScreenPadding();
   const [filter, setFilter] = useState<StatusFilter>('all');
   const surveys = useQuery(api.surveys.list, {
     status: filter === 'all' || filter === 'rejected' ? undefined : filter,
@@ -68,7 +70,8 @@ export default function SurveysScreen() {
         <FlatList
           data={surveys}
           keyExtractor={(s) => s._id}
-          contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
+          contentContainerStyle={{ padding: 14, paddingBottom: tabPad }}
+          {...flatListProps}
           ItemSeparatorComponent={() => <View className="h-2" />}
           renderItem={({ item }) => (
             <SurveyCard

@@ -8,6 +8,7 @@ import { AppButton, Banner, EmptyState, KpiCard, PulseDot, SectionLabel, Spinner
 import { SurveyStatsBreakdown } from '@/components/admin/survey-stats-breakdown';
 import { api } from '@/convex/_generated/api';
 import { humanizeRole, surveyOwnerListLabel } from '@/utils/format';
+import { scrollViewProps, useTabScreenPadding } from '@/utils/ui-layout';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const tabPad = useTabScreenPadding();
   const me = useQuery(api.users.currentUser, {});
   const counts = useQuery(api.masters.dashboardCounts, {});
   const recent = useQuery(api.surveys.list, { limit: 5 });
@@ -51,7 +53,7 @@ export default function DashboardScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 24 }}>
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: tabPad }} {...scrollViewProps}>
         {isSupervisor ? (
           <>
             <SectionLabel>Team analytics</SectionLabel>

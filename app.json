@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.surveyapp.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo-icon.png",
         "backgroundColor": "#FFFFFF"

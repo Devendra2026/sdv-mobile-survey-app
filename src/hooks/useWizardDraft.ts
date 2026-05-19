@@ -200,6 +200,7 @@ export async function persistDraft(draft: WizardDraft): Promise<void> {
 
 /** Hydrate a server survey into a local wizard draft (resume / edit). */
 export function surveyToDraft(survey: {
+  _id: Id<'surveys'>;
   localId: string;
   districtId?: Id<'districts'>;
   municipalityId: Id<'municipalities'>;
@@ -262,6 +263,7 @@ export function surveyToDraft(survey: {
   const now = Date.now();
   return {
     localId: survey.localId,
+    serverSurveyId: survey._id,
     createdAt: now,
     updatedAt: now,
     districtId: survey.districtId,

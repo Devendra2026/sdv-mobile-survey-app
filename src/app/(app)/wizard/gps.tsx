@@ -9,6 +9,7 @@ import {
   GPS_SAMPLE_DURATION_MS,
   GPS_TARGET_ACCURACY_METERS,
 } from '@/convex/gpsAccuracy';
+import { stepCompletion } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import {
   captureGpsWithTargetAccuracy,
@@ -36,7 +37,13 @@ function StepGPS() {
   }
 
   return (
-    <WizardStepFrame localId={localId} activeKey="gps" title="GPS location" subtitle="Stand outside the property">
+    <WizardStepFrame
+      localId={localId}
+      activeKey="gps"
+      title="GPS location"
+      subtitle="Stand outside the property"
+      nextDisabled={(d) => !stepCompletion(d).gps}
+    >
       {({ draft, update }) => {
         const capture = async () => {
           if (state === 'locating') return;

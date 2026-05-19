@@ -8,11 +8,12 @@ import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { formatArea, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
+import { scrollViewProps } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Floor = NonNullable<WizardDraft['floors']>[number];
@@ -270,12 +271,24 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
   const isEdit = value.areaSqft > 0 && value.floorName;
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-black/45 justify-end" onPress={onClose}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent={Platform.OS === 'android'}
+    >
+      <View className="flex-1 justify-end">
         <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          className="bg-black/45"
+        />
+        <View
           className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle max-h-[90%]"
           style={{ paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12) }}
-          onPress={(e) => e.stopPropagation()}
         >
           <View className="items-center pt-2 pb-1">
             <View className="w-9 h-1 rounded-full bg-line-default" />
@@ -289,8 +302,7 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
             </Pressable>
           </View>
           <ScrollView
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
+            {...scrollViewProps}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: FIELD_GAP }}
           >
             <AppDropdown
@@ -332,8 +344,8 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
             <AppButton label="Cancel" variant="outline" onPress={onClose} />
             <AppButton label={isEdit ? 'Save' : 'Add'} onPress={() => onSave(f)} disabled={!canSave} />
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

@@ -2,9 +2,10 @@
  * Step 8 — Photos (front + side required).
  */
 import { AppCard, Banner, PhotoSlot, Tag, Toast } from '@/components';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { stepCompletion } from '@/hooks/useWizardDraft';
 import { useWizardPhotoCapture } from '@/hooks/useWizardPhotoCapture';
+import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { warmCameraModule } from '@/utils/captureSurveyPhoto';
 import { REQUIRED_SURVEY_PHOTO_SLOTS, type SurveyPhotoSlot } from '@/utils/surveyPhotos';
 import { useLocalSearchParams } from 'expo-router';
@@ -21,7 +22,13 @@ export default function StepPhotos() {
   if (!localId) return null;
 
   return (
-    <WizardStepFrame localId={localId} activeKey="photos" title="Photos" subtitle="Front + side view required">
+    <WizardStepFrame
+      localId={localId}
+      activeKey="photos"
+      title="Photos"
+      subtitle="Front + side view required"
+      nextDisabled={(d) => !stepCompletion(d).photos}
+    >
       {({ draft, update }) => <PhotoFields draft={draft} update={update} />}
     </WizardStepFrame>
   );

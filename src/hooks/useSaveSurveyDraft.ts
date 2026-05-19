@@ -15,6 +15,7 @@ function floorReadyForSync(f: NonNullable<WizardDraft['floors']>[number]): boole
 export function useSaveSurveyDraft() {
   const saveDraft = useMutation(api.surveys.saveDraft);
   const upsertFloor = useMutation(api.floors.upsert);
+  const removeOrphanFloors = useMutation(api.floors.removeOrphans);
   const linkPhoto = useMutation(api.photos.linkPhoto);
   const [saving, setSaving] = useState(false);
 
@@ -27,9 +28,11 @@ export function useSaveSurveyDraft() {
       try {
         const surveyId = await saveDraft(payload);
 
+        const syncedFloorIds: string[] = [];
         for (let i = 0; i < (draft.floors ?? []).length; i++) {
           const f = draft.floors![i]!;
           if (!floorReadyForSync(f)) continue;
+          syncedFloorIds.push(f.clientFloorId);
           await upsertFloor({
             surveyId,
             clientFloorId: f.clientFloorId,
@@ -41,6 +44,7 @@ export function useSaveSurveyDraft() {
             areaSqft: f.areaSqft,
           });
         }
+        await removeOrphanFloors({ surveyId, keepClientFloorIds: syncedFloorIds });
 
         for (const photo of draft.photos ?? []) {
           await linkPhoto({
@@ -59,7 +63,7 @@ export function useSaveSurveyDraft() {
         setSaving(false);
       }
     },
-    [saveDraft, upsertFloor, linkPhoto],
+    [saveDraft, upsertFloor, removeOrphanFloors, linkPhoto],
   );
 
   return { save, saving };

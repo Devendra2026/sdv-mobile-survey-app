@@ -4,8 +4,9 @@
 import { AppCard, AppInput, ListRow, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
+import { stepCompletion } from '@/hooks/useWizardDraft';
+import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
@@ -18,7 +19,13 @@ export default function StepAddress() {
   if (!localId) return null;
 
   return (
-    <WizardStepFrame localId={localId} activeKey="address" title="Address" subtitle="Postal details for tax notices">
+    <WizardStepFrame
+      localId={localId}
+      activeKey="address"
+      title="Address"
+      subtitle="Postal details for tax notices"
+      nextDisabled={(d) => !stepCompletion(d).address}
+    >
       {({ draft, update }) => <AddressFields draft={draft} update={update} />}
     </WizardStepFrame>
   );

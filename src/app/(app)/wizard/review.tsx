@@ -4,9 +4,8 @@
  * Validates that every step is complete (re-running stepCompletion) and
  * then runs the submit pipeline:
  *
- *   1. `surveys.upsert(filledDraft)` → returns surveyId
- *   2. `photos.linkPhoto(...)` for every photo captured in step 8
- *   3. `surveys.submit({ id: surveyId })` → flips status to 'submitted',
+ *   1. `surveys.saveDraft` + floor/photo sync → returns surveyId
+ *   2. `surveys.submit({ id: surveyId })` → flips status to 'submitted',
  *      enforces business rules server-side
  *   4. clear the AsyncStorage draft
  *   5. navigate to the survey detail screen
@@ -34,6 +33,7 @@ import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/forma
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { optionLabel, yesNoLabel } from '@/utils/services';
 import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
+import { scrollViewProps } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -135,7 +135,7 @@ export default function ReviewScreen() {
         />
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32, flexGrow: 1 }} {...scrollViewProps}>
         {!allComplete ? (
           <Banner
             tone="warning"

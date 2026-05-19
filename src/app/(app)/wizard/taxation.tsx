@@ -3,6 +3,7 @@
  */
 import { AppCard, AppDropdown, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
+import { stepCompletion } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import {
   filterActivePropertyUses,
@@ -21,7 +22,13 @@ export default function StepTaxation() {
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
   return (
-    <WizardStepFrame localId={localId} activeKey="taxation" title="Taxation" subtitle="Ownership, use & road details">
+    <WizardStepFrame
+      localId={localId}
+      activeKey="taxation"
+      title="Taxation"
+      subtitle="Ownership, use & road details"
+      nextDisabled={(d) => !stepCompletion(d).taxation}
+    >
       {({ draft, update }) => {
         const use = draft.propertyUse ?? '';
         const needsSubcategory = propertyUseRequiresSubcategory(use);
