@@ -1,10 +1,16 @@
+import { TAB_BAR_CONTENT_HEIGHT, tabBarBottomInset } from '@/constants/tabBar';
 import { useTheme } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Main tab bar — wizard, survey detail, and QC live on the parent stack. */
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = tabBarBottomInset(insets);
+
   return (
     <Tabs
       screenOptions={{
@@ -14,11 +20,15 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.bg.surface,
           borderTopColor: theme.border.subtle,
-          height: 62,
-          paddingBottom: 8,
+          height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
           paddingTop: 6,
+          paddingBottom: bottomInset + 4,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
+          marginBottom: Platform.OS === 'ios' ? 0 : 2,
+        },
       }}
     >
       <Tabs.Screen

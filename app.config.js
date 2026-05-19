@@ -1,18 +1,20 @@
 /**
  * Dynamic Expo config.
  * Preview/production APKs must NOT link expo-dev-client (crashes without Metro).
- * Only the "development" EAS profile includes the dev client.
  */
-const app = require("./app.json");
+const { DEV_CLIENT_PACKAGES, isDevClientBuild } = require('./scripts/is-dev-client-build.cjs');
 
-const isDevClientBuild = process.env.EAS_BUILD_PROFILE === "development";
+const app = require('./app.json');
+
+const devClientExclude = isDevClientBuild() ? [] : DEV_CLIENT_PACKAGES;
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   expo: {
     ...app.expo,
     autolinking: {
-      exclude: isDevClientBuild ? [] : ["expo-dev-client"],
+      android: { exclude: devClientExclude },
+      ios: { exclude: devClientExclude },
     },
   },
 };

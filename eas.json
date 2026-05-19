@@ -7,24 +7,29 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_USE_DEV_CLIENT": "1"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "developmentClient": false,
       "environment": "production",
       "env": {
-        "NODE_ENV": "production"
+        "EXCLUDE_DEV_CLIENT": "1"
       },
       "android": {
         "buildType": "app-bundle"
       }
     },
     "preview": {
+      "developmentClient": false,
       "environment": "preview",
       "distribution": "internal",
       "env": {
-        "NODE_ENV": "production"
+        "EXCLUDE_DEV_CLIENT": "1"
       },
       "android": {
         "buildType": "apk"

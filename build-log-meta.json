@@ -1,0 +1,48 @@
+﻿{
+  "id": "19971f4e-2e9f-4d9e-a7ab-f25af35a780b",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "UNKNOWN_ERROR",
+    "message": "Unknown error. See logs of the Install dependencies build phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "019e3f33-4242-7003-b595-c716083d9d48",
+    "hash": "761938c13bde36f74f75ff4608af20f1b3bc1e78"
+  },
+  "initiatingActor": {
+    "id": "d0dd5d8c-1fed-4925-b291-1b3e22265944",
+    "displayName": "sdvedutech"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/f38fc4bf-dba6-4be0-8b2b-4f1138191962/19971f4e-2e9f-4d9e-a7ab-f25af35a780b/2026-05-19T07%3A46%3A30Z-5b465374-d3db-425c-a6a4-0a0099246108.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260519%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260519T075643Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=595f5dcd4486de7a33e869f9bc73014cfd2ea73048e5551028b155bad630b9d32bb9a1828dc1cab246a9ef53e24e4e5287113adf7f1903de07c60eb9c3d65597aaa8694145d28e191068f4a10a3e0e0c3f5523c40d0e299a3afffce9af867a897196a9416078b982f918eef17d15e0caa117ce3d69fbb36871398d5a1d94d8d3150586edaa68204a01011a7f8a08a483e9ea38b1b8d0dd49929bdec201bf74bbf1e88cf2c5eaf44ae3dcd02a672db4b82b6fa4005a24c3ce9255d928b99506183f667b0baf046ca8cb1880d1e910169448734e3d05bbc8c1e4fe56813deaefb31864c99ec0ed82d7160fd7ceba8772ac1dcb9dc2468c58ced1e53dff0bd6a1bd"
+  ],
+  "project": {
+    "id": "f38fc4bf-dba6-4be0-8b2b-4f1138191962",
+    "name": "survey-app",
+    "slug": "survey-app",
+    "ownerAccount": {
+      "id": "cbe295c1-33fd-4878-b501-842a31e2f105",
+      "name": "sdvedutech"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "preview",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "ecea471e4c2f5f17ccace653e7c2ecff262da309",
+  "gitCommitMessage": "fix: standalone preview APK without dev client crash on launch",
+  "priority": "NORMAL",
+  "createdAt": "2026-05-19T07:46:24.404Z",
+  "updatedAt": "2026-05-19T07:46:42.927Z",
+  "completedAt": "2026-05-19T07:46:42.745Z",
+  "expirationDate": "2026-06-02T07:46:24.439Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 5655,
+    "buildQueueTime": 4432,
+    "buildDuration": 8254
+  }
+}

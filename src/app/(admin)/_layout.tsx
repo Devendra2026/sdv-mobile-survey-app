@@ -1,3 +1,4 @@
+import { TAB_BAR_CONTENT_HEIGHT, tabBarBottomInset } from '@/constants/tabBar';
 import { api } from '@/convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
@@ -7,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AdminLayout() {
   const insets = useSafeAreaInsets();
+  const bottomInset = tabBarBottomInset(insets);
   const pending = useQuery(api.admin.listPendingApprovals, {});
   const pendingCount = pending?.length ?? 0;
 
@@ -25,9 +27,9 @@ export default function AdminLayout() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E5E7EB',
-          height: 56 + insets.bottom,
+          height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
           paddingTop: 6,
-          paddingBottom: insets.bottom + 4,
+          paddingBottom: bottomInset + 4,
         },
       }}
     >
