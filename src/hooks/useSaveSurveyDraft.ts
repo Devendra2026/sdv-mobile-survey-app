@@ -9,9 +9,7 @@ import { useMutation } from 'convex/react';
 import { useCallback, useState } from 'react';
 
 function floorReadyForSync(f: NonNullable<WizardDraft['floors']>[number]): boolean {
-  if (!f.floorName || !(f.areaSqft > 0)) return false;
-  if (f.floorName === 'open_land') return true;
-  return !!(f.usageType && f.constructionType);
+  return !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType);
 }
 
 export function useSaveSurveyDraft() {

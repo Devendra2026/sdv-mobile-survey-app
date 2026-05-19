@@ -1,22 +1,24 @@
 /**
- * Step 5 — Area detail: plot area, floor rows, plinth & built-up totals.
+ * Step 5 — Area: plot area, plinth (ground floor), floor rows, total built-up.
  */
 import { AppButton, AppCard, AppDropdown, AreaPairField, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
-import { isOpenLandFloor, OPEN_LAND_FLOOR, sumFloorSqft } from '@/utils/area';
+import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { formatArea, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Floor = NonNullable<WizardDraft['floors']>[number];
 type Masters = ReturnType<typeof normalizeMastersBundle>;
+
+const FIELD_GAP = 16;
 
 function newFloorId() {
   return `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -27,19 +29,17 @@ function labelFor(options: { value: string; label: string }[], value: string) {
 }
 
 function floorRowComplete(f: Floor): boolean {
-  if (!f.floorName || !(f.areaSqft > 0)) return false;
-  if (isOpenLandFloor(f.floorName)) return true;
-  return !!(f.usageType && f.constructionType);
-}
-
-function hasOpenLandFloor(floors: Floor[]): boolean {
-  return floors.some((f) => isOpenLandFloor(f.floorName));
+  return !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType);
 }
 
 function areaStepComplete(d: WizardDraft): boolean {
   const plotOk = (d.plotSqft ?? 0) > 0;
   const floors = d.floors ?? [];
   return plotOk && floors.length > 0 && floors.every(floorRowComplete);
+}
+
+function withSyncedPlinth(floors: Floor[]): Partial<WizardDraft> {
+  return { floors, plinthSqft: plinthSqftFromFloors(floors) };
 }
 
 export default function StepAreaDetail() {
@@ -73,28 +73,25 @@ export default function StepAreaDetail() {
     <WizardStepFrame
       localId={localId}
       activeKey="floors"
-      title="Area Detail"
-      subtitle="Plot area and floor-wise built-up"
+      title="Area"
+      subtitle="Plot, plinth and built-up areas"
       nextDisabled={(draft) => !areaStepComplete(draft)}
     >
       {({ draft, update }) => {
         const floors = draft.floors ?? [];
-        const builtUpSqft = sumFloorSqft(floors);
+        const plinthSqft = plinthSqftFromFloors(floors);
+        const builtUpSqft = builtUpSqftFromFloors(floors);
 
         const saveFloor = async (f: Floor) => {
           const existing = floors.findIndex((x) => x.clientFloorId === f.clientFloorId);
           const next = [...floors];
           const row: Floor = {
             ...f,
-            isOccupied: isOpenLandFloor(f.floorName)
-              ? false
-              : f.usageType === 'self_occupied' || f.usageType === 'rented',
+            isOccupied: f.usageType === 'self_occupied' || f.usageType === 'rented',
           };
           if (existing >= 0) next[existing] = row;
           else next.push(row);
-          const patch: Partial<WizardDraft> = { floors: next };
-          if (!hasOpenLandFloor(next)) patch.plinthSqft = 0;
-          await update(patch);
+          await update(withSyncedPlinth(next));
           setEditorOpen(false);
           setEditing(null);
         };
@@ -107,9 +104,7 @@ export default function StepAreaDetail() {
               style: 'destructive',
               onPress: () => {
                 const next = floors.filter((f) => f.clientFloorId !== id);
-                const patch: Partial<WizardDraft> = { floors: next };
-                if (!hasOpenLandFloor(next)) patch.plinthSqft = 0;
-                void update(patch);
+                void update(withSyncedPlinth(next));
               },
             },
           ]);
@@ -130,11 +125,9 @@ export default function StepAreaDetail() {
           ]);
         };
 
-        const showSummary = hasOpenLandFloor(floors);
-
         return (
           <>
-            <View className="flex-row justify-end mb-3">
+            <View className="flex-row justify-end mb-2">
               <AppButton
                 label="Reset"
                 variant="outline"
@@ -146,78 +139,97 @@ export default function StepAreaDetail() {
 
             <SectionLabel>Plot area</SectionLabel>
             <AppCard padded className="mb-4">
-              <AreaPairField required sqft={draft.plotSqft ?? 0} onSqftChange={(v) => void update({ plotSqft: v })} />
+              <AreaPairField
+                label="Plot Area"
+                required
+                sqft={draft.plotSqft ?? 0}
+                onSqftChange={(v) => void update({ plotSqft: v })}
+                helperText="Total plot size on ground"
+              />
             </AppCard>
 
-            <View className="flex-row items-center justify-between mb-2">
+            <SectionLabel>Plinth area</SectionLabel>
+            <AppCard padded className="mb-4">
+              <AreaPairField
+                label="Plinth Area"
+                sqft={plinthSqft}
+                onSqftChange={() => {}}
+                readOnly
+                helperText={
+                  plinthSqft > 0 ? 'Calculated from ground floor row' : 'Add a ground floor row to set plinth area'
+                }
+              />
+            </AppCard>
+
+            <View className="flex-row items-center justify-between mb-2 mt-1">
               <SectionLabel>Floor area</SectionLabel>
               <Pressable
                 onPress={openNewFloor}
                 accessibilityLabel="Add floor"
-                className="w-10 h-10 rounded-full bg-brand items-center justify-center active:opacity-90"
+                className="w-11 h-11 rounded-full bg-brand items-center justify-center active:opacity-90"
               >
                 <Ionicons name="add" size={24} color="#FFFFFF" />
               </Pressable>
             </View>
+            <Text className="text-helper text-ink-tertiary-light mb-3 px-1 leading-5">
+              Each row is part of built-up area. Tap a row to edit; long press to delete.
+            </Text>
 
-            <AppCard padded={false} className="mb-2 overflow-hidden">
-              <View className="flex-row bg-page-light dark:bg-page-dark px-3 py-2.5 border-b border-line-subtle">
-                <Text className="flex-[1.1] text-[11px] font-semibold text-ink-secondary-light">Floor No.</Text>
-                <Text className="flex-1 text-[11px] font-semibold text-ink-secondary-light">Area</Text>
-                <Text className="flex-[1.1] text-[11px] font-semibold text-ink-secondary-light">Usage</Text>
-                <Text className="flex-[1.2] text-[11px] font-semibold text-ink-secondary-light">Construction</Text>
-              </View>
+            <AppCard padded={false} className="mb-4 overflow-hidden">
               {floors.length === 0 ? (
-                <Text className="text-helper text-ink-tertiary-light text-center py-6 px-4">
-                  Tap + to add a floor row
+                <Text className="text-helper text-ink-tertiary-light text-center py-8 px-4 leading-5">
+                  Tap + to add a floor. Use dropdowns for floor no., usage and construction type.
                 </Text>
               ) : (
-                floors.map((f) => (
+                floors.map((f, index) => (
                   <Pressable
                     key={f.clientFloorId}
                     onPress={() => openEditFloor(f)}
                     onLongPress={() => removeFloor(f.clientFloorId)}
                     delayLongPress={400}
-                    className="flex-row items-center px-3 py-3 border-b border-line-subtle active:bg-page-light dark:active:bg-page-dark"
+                    className={[
+                      'px-4 py-3.5 active:bg-page-light dark:active:bg-page-dark',
+                      index < floors.length - 1 ? 'border-b border-line-subtle' : '',
+                    ].join(' ')}
                   >
-                    <Text
-                      className="flex-[1.1] text-[12px] text-ink-primary-light dark:text-ink-primary-dark"
-                      numberOfLines={2}
-                    >
-                      {labelFor(masters.floors, f.floorName)}
-                    </Text>
-                    <Text className="flex-1 text-[12px] text-ink-secondary-light" numberOfLines={1}>
-                      {f.areaSqft > 0 ? formatArea(f.areaSqft) : '—'}
-                    </Text>
-                    <Text className="flex-[1.1] text-[12px] text-ink-secondary-light" numberOfLines={2}>
-                      {isOpenLandFloor(f.floorName) ? '—' : labelFor(masters.usageTypes, f.usageType)}
-                    </Text>
-                    <Text className="flex-[1.2] text-[11px] text-ink-secondary-light" numberOfLines={2}>
-                      {isOpenLandFloor(f.floorName) ? '—' : labelFor(masters.constructionTypes, f.constructionType)}
-                    </Text>
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1 min-w-0">
+                        <Text
+                          className="text-body font-medium text-ink-primary-light dark:text-ink-primary-dark leading-5"
+                          numberOfLines={2}
+                        >
+                          {f.floorName ? labelFor(masters.floors, f.floorName) : '—'}
+                        </Text>
+                        {f.usageType || f.constructionType ? (
+                          <Text className="text-helper text-ink-secondary-light mt-1 leading-5" numberOfLines={3}>
+                            {[
+                              labelFor(masters.usageTypes, f.usageType),
+                              labelFor(masters.constructionTypes, f.constructionType),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text className="text-body font-medium text-brand shrink-0">
+                        {f.areaSqft > 0 ? formatArea(f.areaSqft) : '—'}
+                      </Text>
+                    </View>
                   </Pressable>
                 ))
               )}
             </AppCard>
-            <Text className="text-caption text-ink-tertiary-light mb-4 px-1">
-              Note: Long press on a row to delete the row.
-            </Text>
 
-            {showSummary ? (
-              <>
-                <SectionLabel>Summary</SectionLabel>
-                <AppCard padded className="mb-4">
-                  <View style={{ gap: 20 }}>
-                    <AreaPairField
-                      label="Plinth Area"
-                      sqft={draft.plinthSqft ?? 0}
-                      onSqftChange={(v) => void update({ plinthSqft: v })}
-                    />
-                    <AreaPairField label="Total Built Up Area" sqft={builtUpSqft} onSqftChange={() => {}} readOnly />
-                  </View>
-                </AppCard>
-              </>
-            ) : null}
+            <SectionLabel>Total built-up area</SectionLabel>
+            <AppCard padded className="mb-2 border-brand/25 bg-brand-soft/30">
+              <AreaPairField
+                label="Total Built-up Area"
+                sqft={builtUpSqft}
+                onSqftChange={() => {}}
+                readOnly
+                helperText="Sum of all floor rows except open land"
+              />
+            </AppCard>
 
             {editing ? (
               <FloorEditorModal
@@ -254,74 +266,67 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
     if (open) setF(value);
   }, [open, value.clientFloorId]);
 
-  const openLand = isOpenLandFloor(f.floorName);
   const canSave = floorRowComplete(f);
   const isEdit = value.areaSqft > 0 && value.floorName;
 
-  const onFloorNameChange = (v: string) => {
-    if (v === OPEN_LAND_FLOOR) {
-      setF({
-        ...f,
-        floorName: v,
-        usageType: '',
-        constructionType: '',
-        isOccupied: false,
-      });
-    } else {
-      setF({ ...f, floorName: v });
-    }
-  };
-
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-black/50 justify-center px-4" onPress={onClose}>
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable className="flex-1 bg-black/45 justify-end" onPress={onClose}>
         <Pressable
-          className="bg-surface-light dark:bg-surface-dark rounded-2xl max-h-[88%] overflow-hidden"
-          style={{ marginBottom: insets.bottom }}
+          className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle max-h-[90%]"
+          style={{ paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12) }}
           onPress={(e) => e.stopPropagation()}
         >
-          <View className="flex-row items-center justify-between px-4 pt-4 pb-2 border-b border-line-subtle">
-            <Text className="text-h3 font-semibold text-ink-primary-light dark:text-ink-primary-dark">Area Detail</Text>
+          <View className="items-center pt-2 pb-1">
+            <View className="w-9 h-1 rounded-full bg-line-default" />
+          </View>
+          <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
+            <Text className="text-h3 font-semibold text-ink-primary-light dark:text-ink-primary-dark">
+              {isEdit ? 'Edit floor' : 'Add floor'}
+            </Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
               <Ionicons name="close" size={22} color="#6B7280" />
             </Pressable>
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 16, paddingBottom: 8, gap: 16 }}
+            nestedScrollEnabled
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: FIELD_GAP }}
           >
             <AppDropdown
-              label="Floor No"
+              label="Floor No."
               required
-              placeholder="Select floor type"
-              modalTitle="Floor No"
+              placeholder="Select floor"
+              modalTitle="Floor No."
               value={f.floorName}
               options={masters.floors}
-              onChange={onFloorNameChange}
+              onChange={(v) => setF({ ...f, floorName: v })}
             />
-            <AreaPairField label="Area" required sqft={f.areaSqft} onSqftChange={(v) => setF({ ...f, areaSqft: v })} />
-            {!openLand ? (
-              <>
-                <AppDropdown
-                  label="Usage Type"
-                  required
-                  placeholder="Select usage type"
-                  modalTitle="Usage Type"
-                  value={f.usageType}
-                  options={masters.usageTypes}
-                  onChange={(v) => setF({ ...f, usageType: v })}
-                />
-                <AppDropdown
-                  label="Construction Type"
-                  required
-                  placeholder="Select construction type"
-                  modalTitle="Construction Type"
-                  value={f.constructionType}
-                  options={masters.constructionTypes}
-                  onChange={(v) => setF({ ...f, constructionType: v })}
-                />
-              </>
-            ) : null}
+            <AreaPairField
+              label="Floor Area"
+              required
+              sqft={f.areaSqft}
+              onSqftChange={(v) => setF({ ...f, areaSqft: v })}
+              helperText="Area of this floor level"
+            />
+            <AppDropdown
+              label="Usage Type"
+              required
+              placeholder="Select usage type"
+              modalTitle="Usage Type"
+              value={f.usageType}
+              options={masters.usageTypes}
+              onChange={(v) => setF({ ...f, usageType: v })}
+            />
+            <AppDropdown
+              label="Construction Type"
+              required
+              placeholder="Select construction type"
+              modalTitle="Construction Type"
+              value={f.constructionType}
+              options={masters.constructionTypes}
+              onChange={(v) => setF({ ...f, constructionType: v })}
+            />
           </ScrollView>
           <View className="flex-row justify-end gap-2 px-4 py-3 border-t border-line-subtle">
             <AppButton label="Cancel" variant="outline" onPress={onClose} />

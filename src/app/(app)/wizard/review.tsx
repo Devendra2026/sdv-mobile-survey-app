@@ -27,6 +27,7 @@ import {
   useWizardDraft,
 } from '@/hooks/useWizardDraft';
 import { indicatorSteps, STEP_BEFORE_REVIEW_ROUTE, WIZARD_STEPS } from '@/hooks/wizardSteps';
+import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { gpsAccuracyTagLabel, gpsAccuracyTagTone } from '@/utils/captureGps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
@@ -331,18 +332,18 @@ export default function ReviewScreen() {
         <SectionLabel>Area detail</SectionLabel>
         <AppCard padded={false} className="mb-3">
           <ListRow title="Plot area" subtitle={formatArea(draft.plotSqft ?? 0)} showChevron={false} />
-          {(draft.floors ?? []).some((f) => f.floorName === 'open_land') ? (
-            <>
-              <Divider />
-              <ListRow title="Plinth area" subtitle={formatArea(draft.plinthSqft ?? 0)} showChevron={false} />
-              <Divider />
-              <ListRow
-                title="Total built-up"
-                subtitle={formatArea((draft.floors ?? []).reduce((s, f) => s + (f.areaSqft > 0 ? f.areaSqft : 0), 0))}
-                showChevron={false}
-              />
-            </>
-          ) : null}
+          <Divider />
+          <ListRow
+            title="Plinth area"
+            subtitle={formatArea(plinthSqftFromFloors(draft.floors ?? []) || draft.plinthSqft || 0)}
+            showChevron={false}
+          />
+          <Divider />
+          <ListRow
+            title="Total built-up"
+            subtitle={formatArea(builtUpSqftFromFloors(draft.floors ?? []))}
+            showChevron={false}
+          />
         </AppCard>
 
         <SectionLabel>Floors ({draft.floors?.length ?? 0})</SectionLabel>
@@ -354,16 +355,8 @@ export default function ReviewScreen() {
               <View key={f.clientFloorId}>
                 {i > 0 ? <Divider /> : null}
                 <ListRow
-                  title={
-                    f.floorName === 'open_land'
-                      ? humanizeRole(f.floorName)
-                      : `${humanizeRole(f.floorName)} · ${humanizeRole(f.usageType)}`
-                  }
-                  subtitle={
-                    f.floorName === 'open_land'
-                      ? formatArea(f.areaSqft)
-                      : `${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}`
-                  }
+                  title={`${humanizeRole(f.floorName)} · ${humanizeRole(f.usageType)}`}
+                  subtitle={`${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}`}
                   showChevron={false}
                 />
               </View>

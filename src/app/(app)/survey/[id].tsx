@@ -8,6 +8,7 @@ import { AppButton, AppCard, Banner, ListRow, SectionLabel, Spinner, StatusBadge
 import { SurveyPhotoGrid } from '@/components/survey/survey-photo-grid';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { gpsAccuracyTagLabel, gpsAccuracyTier } from '@/utils/captureGps';
 import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/utils/format';
@@ -244,11 +245,15 @@ export default function SurveyDetailScreen() {
         <AppCard padded={false} className="mb-3">
           <ListRow title="Plot area" subtitle={formatArea(survey.plotSqft)} showChevron={false} />
           <View className="h-px bg-line-subtle" />
-          <ListRow title="Plinth area" subtitle={formatArea(survey.plinthSqft)} showChevron={false} />
+          <ListRow
+            title="Plinth area"
+            subtitle={formatArea(plinthSqftFromFloors(survey.floors) || survey.plinthSqft)}
+            showChevron={false}
+          />
           <View className="h-px bg-line-subtle" />
           <ListRow
             title="Total built-up"
-            subtitle={formatArea(survey.floors.reduce((s, f) => s + f.areaSqft, 0))}
+            subtitle={formatArea(builtUpSqftFromFloors(survey.floors))}
             showChevron={false}
           />
         </AppCard>

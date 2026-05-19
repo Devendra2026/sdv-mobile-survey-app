@@ -7,7 +7,7 @@
  */
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { isOpenLandFloor, usageTypeToOccupied, validateFloorRow } from './areaMasters';
+import { usageTypeToOccupied, validateFloorRow } from './areaMasters';
 import { assertCanReadWard, clientError, requireUser, writeAudit } from './helpers';
 
 export const list = query({
@@ -53,7 +53,7 @@ export const upsert = mutation({
     if (Object.keys(floorErrors).length > 0) {
       clientError('VALIDATION', 'Invalid floor row', floorErrors);
     }
-    const isOccupied = isOpenLandFloor(args.floorName) ? false : usageTypeToOccupied(args.usageType);
+    const isOccupied = usageTypeToOccupied(args.usageType);
 
     const existing = await ctx.db
       .query('floors')

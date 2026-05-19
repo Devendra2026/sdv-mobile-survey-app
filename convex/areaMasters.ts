@@ -51,14 +51,11 @@ export function validateFloorRow(input: {
   if (!input.floorName || !FLOOR_SET.has(input.floorName)) {
     details.floorName = ['Select a valid floor'];
   }
-  const openLand = isOpenLandFloor(input.floorName);
-  if (!openLand) {
-    if (!input.usageType || !USAGE_SET.has(input.usageType)) {
-      details.usageType = ['Select a valid usage type'];
-    }
-    if (!input.constructionType || !CONSTRUCTION_SET.has(input.constructionType)) {
-      details.constructionType = ['Select a valid construction type'];
-    }
+  if (!input.usageType || !USAGE_SET.has(input.usageType)) {
+    details.usageType = ['Select a valid usage type'];
+  }
+  if (!input.constructionType || !CONSTRUCTION_SET.has(input.constructionType)) {
+    details.constructionType = ['Select a valid construction type'];
   }
   const area = input.areaSqft;
   if (typeof area !== 'number' || !(area > 0)) {

@@ -20,6 +20,7 @@
  *   - useWizardDraft(id) → loads the draft for `localId`, exposes update + reset
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
+import { plinthSqftFromFloors } from '@/utils/area';
 import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
 import { surveyPhotosComplete } from '@/utils/surveyPhotos';
@@ -464,7 +465,7 @@ export function draftToSaveDraftPayload(d: WizardDraft) {
     roadType: d.roadType,
     taxRateZone: d.taxRateZone,
     plotSqft: d.plotSqft,
-    plinthSqft: d.plinthSqft,
+    plinthSqft: plinthSqftFromFloors(d.floors ?? []) || d.plinthSqft,
     municipalWaterConnection: d.municipalWaterConnection,
     waterSource: d.waterSource as 'government_tap' | 'dug_well' | 'borewell' | 'other' | undefined,
     sanitationType: d.sanitationType as
@@ -544,7 +545,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     roadType: d.roadType,
     taxRateZone: d.taxRateZone,
     plotSqft: d.plotSqft ?? 0,
-    plinthSqft: d.plinthSqft ?? 0,
+    plinthSqft: plinthSqftFromFloors(d.floors ?? []) || (d.plinthSqft ?? 0),
     municipalWaterConnection: d.municipalWaterConnection,
     waterSource: d.waterSource,
     sanitationType: d.sanitationType,
@@ -605,11 +606,7 @@ export function stepCompletion(d: WizardDraft) {
       (d.plotSqft ?? 0) > 0 &&
       d.floors &&
       d.floors.length > 0 &&
-      d.floors.every((f) => {
-        if (!f.floorName || !(f.areaSqft > 0)) return false;
-        if (f.floorName === 'open_land') return true;
-        return !!(f.usageType && f.constructionType);
-      })
+      d.floors.every((f) => !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType))
     ),
     services: servicesStepComplete(d),
     gps: !!d.gps,

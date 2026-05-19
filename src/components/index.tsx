@@ -993,9 +993,10 @@ export interface AreaPairFieldProps {
   sqft: number;
   onSqftChange: (sqft: number) => void;
   readOnly?: boolean;
+  helperText?: string;
 }
 
-export function AreaPairField({ label, required, sqft, onSqftChange, readOnly }: AreaPairFieldProps) {
+export function AreaPairField({ label, required, sqft, onSqftChange, readOnly, helperText }: AreaPairFieldProps) {
   const [sqftText, setSqftText] = useState(() => (sqft > 0 ? String(sqft) : ''));
   const [sqmText, setSqmText] = useState(() => (sqft > 0 ? formatSqmDisplay(sqmFromSqft(sqft)) : ''));
   const editingRef = useRef<'sqft' | 'sqm' | null>(null);
@@ -1043,8 +1044,12 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly }:
     editingRef.current = null;
   };
 
-  const inputClass = 'flex-1 text-body text-ink-primary-light dark:text-ink-primary-dark px-3 py-3 min-h-[48px]';
-  const unitClass = 'text-[11px] text-ink-tertiary-light text-center mt-1';
+  const inputClass =
+    'flex-1 text-body leading-5 text-ink-primary-light dark:text-ink-primary-dark px-3 py-3 min-h-[48px]';
+  const unitClass = 'text-[11px] leading-4 text-ink-tertiary-light text-center mt-1 px-0.5';
+  const fieldShell = readOnly
+    ? 'rounded-xl border border-line-subtle bg-page-light dark:bg-page-dark'
+    : 'rounded-xl border border-line-default bg-surface-light dark:bg-surface-dark';
 
   return (
     <View>
@@ -1054,37 +1059,38 @@ export function AreaPairField({ label, required, sqft, onSqftChange, readOnly }:
         </Text>
       ) : null}
       <View className="flex-row gap-2">
-        <View className="flex-1">
-          <View className="rounded-full border border-line-default bg-surface-light dark:bg-surface-dark overflow-hidden">
+        <View className="flex-1 min-w-0">
+          <View className={`${fieldShell} overflow-hidden`}>
             <TextInput
               value={sqftText}
               onChangeText={onSqftInput}
               onBlur={endEdit}
               editable={!readOnly}
               keyboardType="decimal-pad"
-              placeholder="sq feet"
+              placeholder="Sq feet"
               placeholderTextColor="#9CA3AF"
               className={inputClass}
             />
           </View>
-          <Text className={unitClass}>Unit (square feet)</Text>
+          <Text className={unitClass}>Sq feet</Text>
         </View>
-        <View className="flex-1">
-          <View className="rounded-full border border-line-default bg-surface-light dark:bg-surface-dark overflow-hidden">
+        <View className="flex-1 min-w-0">
+          <View className={`${fieldShell} overflow-hidden`}>
             <TextInput
               value={sqmText}
               onChangeText={onSqmInput}
               onBlur={endEdit}
               editable={!readOnly}
               keyboardType="decimal-pad"
-              placeholder="0.0000"
+              placeholder="Sq meter"
               placeholderTextColor="#9CA3AF"
               className={inputClass}
             />
           </View>
-          <Text className={unitClass}>Unit (square meter)</Text>
+          <Text className={unitClass}>Sq meter</Text>
         </View>
       </View>
+      {helperText ? <Text className="text-helper text-ink-tertiary-light mt-2 leading-5">{helperText}</Text> : null}
     </View>
   );
 }

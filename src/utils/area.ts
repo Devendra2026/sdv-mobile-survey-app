@@ -4,8 +4,29 @@ export const SQM_PER_SQFT = 0.092903;
 /** Floor master value — open plot / vacant land (no built-up floors). */
 export const OPEN_LAND_FLOOR = 'open_land';
 
+/** Floor master value — plinth is taken from this row only. */
+export const GROUND_FLOOR_NAME = 'ground_floor';
+
 export function isOpenLandFloor(floorName: string | undefined): boolean {
   return floorName === OPEN_LAND_FLOOR;
+}
+
+export function isGroundFloor(floorName: string | undefined): boolean {
+  return floorName === GROUND_FLOOR_NAME;
+}
+
+/** Plinth area = ground floor row area only. */
+export function plinthSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  const ground = floors.find((f) => isGroundFloor(f.floorName));
+  return ground && ground.areaSqft > 0 ? ground.areaSqft : 0;
+}
+
+/** Built-up area = sum of floor rows, excluding open-land plot rows. */
+export function builtUpSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  return floors.reduce((sum, f) => {
+    if (isOpenLandFloor(f.floorName)) return sum;
+    return sum + (f.areaSqft > 0 ? f.areaSqft : 0);
+  }, 0);
 }
 
 export function sqmFromSqft(sqft: number): number {
@@ -29,6 +50,7 @@ export function parseAreaInput(text: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** @deprecated Prefer {@link builtUpSqftFromFloors} when floor names are available. */
 export function sumFloorSqft(floors: { areaSqft: number }[]): number {
   return floors.reduce((sum, f) => sum + (f.areaSqft > 0 ? f.areaSqft : 0), 0);
 }
