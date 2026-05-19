@@ -4,19 +4,16 @@
 import { AppCard, AppDropdown, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
-import { propertyUseRequiresSubcategory } from '@/utils/taxation';
+import {
+  filterActivePropertyUses,
+  propertyUseRequiresSubcategory,
+  taxationSubcategoryFieldLabel,
+} from '@/utils/taxation';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 
 const FIELD_GAP = 16;
-
-function subcategoryLabel(propertyUse: string): string {
-  if (propertyUse === 'residential') return 'Residential type';
-  if (propertyUse === 'commercial') return 'Commercial type';
-  if (propertyUse === 'mix_property') return 'Mix type';
-  return 'Subcategory';
-}
 
 export default function StepTaxation() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
@@ -29,6 +26,7 @@ export default function StepTaxation() {
         const use = draft.propertyUse ?? '';
         const needsSubcategory = propertyUseRequiresSubcategory(use);
         const subcategoryOptions = masters.propertyUseSubcategories?.[use] ?? [];
+        const propertyUseOptions = filterActivePropertyUses(masters.propertyUses);
 
         const onPropertyUseChange = (v: string) => {
           const subs = masters.propertyUseSubcategories?.[v] ?? [];
@@ -65,15 +63,15 @@ export default function StepTaxation() {
                   placeholder="Select property use"
                   modalTitle="Property use"
                   value={use}
-                  options={masters.propertyUses}
+                  options={propertyUseOptions}
                   onChange={onPropertyUseChange}
                 />
                 {needsSubcategory ? (
                   <AppDropdown
-                    label={subcategoryLabel(use)}
+                    label={taxationSubcategoryFieldLabel(use)}
                     required
                     placeholder="Select type"
-                    modalTitle={subcategoryLabel(use)}
+                    modalTitle={taxationSubcategoryFieldLabel(use)}
                     value={draft.propertyType ?? ''}
                     options={subcategoryOptions}
                     onChange={(v) => update({ propertyType: v })}

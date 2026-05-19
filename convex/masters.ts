@@ -92,7 +92,9 @@ export const bundle = query({
       // Each category is optional in case it isn't seeded yet on a fresh deployment.
       assessmentYears: grouped['assessment_year'] ?? [],
       ownershipTypes: grouped['ownership_type']?.length ? grouped['ownership_type']! : OWNERSHIP_TYPES,
-      propertyUses: grouped['property_use']?.length ? grouped['property_use']! : PROPERTY_USES,
+      propertyUses: (grouped['property_use']?.length ? grouped['property_use']! : PROPERTY_USES).filter(
+        (o) => o.value !== 'agricultural_land',
+      ),
       propertyUseSubcategories: PROPERTY_USE_SUBCATEGORIES,
       propertyUsesRequiringSubcategory: PROPERTY_USES_REQUIRING_SUBCATEGORY,
       situations: grouped['situation']?.length ? grouped['situation']! : SITUATIONS,

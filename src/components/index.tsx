@@ -12,10 +12,11 @@ import { formatSurveyParcelLabel } from '@/utils/format';
 import { optionLabel } from '@/utils/services';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -26,6 +27,7 @@ import {
   View,
   ViewProps,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
@@ -252,10 +254,14 @@ export function AppDropdown({
   disabled,
 }: AppDropdownProps) {
   const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
   const safeOptions = options ?? [];
   const selected = safeOptions.find((o) => o.value === value);
   const displayLabel = selected?.label ?? (value.trim() ? optionLabel(value, safeOptions) : undefined);
   const sheetTitle = modalTitle ?? label ?? placeholder ?? 'Select';
+  const listMaxHeight = useMemo(() => Math.min(420, Math.max(220, safeOptions.length * 52)), [safeOptions.length]);
+  const sheetBottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 12);
+
   return (
     <View>
       {label ? (
@@ -271,53 +277,66 @@ export function AppDropdown({
         accessibilityLabel={label ? `${label}, ${displayLabel ?? 'not selected'}` : displayLabel}
       >
         <Text
-          className={`flex-1 text-body ${displayLabel ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
-          numberOfLines={1}
+          className={`flex-1 text-body leading-5 ${displayLabel ? 'text-ink-primary-light dark:text-ink-primary-dark' : 'text-ink-disabled-light'}`}
+          numberOfLines={2}
         >
           {displayLabel ?? placeholder}
         </Text>
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable onPress={() => setOpen(false)} className="flex-1 bg-black/40 justify-end">
           <Pressable
             onPress={() => undefined}
-            className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle max-h-[70%] pb-7"
+            className="bg-surface-light dark:bg-surface-dark rounded-t-3xl border-t border-line-subtle"
+            style={{ maxHeight: '78%', paddingBottom: sheetBottomPad }}
           >
             <View className="items-center pt-2 pb-1">
               <View className="w-9 h-1 rounded-full bg-line-default" />
             </View>
             {sheetTitle ? (
-              <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark px-5 py-3">
+              <Text className="text-h3 font-medium text-ink-primary-light dark:text-ink-primary-dark px-5 pb-2 pt-1">
                 {sheetTitle}
               </Text>
             ) : (
               <View className="h-2" />
             )}
-            <ScrollView className="px-2.5">
-              {safeOptions.map((o) => {
+            <FlatList
+              data={safeOptions}
+              keyExtractor={(o) => o.value}
+              style={{ maxHeight: listMaxHeight }}
+              contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 4 }}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              overScrollMode="always"
+              initialNumToRender={14}
+              maxToRenderPerBatch={20}
+              windowSize={8}
+              renderItem={({ item: o }) => {
                 const active = o.value === value;
                 return (
                   <Pressable
-                    key={o.value}
                     onPress={() => {
                       onChange(o.value);
                       setOpen(false);
                     }}
-                    className={`flex-row items-center justify-between rounded-md px-3 ${active ? 'bg-brand-soft' : ''}`}
+                    className={`flex-row items-center justify-between rounded-md px-3 py-2.5 ${active ? 'bg-brand-soft' : ''}`}
                     style={{ minHeight: 48 }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                   >
                     <Text
-                      className={`text-body ${active ? 'text-brand font-medium' : 'text-ink-primary-light dark:text-ink-primary-dark'}`}
+                      className={`flex-1 pr-2 text-body leading-5 ${active ? 'text-brand font-medium' : 'text-ink-primary-light dark:text-ink-primary-dark'}`}
                     >
                       {o.label}
                     </Text>
                     {active ? <Ionicons name="checkmark" size={18} color="#003B8E" /> : null}
                   </Pressable>
                 );
-              })}
-            </ScrollView>
+              }}
+            />
           </Pressable>
         </Pressable>
       </Modal>

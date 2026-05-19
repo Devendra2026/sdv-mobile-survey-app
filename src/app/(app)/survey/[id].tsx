@@ -14,6 +14,7 @@ import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/ut
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { backOrReplace } from '@/utils/navigation';
 import { optionLabel, yesNoLabel } from '@/utils/services';
+import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -221,7 +222,14 @@ export default function SurveyDetailScreen() {
           {survey.propertyType ? (
             <>
               <View className="h-px bg-line-subtle" />
-              <ListRow title="Subcategory" subtitle={humanizeRole(survey.propertyType)} showChevron={false} />
+              <ListRow
+                title={taxationSubcategoryFieldLabel(survey.propertyUse)}
+                subtitle={optionLabel(
+                  survey.propertyType,
+                  masters?.propertyUseSubcategories?.[survey.propertyUse] ?? [],
+                )}
+                showChevron={false}
+              />
             </>
           ) : null}
           <View className="h-px bg-line-subtle" />

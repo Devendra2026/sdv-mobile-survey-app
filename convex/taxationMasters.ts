@@ -22,7 +22,6 @@ export const PROPERTY_USES: MasterOption[] = [
   { value: 'residential', label: 'Residential' },
   { value: 'commercial', label: 'Commercial' },
   { value: 'open_land', label: 'Open land' },
-  { value: 'agricultural_land', label: 'Agricultural land' },
   { value: 'religious_property', label: 'Religious property' },
   { value: 'mix_property', label: 'Mix property' },
 ];
@@ -33,17 +32,30 @@ export const PROPERTY_USE_SUBCATEGORIES: Record<string, MasterOption[]> = {
     { value: 'residential_rented', label: 'Residential rented' },
   ],
   commercial: [
-    { value: 'bank', label: 'Bank' },
-    { value: 'shop', label: 'Shop' },
-    { value: 'showroom', label: 'Showroom' },
-    { value: 'godown', label: 'Godown' },
-    { value: 'office', label: 'Office' },
-    { value: 'mall', label: 'Mall' },
-    { value: 'hospital', label: 'Hospital' },
+    { value: 'shop_bakery', label: 'Shop / Bakery' },
+    { value: 'bank_office', label: 'Bank / office' },
     { value: 'school_college', label: 'School / College' },
-    { value: 'petrol_pumps', label: 'Petrol pumps' },
-    { value: 'marriage_home', label: 'Marriage home' },
-    { value: 'hotel_restaurant', label: 'Hotel & restaurant' },
+    { value: 'mall_showroom', label: 'Mall / Show room' },
+    { value: 'petrol_pump', label: 'Petrol Pump' },
+    { value: 'hotel_marriage_restaurant', label: 'Hotel / Marriage Garden / Restaurant' },
+    { value: 'hospital_nursing_pathology', label: 'Hospital / Nursing Home / Pathology / Clinic' },
+    { value: 'godown', label: 'Godown' },
+    { value: 'central_government', label: 'Central Government' },
+    { value: 'state_government', label: 'State Government' },
+    { value: 'industry', label: 'Industry' },
+    { value: 'cold_store', label: 'Cold Store' },
+  ],
+  open_land: [
+    { value: 'open', label: 'Open' },
+    { value: 'agriculture', label: 'Agriculture' },
+    { value: 'open_land_godown', label: 'Godown' },
+  ],
+  religious_property: [
+    { value: 'mandir', label: 'Mandir' },
+    { value: 'masjid', label: 'Masjid' },
+    { value: 'trust_dharamshala', label: 'Trust / Dharamshala' },
+    { value: 'shamshan_kabristan', label: 'Shamshan / kabristan' },
+    { value: 'gurudwara_church', label: 'Gurudwara / Church' },
   ],
   mix_property: [{ value: 'residential_and_commercial', label: 'Residential & commercial' }],
 };
@@ -75,6 +87,22 @@ const ROAD_TYPE_SET = new Set(ROAD_TYPES.map((o) => o.value));
 const TAX_ZONE_SET = new Set(TAX_RATE_ZONES.map((o) => o.value));
 const SITUATION_SET = new Set(SITUATIONS.map((o) => o.value));
 
+/** Retired property uses — still accepted on read for older surveys. */
+const LEGACY_PROPERTY_USES = new Set(['agricultural_land']);
+
+/** Retired commercial subcategories — still accepted on read for older surveys. */
+const LEGACY_COMMERCIAL_SUBCATEGORIES = new Set([
+  'bank',
+  'shop',
+  'showroom',
+  'office',
+  'mall',
+  'hospital',
+  'petrol_pumps',
+  'marriage_home',
+  'hotel_restaurant',
+]);
+
 /** Retired mix subcategories — still accepted on read for older surveys. */
 const LEGACY_MIX_SUBCATEGORIES = new Set(['mix_residential', 'mix_commercial']);
 
@@ -89,8 +117,13 @@ export function propertyUseRequiresSubcategory(propertyUse: string): boolean {
 
 export function isValidPropertyUseSubcategory(propertyUse: string, subcategory: string): boolean {
   if (propertyUse === 'mix_property' && LEGACY_MIX_SUBCATEGORIES.has(subcategory)) return true;
+  if (propertyUse === 'commercial' && LEGACY_COMMERCIAL_SUBCATEGORIES.has(subcategory)) return true;
   const allowed = SUBCATEGORY_BY_USE.get(propertyUse);
   return allowed ? allowed.has(subcategory) : false;
+}
+
+function isValidPropertyUse(propertyUse: string): boolean {
+  return PROPERTY_USE_SET.has(propertyUse) || LEGACY_PROPERTY_USES.has(propertyUse);
 }
 
 export function validateTaxationSection(
@@ -115,9 +148,9 @@ export function validateTaxationSection(
   }
 
   const propertyUse = input.propertyUse?.trim() ?? '';
-  if (strict && (!propertyUse || !PROPERTY_USE_SET.has(propertyUse))) {
+  if (strict && (!propertyUse || !isValidPropertyUse(propertyUse))) {
     details.propertyUse = ['Select a valid property use'];
-  } else if (propertyUse && !PROPERTY_USE_SET.has(propertyUse)) {
+  } else if (propertyUse && !isValidPropertyUse(propertyUse)) {
     details.propertyUse = ['Select a valid property use'];
   }
 
@@ -213,10 +246,18 @@ export async function seedTaxationMasters(ctx: MutationCtx) {
     SITUATIONS.map((o, i) => ({ ...o, position: i + 1 })),
   );
 
-  for (const value of LEGACY_MIX_SUBCATEGORIES) {
+  for (const value of [...LEGACY_MIX_SUBCATEGORIES, ...LEGACY_COMMERCIAL_SUBCATEGORIES]) {
     const row = await ctx.db
       .query('masters')
       .withIndex('by_category_value', (q) => q.eq('category', 'property_use_subcategory').eq('value', value))
+      .unique();
+    if (row?.isActive) await ctx.db.patch(row._id, { isActive: false });
+  }
+
+  for (const value of LEGACY_PROPERTY_USES) {
+    const row = await ctx.db
+      .query('masters')
+      .withIndex('by_category_value', (q) => q.eq('category', 'property_use').eq('value', value))
       .unique();
     if (row?.isActive) await ctx.db.patch(row._id, { isActive: false });
   }

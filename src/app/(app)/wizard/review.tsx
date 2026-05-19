@@ -32,6 +32,7 @@ import { toUserMessage } from '@/utils/errors';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { optionLabel, yesNoLabel } from '@/utils/services';
+import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -309,7 +310,14 @@ export default function ReviewScreen() {
           {draft.propertyType ? (
             <>
               <Divider />
-              <ListRow title="Subcategory" subtitle={humanizeRole(draft.propertyType)} showChevron={false} />
+              <ListRow
+                title={taxationSubcategoryFieldLabel(draft.propertyUse)}
+                subtitle={optionLabel(
+                  draft.propertyType,
+                  bundle.propertyUseSubcategories?.[draft.propertyUse ?? ''] ?? [],
+                )}
+                showChevron={false}
+              />
             </>
           ) : null}
           <Divider />
