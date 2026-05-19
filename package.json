@@ -12,7 +12,7 @@
     "build:ios": "expo run:ios",
     "lint": "expo lint",
     "generate:logo": "node scripts/generate-logo-assets.mjs",
-    "lockfile:eas": "npm install --package-lock-only --os=linux --libc=glibc --cpu=x64",
+    "lockfile:eas": "node ./scripts/lockfile-eas.mjs",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
