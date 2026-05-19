@@ -55,6 +55,10 @@
     "react-native-worklets": "0.5.1",
     "svix": "^1.93.0"
   },
+  "optionalDependencies": {
+    "utf-8-validate": "5.0.10",
+    "yaml": "2.9.0"
+  },
   "devDependencies": {
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
