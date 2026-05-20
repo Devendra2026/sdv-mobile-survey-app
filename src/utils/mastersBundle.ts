@@ -27,6 +27,7 @@ export function normalizeMastersBundle(bundle: MastersBundle): MastersBundle {
     relationships: bundle.relationships ?? emptyOptions,
     waterSources: mergeMasterOptions([...WATER_SOURCES], bundle.waterSources),
     sanitationTypes: mergeMasterOptions([...SANITATION_TYPES], bundle.sanitationTypes),
+    usageFactors: bundle.usageFactors ?? bundle.usageTypes ?? emptyOptions,
     usageTypes: bundle.usageTypes ?? emptyOptions,
     constructionTypes: bundle.constructionTypes ?? emptyOptions,
     floors: bundle.floors ?? emptyOptions,

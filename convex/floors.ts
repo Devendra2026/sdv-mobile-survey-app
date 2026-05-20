@@ -7,7 +7,7 @@
  */
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { usageTypeToOccupied, validateFloorRow } from './areaMasters';
+import { normalizeFloorFields, presentFloorRow, usageTypeToOccupied, validateFloorRow } from './areaMasters';
 import { assertCanReadWard, clientError, requireUser, writeAudit } from './helpers';
 
 export const list = query({
@@ -21,7 +21,7 @@ export const list = query({
       .query('floors')
       .withIndex('by_survey', (q) => q.eq('surveyId', args.surveyId))
       .collect();
-    return rows.sort((a, b) => a.position - b.position);
+    return rows.sort((a, b) => a.position - b.position).map(presentFloorRow);
   },
 });
 
@@ -31,6 +31,7 @@ export const upsert = mutation({
     clientFloorId: v.string(),
     position: v.number(),
     floorName: v.string(),
+    usageFactor: v.optional(v.string()),
     usageType: v.string(),
     constructionType: v.string(),
     isOccupied: v.boolean(),
@@ -44,16 +45,23 @@ export const upsert = mutation({
     if (survey.qcStatus === 'approved' && me.role === 'surveyor') {
       clientError('LOCKED', 'Survey is locked');
     }
+
+    const normalized = normalizeFloorFields({
+      usageFactor: args.usageFactor,
+      usageType: args.usageType,
+    });
+
     const floorErrors = validateFloorRow({
       floorName: args.floorName,
-      usageType: args.usageType,
+      usageFactor: normalized.usageFactor || undefined,
+      usageType: normalized.usageType,
       constructionType: args.constructionType,
       areaSqft: args.areaSqft,
     });
     if (Object.keys(floorErrors).length > 0) {
       clientError('VALIDATION', 'Invalid floor row', floorErrors);
     }
-    const isOccupied = usageTypeToOccupied(args.usageType);
+    const isOccupied = usageTypeToOccupied(normalized.usageType);
 
     const existing = await ctx.db
       .query('floors')
@@ -62,18 +70,25 @@ export const upsert = mutation({
       )
       .unique();
 
+    const row = {
+      position: args.position,
+      floorName: args.floorName,
+      usageFactor: normalized.usageFactor || undefined,
+      usageType: normalized.usageType,
+      constructionType: args.constructionType,
+      isOccupied,
+      areaSqft: args.areaSqft,
+    };
+
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        position: args.position,
-        floorName: args.floorName,
-        usageType: args.usageType,
-        constructionType: args.constructionType,
-        isOccupied,
-        areaSqft: args.areaSqft,
-      });
+      await ctx.db.patch(existing._id, row);
       return existing._id;
     }
-    const id = await ctx.db.insert('floors', { ...args, isOccupied });
+    const id = await ctx.db.insert('floors', {
+      surveyId: args.surveyId,
+      clientFloorId: args.clientFloorId,
+      ...row,
+    });
     await writeAudit(ctx, {
       actorId: me._id,
       action: 'floor.added',

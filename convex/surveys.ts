@@ -11,7 +11,7 @@ import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { addressTenantContext, normalizeAddressFields, validateAddressSection } from './addressRules';
-import { validateAreaSection } from './areaMasters';
+import { presentFloorRow, validateAreaSection } from './areaMasters';
 import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_TARGET_ACCURACY_METERS } from './gpsAccuracy';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
 import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
@@ -254,7 +254,7 @@ export const get = query({
         .query('floors')
         .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
         .collect()
-        .then((rows) => rows.sort((a, b) => a.position - b.position)),
+        .then((rows) => rows.sort((a, b) => a.position - b.position).map(presentFloorRow)),
       ctx.db
         .query('photos')
         .withIndex('by_survey', (q) => q.eq('surveyId', args.id))

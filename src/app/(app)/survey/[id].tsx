@@ -54,6 +54,8 @@ export default function SurveyDetailScreen() {
     survey.status === 'submitted' &&
     survey.qcStatus !== 'approved';
 
+  const bundle = normalizeMastersBundle(masters);
+
   const doSubmit = async () => {
     setBusy(true);
     try {
@@ -270,8 +272,15 @@ export default function SurveyDetailScreen() {
               <View key={f._id}>
                 {i > 0 ? <View className="h-px bg-line-subtle" /> : null}
                 <ListRow
-                  title={`${f.floorName} · ${humanizeRole(f.usageType)}`}
-                  subtitle={`${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}${f.isOccupied ? '' : ' · vacant'}`}
+                  title={`${humanizeRole(f.floorName)} · ${optionLabel(f.usageFactor, bundle.usageFactors)}`}
+                  subtitle={[
+                    optionLabel(f.usageType, bundle.usageTypes),
+                    formatArea(f.areaSqft),
+                    humanizeRole(f.constructionType),
+                    f.isOccupied ? undefined : 'vacant',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   showChevron={false}
                 />
               </View>
@@ -282,7 +291,6 @@ export default function SurveyDetailScreen() {
         <SectionLabel>Services</SectionLabel>
         <AppCard padded={false} className="mb-3">
           {(() => {
-            const bundle = normalizeMastersBundle(masters);
             return (
               <>
                 <ListRow

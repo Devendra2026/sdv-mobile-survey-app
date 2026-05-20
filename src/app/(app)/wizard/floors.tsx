@@ -6,6 +6,7 @@ import { api } from '@/convex/_generated/api';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
+import { usageTypeToOccupied } from '@/utils/floorRow';
 import { formatArea, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { scrollViewProps } from '@/utils/ui-layout';
@@ -30,7 +31,7 @@ function labelFor(options: { value: string; label: string }[], value: string) {
 }
 
 function floorRowComplete(f: Floor): boolean {
-  return !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType);
+  return !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType);
 }
 
 function areaStepComplete(d: WizardDraft): boolean {
@@ -57,6 +58,7 @@ export default function StepAreaDetail() {
     setEditing({
       clientFloorId: newFloorId(),
       floorName: '',
+      usageFactor: '',
       usageType: '',
       constructionType: '',
       isOccupied: true,
@@ -88,7 +90,7 @@ export default function StepAreaDetail() {
           const next = [...floors];
           const row: Floor = {
             ...f,
-            isOccupied: f.usageType === 'self_occupied' || f.usageType === 'rented',
+            isOccupied: usageTypeToOccupied(f.usageType),
           };
           if (existing >= 0) next[existing] = row;
           else next.push(row);
@@ -179,7 +181,7 @@ export default function StepAreaDetail() {
             <AppCard padded={false} className="mb-4 overflow-hidden">
               {floors.length === 0 ? (
                 <Text className="text-helper text-ink-tertiary-light text-center py-8 px-4 leading-5">
-                  Tap + to add a floor. Use dropdowns for floor no., usage and construction type.
+                  Tap + to add a floor. Choose floor no., usage factor, usage type, and construction type.
                 </Text>
               ) : (
                 floors.map((f, index) => (
@@ -201,9 +203,10 @@ export default function StepAreaDetail() {
                         >
                           {f.floorName ? labelFor(masters.floors, f.floorName) : '—'}
                         </Text>
-                        {f.usageType || f.constructionType ? (
+                        {f.usageFactor || f.usageType || f.constructionType ? (
                           <Text className="text-helper text-ink-secondary-light mt-1 leading-5" numberOfLines={3}>
                             {[
+                              labelFor(masters.usageFactors, f.usageFactor),
                               labelFor(masters.usageTypes, f.usageType),
                               labelFor(masters.constructionTypes, f.constructionType),
                             ]
@@ -319,16 +322,27 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
               required
               sqft={f.areaSqft}
               onSqftChange={(v) => setF({ ...f, areaSqft: v })}
-              helperText="Area of this floor level"
+              helperText="Area of this floor level in sq.ft"
             />
             <AppDropdown
-              label="Usage Type"
+              label="Usage factor"
+              required
+              placeholder="Select usage factor"
+              modalTitle="Usage factor"
+              value={f.usageFactor}
+              options={masters.usageFactors}
+              onChange={(v) => setF({ ...f, usageFactor: v })}
+              helperText="How this floor area is used (residential, commercial, etc.)"
+            />
+            <AppDropdown
+              label="Usage type"
               required
               placeholder="Select usage type"
-              modalTitle="Usage Type"
+              modalTitle="Usage type"
               value={f.usageType}
               options={masters.usageTypes}
               onChange={(v) => setF({ ...f, usageType: v })}
+              helperText="Occupancy — self-occupied or rented"
             />
             <AppDropdown
               label="Construction Type"

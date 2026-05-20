@@ -247,6 +247,7 @@ interface AppDropdownProps {
   label?: string;
   required?: boolean;
   placeholder?: string;
+  helperText?: string;
   /** Bottom-sheet title when there is no field `label`; ignored if `label` is set. */
   modalTitle?: string;
   disabled?: boolean;
@@ -259,6 +260,7 @@ export function AppDropdown({
   label,
   required,
   placeholder = 'Tap to choose',
+  helperText,
   modalTitle,
   disabled,
 }: AppDropdownProps) {
@@ -294,6 +296,11 @@ export function AppDropdown({
         </Text>
         <Ionicons name="chevron-down" size={18} color="#6B7280" />
       </Pressable>
+      {helperText ? (
+        <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1 leading-5">
+          {helperText}
+        </Text>
+      ) : null}
 
       <Modal
         visible={open}

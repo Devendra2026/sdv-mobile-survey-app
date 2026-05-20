@@ -9,7 +9,7 @@ import { useConvex, useMutation } from 'convex/react';
 import { useCallback, useState } from 'react';
 
 function floorReadyForSync(f: NonNullable<WizardDraft['floors']>[number]): boolean {
-  return !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType);
+  return !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType);
 }
 
 export function useSaveSurveyDraft() {
@@ -39,6 +39,7 @@ export function useSaveSurveyDraft() {
             clientFloorId: f.clientFloorId,
             position: i,
             floorName: f.floorName,
+            usageFactor: f.usageFactor,
             usageType: f.usageType,
             constructionType: f.constructionType,
             isOccupied: f.isOccupied,

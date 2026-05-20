@@ -355,8 +355,14 @@ export default function ReviewScreen() {
               <View key={f.clientFloorId}>
                 {i > 0 ? <Divider /> : null}
                 <ListRow
-                  title={`${humanizeRole(f.floorName)} · ${humanizeRole(f.usageType)}`}
-                  subtitle={`${formatArea(f.areaSqft)} · ${humanizeRole(f.constructionType)}`}
+                  title={`${humanizeRole(f.floorName)} · ${optionLabel(f.usageFactor, bundle.usageFactors)}`}
+                  subtitle={[
+                    optionLabel(f.usageType, bundle.usageTypes),
+                    formatArea(f.areaSqft),
+                    humanizeRole(f.constructionType),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   showChevron={false}
                 />
               </View>

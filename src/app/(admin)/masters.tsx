@@ -23,6 +23,7 @@ const LOOKUP_GROUPS: {
     | 'relationships'
     | 'waterSources'
     | 'sanitationTypes'
+    | 'usageFactors'
     | 'usageTypes'
     | 'constructionTypes'
     | 'floors';
@@ -38,7 +39,8 @@ const LOOKUP_GROUPS: {
   { key: 'relationships', label: 'Relationships', icon: 'people-outline' },
   { key: 'waterSources', label: 'Water sources', icon: 'water-outline' },
   { key: 'sanitationTypes', label: 'Sanitation', icon: 'medkit-outline' },
-  { key: 'usageTypes', label: 'Usage types', icon: 'grid-outline' },
+  { key: 'usageFactors', label: 'Usage factors', icon: 'grid-outline' },
+  { key: 'usageTypes', label: 'Usage types', icon: 'home-outline' },
   { key: 'constructionTypes', label: 'Construction', icon: 'hammer-outline' },
   { key: 'floors', label: 'Floors', icon: 'business-outline' },
 ];
@@ -194,7 +196,7 @@ export default function AdminMastersScreen() {
               Values shown in field forms. Managed via admin API in production.
             </Text>
             {LOOKUP_GROUPS.map((group) => {
-              const options = masters[group.key] ?? [];
+              const options = bundle[group.key] ?? [];
               const open = expandedCategory === group.key;
               return (
                 <AppCard key={group.key} padded={false} className="mb-2.5 overflow-hidden">

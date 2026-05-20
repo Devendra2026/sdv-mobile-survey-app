@@ -228,6 +228,7 @@ export default defineSchema({
     clientFloorId: v.string(), // client-generated id; idempotency
     position: v.number(),
     floorName: v.string(),
+    usageFactor: v.optional(v.string()),
     usageType: v.string(),
     constructionType: v.string(),
     isOccupied: v.boolean(),

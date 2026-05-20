@@ -22,6 +22,7 @@
  */
 import { isRespondentOwner, primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
 import { plinthSqftFromFloors } from '@/utils/area';
+import { normalizeFloorFields, usageTypeToOccupied } from '@/utils/floorRow';
 import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
 import { surveyPhotosComplete } from '@/utils/surveyPhotos';
@@ -83,6 +84,20 @@ function migrateWizardDraft(
   delete raw.altMobileNo;
   if (raw.waterSource) raw.waterSource = coerceWaterSource(raw.waterSource);
   if (raw.sanitationType) raw.sanitationType = coerceSanitationType(raw.sanitationType);
+  if (raw.floors?.length) {
+    raw.floors = raw.floors.map((f) => {
+      const { usageFactor, usageType } = normalizeFloorFields({
+        usageFactor: f.usageFactor,
+        usageType: f.usageType,
+      });
+      return {
+        ...f,
+        usageFactor,
+        usageType,
+        isOccupied: usageType ? usageTypeToOccupied(usageType) : f.isOccupied,
+      };
+    });
+  }
   return raw;
 }
 
@@ -134,6 +149,7 @@ export interface WizardDraft {
   floors?: Array<{
     clientFloorId: string;
     floorName: string;
+    usageFactor: string;
     usageType: string;
     constructionType: string;
     isOccupied: boolean;
@@ -246,6 +262,7 @@ export function surveyToDraft(survey: {
   floors: Array<{
     clientFloorId: string;
     floorName: string;
+    usageFactor?: string;
     usageType: string;
     constructionType: string;
     isOccupied: boolean;
@@ -321,14 +338,21 @@ export function surveyToDraft(survey: {
     sanitationType: coerceSanitationType(survey.sanitationType),
     municipalWasteCollection: survey.municipalWasteCollection,
     electricityNo: survey.electricityNo,
-    floors: survey.floors.map((f) => ({
-      clientFloorId: f.clientFloorId,
-      floorName: f.floorName,
-      usageType: f.usageType,
-      constructionType: f.constructionType,
-      isOccupied: f.isOccupied,
-      areaSqft: f.areaSqft,
-    })),
+    floors: survey.floors.map((f) => {
+      const { usageFactor, usageType } = normalizeFloorFields({
+        usageFactor: f.usageFactor,
+        usageType: f.usageType,
+      });
+      return {
+        clientFloorId: f.clientFloorId,
+        floorName: f.floorName,
+        usageFactor,
+        usageType,
+        constructionType: f.constructionType,
+        isOccupied: usageType ? usageTypeToOccupied(usageType) : f.isOccupied,
+        areaSqft: f.areaSqft,
+      };
+    }),
     gps: survey.gps,
     photos: survey.photos.map((p) => ({
       slot: p.slot,
@@ -609,7 +633,7 @@ export function stepCompletion(d: WizardDraft) {
       (d.plotSqft ?? 0) > 0 &&
       d.floors &&
       d.floors.length > 0 &&
-      d.floors.every((f) => !!(f.floorName && f.areaSqft > 0 && f.usageType && f.constructionType))
+      d.floors.every((f) => !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType))
     ),
     services: servicesStepComplete(d),
     gps: !!d.gps,

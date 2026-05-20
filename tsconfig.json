@@ -1,12 +1,49 @@
 {
-  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
+    "allowJs": true,
+    "esModuleInterop": true,
+    "jsx": "react-native",
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
+    "module": "preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "customConditions": [
+      "react-native"
+    ],
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "target": "ESNext",
     "strict": true,
     "paths": {
-      "@/convex/*": ["./convex/*"],
-      "@/*": ["./src/*"],
-      "@/assets/*": ["./assets/*"]
+      "@/convex/*": [
+        "./convex/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "android",
+    "ios"
+  ],
+  "extends": "expo/tsconfig.base"
 }
