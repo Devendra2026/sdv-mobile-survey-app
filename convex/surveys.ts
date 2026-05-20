@@ -14,7 +14,7 @@ import { addressTenantContext, normalizeAddressFields, validateAddressSection } 
 import { validateAreaSection } from './areaMasters';
 import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_TARGET_ACCURACY_METERS } from './gpsAccuracy';
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from './helpers';
-import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
+import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
 import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from './schema';
 import { validateServicesSection } from './serviceMasters';
 import { validateTaxationSection } from './taxationMasters';
@@ -804,6 +804,10 @@ function validateBusinessRules(
       { requirePrimaryMobile: strict },
     ),
   );
+  const denormalizedMobile = String(in_.mobileNo ?? '').trim();
+  if (denormalizedMobile && !isValidIndianOwnerMobile(denormalizedMobile)) {
+    details.mobileNo = ['Enter a valid 10-digit mobile (starts 6-9)'];
+  }
   Object.assign(
     details,
     validateAddressSection(

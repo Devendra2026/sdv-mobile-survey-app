@@ -3,12 +3,7 @@
  * Canonical dropdown values live here (not admin-editable masters).
  */
 import { query } from './_generated/server';
-import {
-  isAcceptedOwnerMobile,
-  isRespondentOwner,
-  isValidIndianOwnerMobile,
-  primaryOwnerMobileFromOwners,
-} from './ownerMobile';
+import { isRespondentOwner, isValidIndianOwnerMobile, primaryOwnerMobileFromOwners } from './ownerMobile';
 
 export {
   isAcceptedOwnerMobile,
@@ -108,23 +103,15 @@ export function validateOwnerSection(
   }
   const relationship = input.relationship?.trim();
   const firstMobile = owners[0]?.mobileNo?.trim() ?? '';
-  if (requirePrimary) {
-    if (isRespondentOwner(relationship)) {
-      if (!isValidIndianOwnerMobile(firstMobile)) {
-        details.mobileNo = ['Enter a valid 10-digit mobile for the owner (starts 6-9)'];
-      }
-    } else if (!firstMobile) {
-      details.mobileNo = ['Enter owner mobile or 0000000000 if contact is unknown'];
-    } else if (!isAcceptedOwnerMobile(firstMobile, relationship)) {
-      details.mobileNo = ['Use a valid mobile (starts 6-9) or 0000000000 if owner contact is unknown'];
-    }
+  if (requirePrimary && isRespondentOwner(relationship) && !isValidIndianOwnerMobile(firstMobile)) {
+    details.mobileNo = ['Enter a valid 10-digit mobile for the owner (starts 6-9)'];
+  } else if (firstMobile && !isValidIndianOwnerMobile(firstMobile)) {
+    details.mobileNo = ['Enter a valid 10-digit mobile (starts 6-9)'];
   }
   owners.forEach((o, i) => {
     const mobile = o.mobileNo?.trim();
-    if (mobile && !isAcceptedOwnerMobile(mobile, relationship)) {
-      details[`owners.${i}.mobileNo`] = isRespondentOwner(relationship)
-        ? ['Enter a valid 10-digit mobile (starts 6-9)']
-        : ['Use a valid mobile (starts 6-9) or 0000000000 if owner contact is unknown'];
+    if (mobile && !isValidIndianOwnerMobile(mobile)) {
+      details[`owners.${i}.mobileNo`] = ['Enter a valid 10-digit mobile (starts 6-9)'];
     }
     const alt = o.altMobileNo?.trim();
     if (alt) {

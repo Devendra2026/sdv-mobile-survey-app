@@ -6,7 +6,7 @@
  */
 import { AppButton, AppCard, AppDropdown, AppInput, NumberStepper, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
-import { OWNER_MOBILE_UNKNOWN, isAcceptedOwnerMobile, isRespondentOwner } from '@/convex/ownerMobile';
+import { isRespondentOwner, isValidIndianOwnerMobile } from '@/convex/ownerMobile';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { newOwnerRow, stepCompletion, type WizardDraft, type WizardOwnerRow } from '@/hooks/useWizardDraft';
 import { isValidIndianMobile, sanitizeMobileDigits } from '@/utils/format';
@@ -17,15 +17,15 @@ import { useEffect } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
 const MOBILE_HELPER = '10 digits, starting with 6, 7, 8 or 9';
-const UNKNOWN_OWNER_HELPER = `If owner contact is unknown, enter ${OWNER_MOBILE_UNKNOWN}`;
 
 function ownerMobileError(row: WizardOwnerRow, requirePrimary: boolean, relationship?: string): string | undefined {
   const value = row.mobileNo?.trim();
-  if (!value) return requirePrimary ? 'Mobile number is required' : undefined;
+  if (!value) {
+    return requirePrimary && isRespondentOwner(relationship) ? 'Mobile number is required' : undefined;
+  }
   if (value.length < 10) return 'Enter all 10 digits';
-  if (isAcceptedOwnerMobile(value, relationship)) return undefined;
-  if (isRespondentOwner(relationship)) return MOBILE_HELPER;
-  return `${MOBILE_HELPER}, or ${OWNER_MOBILE_UNKNOWN} if unknown`;
+  if (isValidIndianOwnerMobile(value)) return undefined;
+  return MOBILE_HELPER;
 }
 
 function ownerAltMobileError(row: WizardOwnerRow): string | undefined {
@@ -112,11 +112,7 @@ function OwnerStepBody({
         {owners.map((row, index) => {
           const mobileError = ownerMobileError(row, index === 0, draft.relationship);
           const altError = ownerAltMobileError(row);
-          const mobileHelper =
-            mobileError ??
-            (index === 0 && !isRespondentOwner(draft.relationship)
-              ? `${MOBILE_HELPER}. ${UNKNOWN_OWNER_HELPER}`
-              : MOBILE_HELPER);
+          const mobileHelper = mobileError ?? MOBILE_HELPER;
           return (
             <AppCard key={row.clientOwnerId} padded>
               <View className="flex-row items-center justify-between mb-2">

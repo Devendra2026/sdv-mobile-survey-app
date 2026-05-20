@@ -20,7 +20,7 @@
  *   - useWizardDraft(id) → loads the draft for `localId`, exposes update + reset
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
-import { isAcceptedOwnerMobile, isRespondentOwner, primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
+import { isRespondentOwner, primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
 import { plinthSqftFromFloors } from '@/utils/area';
 import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
@@ -491,7 +491,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     !d.wardNo ||
     !d.parcelNo?.trim() ||
     !d.unitNo?.trim() ||
-    !primaryOwnerMobileFromDraft(d) ||
+    !ownerStepComplete(d) ||
     !d.locality?.trim() ||
     !d.colonyName?.trim() ||
     !d.pinCode ||
@@ -563,21 +563,20 @@ function primaryOwnerMobileFromDraft(d: WizardDraft): string | undefined {
   return primaryOwnerMobileFromOwners(d.owners, d.relationship);
 }
 
-/** Owner step: mobile required; valid Indian when respondent is owner, else 0000000000 allowed. */
+/** Owner step: respondent is owner → valid primary mobile required; else mobile optional but must be valid if set. */
 export function ownerStepComplete(d: WizardDraft): boolean {
   const owners = d.owners ?? [];
   if (!owners.length) return false;
   const relationship = d.relationship?.trim();
   const primary = owners[0]?.mobileNo?.trim() ?? '';
-  if (!primary) return false;
   if (isRespondentOwner(relationship)) {
-    if (!isValidIndianMobile(primary)) return false;
-  } else if (!isAcceptedOwnerMobile(primary, relationship)) {
+    if (!primary || !isValidIndianMobile(primary)) return false;
+  } else if (primary && !isValidIndianMobile(primary)) {
     return false;
   }
   for (const o of owners) {
     const mobile = o.mobileNo?.trim();
-    if (mobile && !isAcceptedOwnerMobile(mobile, relationship)) return false;
+    if (mobile && !isValidIndianMobile(mobile)) return false;
     const alt = o.altMobileNo?.trim();
     if (alt) {
       if (!isValidIndianMobile(alt)) return false;
