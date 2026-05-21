@@ -169,6 +169,7 @@ export default defineSchema({
     // Section 1 — Property
     sectorNo: v.optional(v.string()),
     oldPropertyNo: v.optional(v.string()),
+    propertyId: v.optional(v.string()),
     parcelNo: v.string(),
     unitNo: v.string(),
     constructedYear: v.optional(v.number()),

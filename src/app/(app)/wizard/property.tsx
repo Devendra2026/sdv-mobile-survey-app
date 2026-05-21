@@ -145,44 +145,70 @@ function PropertyFields({
       </AppCard>
 
       <SectionLabel>Identification</SectionLabel>
-      <AppCard padded className="mb-3" style={{ gap: 12 }}>
-        <AppInput
-          label="Parcel number"
-          required
-          value={draft.parcelNo ?? ''}
-          onChangeText={(v) => update({ parcelNo: v })}
-          placeholder="e.g. P-1042"
-          helperText="Official parcel / plot identifier"
-        />
-        <AppInput
-          label="Unit no"
-          required
-          value={draft.unitNo ?? ''}
-          onChangeText={(v) => update({ unitNo: v })}
-          placeholder="e.g. 4A"
-        />
-        <AppInput
-          label="Old property number"
-          value={draft.oldPropertyNo ?? ''}
-          onChangeText={(v) => update({ oldPropertyNo: v })}
-          placeholder="e.g. 12/45/A"
-          helperText="Optional — previous assessment register number"
-        />
-        <AppInput
-          label="Constructed year"
-          value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
-          onChangeText={(v) => {
-            const digits = v.replace(/\D/g, '');
-            update({ constructedYear: digits ? Number(digits) : undefined });
-          }}
-          placeholder="e.g. 1998"
-          keyboardType="number-pad"
-          helperText="Optional — year the structure was built"
-        />
+      <AppCard padded className="mb-3" style={{ gap: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <AppInput
+              label="Parcel number"
+              required
+              value={draft.parcelNo ?? ''}
+              onChangeText={(v) => update({ parcelNo: v })}
+              placeholder="P-1042"
+              helperText="Plot / parcel ID"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AppInput
+              label="Unit no"
+              required
+              value={draft.unitNo ?? ''}
+              onChangeText={(v) => update({ unitNo: v })}
+              placeholder="4A"
+            />
+          </View>
+        </View>
+
+        <View style={{ gap: 12 }}>
+          <Text className="text-caption font-medium text-ink-tertiary-light dark:text-ink-tertiary-dark">
+            Additional details (optional)
+          </Text>
+          <AppInput
+            label="Old property number"
+            value={draft.oldPropertyNo ?? ''}
+            onChangeText={(v) => update({ oldPropertyNo: v })}
+            placeholder="e.g. 12/45/A"
+            iconLeft="document-text-outline"
+            helperText="Previous assessment register number"
+          />
+          <AppInput
+            label="Property ID"
+            value={draft.propertyId ?? ''}
+            onChangeText={(v) => update({ propertyId: v })}
+            placeholder="e.g. PID-2024-0891"
+            iconLeft="finger-print-outline"
+            helperText="Municipal unique property identifier (PID)"
+            autoCapitalize="characters"
+          />
+          <AppInput
+            label="Constructed year"
+            value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
+            onChangeText={(v) => {
+              const digits = v.replace(/\D/g, '').slice(0, 4);
+              update({ constructedYear: digits ? Number(digits) : undefined });
+            }}
+            placeholder="e.g. 1998"
+            keyboardType="number-pad"
+            iconLeft="calendar-outline"
+            helperText="Year the structure was built"
+          />
+        </View>
       </AppCard>
 
       <SectionLabel>Slum classification</SectionLabel>
-      <AppCard padded>
+      <AppCard padded style={{ gap: 8 }}>
+        <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark">
+          Indicates whether the property falls within a notified slum area.
+        </Text>
         <ChipSelector
           value={draft.isSlum ? 'yes' : 'no'}
           options={[

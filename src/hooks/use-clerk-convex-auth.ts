@@ -1,11 +1,9 @@
-import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useAuth } from '@clerk/expo';
 import { useConvexAuth } from 'convex/react';
 import { useEffect, useState } from 'react';
 
-/** Allow Clerk token retries (see useAuthForConvex) before showing the error screen. */
-const CONVEX_AUTH_TIMEOUT_MS = 25_000;
-const RETRY_INTERVAL_MS = 4_000;
+/** Allow Clerk token retries inside useAuthForConvex before showing the error screen. */
+const CONVEX_AUTH_TIMEOUT_MS = 35_000;
 
 /**
  * Clerk session + Convex JWT bridge state.
@@ -18,14 +16,6 @@ export function useClerkConvexAuth() {
   const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
   const { isLoading: convexAuthLoading, isAuthenticated } = useConvexAuth();
   const [timedOut, setTimedOut] = useState(false);
-  useEffect(() => {
-    if (!isSignedIn) return;
-    if (convexAuthLoading || isAuthenticated) return;
-
-    retryConvexAuth();
-    const interval = setInterval(() => retryConvexAuth(), RETRY_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isSignedIn, convexAuthLoading, isAuthenticated]);
 
   useEffect(() => {
     if (!isSignedIn || convexAuthLoading || isAuthenticated) {

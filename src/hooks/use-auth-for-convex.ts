@@ -1,4 +1,4 @@
-import { sessionClaimsHaveConvexAud, tokenHasConvexAud } from '@/utils/jwt';
+import { tokenHasConvexAud } from '@/utils/jwt';
 import { useAuth } from '@clerk/expo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -8,11 +8,21 @@ export let lastConvexTokenError: string | null = null;
 const RETRY_MS = 800;
 const MAX_ATTEMPTS = 8;
 
-const authRetryListeners = new Set<() => void>();
+/** Bumped on manual retry so Convex re-runs setAuth (user-initiated only). */
+let manualAuthRetrySeq = 0;
 
-/** Force ConvexProviderWithAuth to fetch a fresh Clerk `convex` JWT. */
+const forceRefreshRef = { current: 0 };
+const manualRetryListeners = new Set<() => void>();
+
+function notifyManualAuthRetry() {
+  for (const listener of manualRetryListeners) listener();
+}
+
+/** Force ConvexProviderWithAuth to fetch a fresh Clerk `convex` JWT (Try again). */
 export function retryConvexAuth() {
-  for (const listener of authRetryListeners) listener();
+  forceRefreshRef.current += 1;
+  manualAuthRetrySeq += 1;
+  notifyManualAuthRetry();
 }
 
 function formatTokenError(err: unknown): string {
@@ -41,35 +51,24 @@ function isClerkOfflineError(err: unknown): boolean {
  * Convex does not call setAuth on every render (causes "Securing your session" loops).
  */
 export function useAuthForConvex() {
-  const { isLoaded, isSignedIn, getToken, sessionClaims } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
-  const [authEpoch, setAuthEpoch] = useState(0);
-  const hadConvexAudRef = useRef(false);
+  const [retrySeq, setRetrySeq] = useState(manualAuthRetrySeq);
 
   useEffect(() => {
-    const bump = () => setAuthEpoch((n) => n + 1);
-    authRetryListeners.add(bump);
+    const sync = () => setRetrySeq(manualAuthRetrySeq);
+    manualRetryListeners.add(sync);
     return () => {
-      authRetryListeners.delete(bump);
+      manualRetryListeners.delete(sync);
     };
   }, []);
 
-  useEffect(() => {
-    const hasConvexAud = sessionClaimsHaveConvexAud(sessionClaims);
-    if (hasConvexAud && !hadConvexAudRef.current) {
-      hadConvexAudRef.current = true;
-      setAuthEpoch((n) => n + 1);
-    }
-    if (!hasConvexAud) {
-      hadConvexAudRef.current = false;
-    }
-  }, [sessionClaims]);
-
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      void retrySeq;
       lastConvexTokenError = null;
-      const refresh = forceRefreshToken || authEpoch > 0;
+      const refresh = forceRefreshToken || forceRefreshRef.current > 0;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
         const skipCache = refresh || attempt > 1;
@@ -121,7 +120,7 @@ export function useAuthForConvex() {
       }
       return null;
     },
-    [authEpoch],
+    [retrySeq],
   );
 
   return useMemo(

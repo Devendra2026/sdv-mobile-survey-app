@@ -30,6 +30,7 @@ const draftSurveyInput = {
   wardNo: v.optional(v.string()),
   sectorNo: v.optional(v.string()),
   oldPropertyNo: v.optional(v.string()),
+  propertyId: v.optional(v.number()),
   parcelNo: v.optional(v.string()),
   unitNo: v.optional(v.string()),
   constructedYear: v.optional(v.number()),
@@ -70,6 +71,7 @@ const surveyInput = {
 
   sectorNo: v.optional(v.string()),
   oldPropertyNo: v.optional(v.string()),
+  propertyId: v.optional(v.string()),
   parcelNo: v.string(),
   unitNo: v.string(),
   constructedYear: v.optional(v.number()),
@@ -655,6 +657,7 @@ type SurveyUpsertArgs = {
   municipalWasteCollection: boolean;
   sectorNo?: string;
   oldPropertyNo?: string;
+  propertyId?: string;
   constructedYear?: number;
   respondentName?: string;
   relationship?: string;
@@ -668,12 +671,20 @@ type SurveyUpsertArgs = {
 };
 
 function normalizePropertyFields<
-  T extends { parcelNo?: string; unitNo?: string; sectorNo?: string; oldPropertyNo?: string; constructedYear?: number },
+  T extends {
+    parcelNo?: string;
+    unitNo?: string;
+    sectorNo?: string;
+    oldPropertyNo?: string;
+    propertyId?: string;
+    constructedYear?: number;
+  },
 >(args: T): T {
   return {
     ...args,
     sectorNo: args.sectorNo?.trim() || undefined,
     oldPropertyNo: args.oldPropertyNo?.trim() || undefined,
+    propertyId: args.propertyId?.trim() || undefined,
     parcelNo: (args.parcelNo ?? '').trim(),
     unitNo: (args.unitNo ?? '').trim(),
     constructedYear: args.constructedYear,
@@ -735,6 +746,7 @@ function mergeDraftArgs(
         wardNo: existing.wardNo,
         sectorNo: existing.sectorNo,
         oldPropertyNo: existing.oldPropertyNo,
+        propertyId: existing.propertyId,
         parcelNo: existing.parcelNo,
         unitNo: existing.unitNo,
         constructedYear: existing.constructedYear,

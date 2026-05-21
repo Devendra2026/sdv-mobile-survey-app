@@ -217,6 +217,18 @@ export default function ReviewScreen() {
               />
             </>
           ) : null}
+          {draft.propertyId ? (
+            <>
+              <Divider />
+              <ListRow
+                icon="finger-print-outline"
+                iconTone="neutral"
+                title="Property ID"
+                subtitle={draft.propertyId}
+                showChevron={false}
+              />
+            </>
+          ) : null}
           {draft.constructedYear != null ? (
             <>
               <Divider />

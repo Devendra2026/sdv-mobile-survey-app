@@ -117,6 +117,7 @@ export interface WizardDraft {
   wardNo?: string;
   sectorNo?: string;
   oldPropertyNo?: string;
+  propertyId?: string;
   parcelNo?: string;
   unitNo?: string;
   constructedYear?: number;
@@ -224,6 +225,7 @@ export function surveyToDraft(survey: {
   wardNo: string;
   sectorNo?: string;
   oldPropertyNo?: string;
+  propertyId?: string;
   parcelNo: string;
   unitNo: string;
   constructedYear?: number;
@@ -289,6 +291,7 @@ export function surveyToDraft(survey: {
     wardNo: survey.wardNo,
     sectorNo: survey.sectorNo,
     oldPropertyNo: survey.oldPropertyNo,
+    propertyId: survey.propertyId,
     parcelNo: survey.parcelNo,
     unitNo: survey.unitNo,
     constructedYear: survey.constructedYear,
@@ -469,6 +472,7 @@ export function draftToSaveDraftPayload(d: WizardDraft) {
     wardNo: d.wardNo?.trim() || undefined,
     sectorNo: d.sectorNo?.trim() || undefined,
     oldPropertyNo: d.oldPropertyNo?.trim() || undefined,
+    propertyId: d.propertyId?.trim() || undefined,
     parcelNo: d.parcelNo?.trim() || undefined,
     unitNo: d.unitNo?.trim() || undefined,
     constructedYear: d.constructedYear,
@@ -539,6 +543,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     wardNo: d.wardNo,
     sectorNo: d.sectorNo?.trim() || undefined,
     oldPropertyNo: d.oldPropertyNo?.trim() || undefined,
+    propertyId: d.propertyId?.trim() || undefined,
     parcelNo: d.parcelNo.trim(),
     unitNo: d.unitNo.trim(),
     constructedYear: d.constructedYear,
