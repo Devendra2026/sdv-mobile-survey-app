@@ -58,7 +58,7 @@ function signedInLoadingMessage(
 
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
-  const { convexReady, convexAuthFailed, convexAuthLoading } = useClerkConvexAuth();
+  const { convexReady, convexAuthFailed, convexAuthLoading, convexAuthRecovering } = useClerkConvexAuth();
   const { me, needsSync, syncing } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
@@ -114,6 +114,14 @@ function AuthGate() {
 
   if (!isLoaded) {
     return <View style={bootScreenStyle} />;
+  }
+
+  if (isSignedIn && convexAuthRecovering) {
+    return (
+      <View className="flex-1">
+        <AppLoadingView message="Connecting — weak signal is OK, this may take a minute…" />
+      </View>
+    );
   }
 
   if (isSignedIn && convexAuthFailed) {

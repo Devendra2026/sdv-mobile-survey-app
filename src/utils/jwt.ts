@@ -26,3 +26,16 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
 export function tokenHasConvexAud(token: string): boolean {
   return sessionClaimsHaveConvexAud(decodeJwtPayload(token));
 }
+
+/** JWT `exp` in ms, or null when missing or invalid. */
+export function tokenExpiresAtMs(token: string): number | null {
+  const exp = decodeJwtPayload(token)?.exp;
+  return typeof exp === 'number' ? exp * 1000 : null;
+}
+
+/** True when the token is still valid for Convex (default 60s skew). */
+export function isTokenValid(token: string, skewMs = 60_000): boolean {
+  const expMs = tokenExpiresAtMs(token);
+  if (expMs === null) return true;
+  return Date.now() < expMs - skewMs;
+}

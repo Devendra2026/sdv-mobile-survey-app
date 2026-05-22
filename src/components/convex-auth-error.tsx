@@ -1,7 +1,7 @@
 import { AppButton } from '@/components';
 import { authStyles } from '@/components/auth/styles';
 import { env } from '@/config/env';
-import { lastConvexTokenError, retryConvexAuth } from '@/hooks/use-auth-for-convex';
+import { classifyConvexTokenError, lastConvexTokenError, retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { useAuth } from '@clerk/expo';
 import { useState } from 'react';
@@ -21,7 +21,8 @@ export function ConvexAuthError() {
     setRetrying(true);
     try {
       retryConvexAuth();
-      await new Promise((r) => setTimeout(r, 2500));
+      const waitMs = classifyConvexTokenError(lastConvexTokenError) === 'transient' ? 5000 : 2500;
+      await new Promise((r) => setTimeout(r, waitMs));
     } finally {
       setRetrying(false);
     }
@@ -32,8 +33,8 @@ export function ConvexAuthError() {
       <ScrollView contentContainerStyle={authStyles.scroll}>
         <Text style={authStyles.title}>Could not connect your session</Text>
         <Text style={authStyles.subtitle}>
-          You are signed in, but the server could not verify your account yet. This is usually temporary — try again, or
-          sign out and sign back in.
+          Your account setup on this device needs attention. Try again when you have a stronger signal, or sign out and
+          sign back in.
         </Text>
 
         {lastConvexTokenError ? (
