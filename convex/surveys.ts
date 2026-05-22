@@ -30,7 +30,7 @@ const draftSurveyInput = {
   wardNo: v.optional(v.string()),
   sectorNo: v.optional(v.string()),
   oldPropertyNo: v.optional(v.string()),
-  propertyId: v.optional(v.number()),
+  propertyId: v.optional(v.string()),
   parcelNo: v.optional(v.string()),
   unitNo: v.optional(v.string()),
   constructedYear: v.optional(v.number()),
