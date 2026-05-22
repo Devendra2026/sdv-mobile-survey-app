@@ -1,3 +1,51 @@
-# AI agent skills (local .claude/skills may be symlinks into .agents on Windows)
+# EAS upload ignore list. When this file exists it replaces .gitignore for uploads —
+# copy .gitignore rules here, then add EAS-only exclusions.
+
+# dependencies
+node_modules/
+bun.lock
+bun.lockb
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native (must not upload stale local projects; EAS runs expo prebuild)
+/android
+/ios
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# local EAS CLI artifacts
+build-log-meta.json
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# AI agent skills (not needed on build workers)
 .agents/
 .claude/

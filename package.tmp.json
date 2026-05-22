@@ -81,28 +81,18 @@
     "typescript": "~5.9.2"
   },
   "private": true,
-  "expo": {
-    "autolinking": {
-      "android": {
-        "exclude": [
-          "expo-dev-client",
-          "expo-dev-launcher",
-          "expo-dev-menu",
-          "expo-dev-menu-interface"
-        ]
-      },
-      "ios": {
-        "exclude": [
-          "expo-dev-client",
-          "expo-dev-launcher",
-          "expo-dev-menu",
-          "expo-dev-menu-interface"
-        ]
-      }
-    }
-  },
   "overrides": {
     "@expo/config": "~12.0.13",
     "@expo/config-plugins": "~54.0.4"
+  },
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "expo-dev-client",
+        "expo-dev-launcher",
+        "expo-dev-menu",
+        "expo-dev-menu-interface"
+      ]
+    }
   }
 }

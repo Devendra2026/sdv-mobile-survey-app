@@ -2,7 +2,8 @@
  * Run before `eas build --profile preview` to catch install/launch crash causes locally.
  */
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const REQUIRED_REACT = '19.1.0';
 const LINUX_OPTIONAL = ['utf-8-validate-5.0.10', 'yaml-2.9.0'];
@@ -60,6 +61,32 @@ try {
   execSync('node ./scripts/verify-no-dev-client.mjs preview', { stdio: 'inherit' });
 } catch {
   fail('dev-client packages would be linked in preview APK');
+}
+
+const androidDir = path.join(process.cwd(), 'android');
+if (existsSync(androidDir)) {
+  const resDir = path.join(androidDir, 'app', 'src', 'main', 'res');
+  const hasSplashLogo =
+    existsSync(resDir) &&
+    readdirSync(resDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith('drawable'))
+      .some((d) =>
+        existsSync(path.join(resDir, d.name, 'splashscreen_logo.png')),
+      );
+  if (!hasSplashLogo) {
+    fail(
+      'android/ exists but is missing splashscreen_logo drawables. Delete android/ and ios/, or run: npx expo prebuild --clean.',
+    );
+  } else {
+    ok('local android/ has splash assets');
+  }
+}
+
+const easignore = readFileSync('.easignore', 'utf8');
+if (!easignore.includes('/android') || !easignore.includes('/ios')) {
+  fail('.easignore must list /android and /ios (EAS uses .easignore instead of .gitignore when present)');
+} else {
+  ok('.easignore excludes native android/ios from EAS upload');
 }
 
 if (!pkg.dependencies['@react-native-async-storage/async-storage']) {
