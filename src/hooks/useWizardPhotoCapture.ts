@@ -4,7 +4,14 @@
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
-import { pickSurveyPhotoFromCamera, uploadSurveyPhotoBytes } from '@/utils/captureSurveyPhoto';
+import {
+  clearPendingSurveyPhotoSlot,
+  pickSurveyPhotoFromCamera,
+  readPendingSurveyPhotoSlot,
+  recoverPendingSurveyPhotoPick,
+  setPendingSurveyPhotoSlot,
+  uploadSurveyPhotoBytes,
+} from '@/utils/captureSurveyPhoto';
 import { toPhotoErrorMessage } from '@/utils/convex-storage';
 import {
   filterSurveyPhotos,
@@ -14,8 +21,10 @@ import {
   type WizardPhotoEntry,
 } from '@/utils/surveyPhotos';
 import { useMutation } from 'convex/react';
-import { useCallback, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Platform } from 'react-native';
+
+type PickedPhoto = Extract<Awaited<ReturnType<typeof pickSurveyPhotoFromCamera>>, { canceled: false }>;
 
 export function useWizardPhotoCapture({
   draft,
@@ -34,6 +43,7 @@ export function useWizardPhotoCapture({
   const [uploadingSlot, setUploadingSlot] = useState<SurveyPhotoSlot | null>(null);
   const [previewBySlot, setPreviewBySlot] = useState<Partial<Record<SurveyPhotoSlot, string>>>({});
   const captureInFlight = useRef(false);
+  const pendingRecoveryDone = useRef(false);
 
   const surveyPhotos = filterSurveyPhotos(draft.photos);
   const photoBySlot = new Map(surveyPhotos.map((p) => [p.slot, p]));
@@ -65,17 +75,12 @@ export function useWizardPhotoCapture({
     [releaseStorage, removeBySurveySlot, serverSurveyId],
   );
 
-  const capture = useCallback(
-    async (slot: SurveyPhotoSlot) => {
-      if (captureInFlight.current) return;
-      captureInFlight.current = true;
+  const applyPickedPhoto = useCallback(
+    async (slot: SurveyPhotoSlot, picked: PickedPhoto) => {
+      const existing = photoBySlot.get(slot);
+      setUploadingSlot(slot);
+
       try {
-        const picked = await pickSurveyPhotoFromCamera();
-        if (picked.canceled) return;
-
-        const existing = photoBySlot.get(slot);
-        setUploadingSlot(slot);
-
         const uploadUrl = await generateUploadUrl({});
         const { storageId, sizeKb } = await uploadSurveyPhotoBytes(uploadUrl, picked.jpegBytes);
 
@@ -99,18 +104,66 @@ export function useWizardPhotoCapture({
 
         setPreviewBySlot((prev) => ({ ...prev, [slot]: picked.uri }));
         return { ok: true as const, label: SURVEY_PHOTO_SLOT_LABEL[slot] };
+      } finally {
+        setUploadingSlot(null);
+      }
+    },
+    [generateUploadUrl, photoBySlot, releasePhoto, surveyPhotos, syncPhotoToServer, update],
+  );
+
+  const capture = useCallback(
+    async (slot: SurveyPhotoSlot) => {
+      if (captureInFlight.current) return;
+      captureInFlight.current = true;
+      try {
+        await setPendingSurveyPhotoSlot(slot);
+        const picked = await pickSurveyPhotoFromCamera();
+        await clearPendingSurveyPhotoSlot();
+        if (picked.canceled) return;
+
+        return await applyPickedPhoto(slot, picked);
       } catch (e) {
+        await clearPendingSurveyPhotoSlot();
         return {
           ok: false as const,
           message: toPhotoErrorMessage(e),
         };
       } finally {
-        setUploadingSlot(null);
         captureInFlight.current = false;
       }
     },
-    [generateUploadUrl, photoBySlot, releasePhoto, surveyPhotos, syncPhotoToServer, update],
+    [applyPickedPhoto],
   );
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || pendingRecoveryDone.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      const slot = await readPendingSurveyPhotoSlot();
+      if (!slot || cancelled) return;
+
+      const picked = await recoverPendingSurveyPhotoPick();
+      if (cancelled || !picked || picked.canceled) return;
+
+      pendingRecoveryDone.current = true;
+      await clearPendingSurveyPhotoSlot();
+
+      if (captureInFlight.current) return;
+      captureInFlight.current = true;
+      try {
+        await applyPickedPhoto(slot, picked);
+      } catch {
+        // User can retake; avoid blocking the wizard on recovery failure.
+      } finally {
+        captureInFlight.current = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyPickedPhoto]);
 
   const remove = useCallback(
     async (slot: SurveyPhotoSlot) => {

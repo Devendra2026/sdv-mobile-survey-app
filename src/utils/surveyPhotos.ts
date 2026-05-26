@@ -2,6 +2,10 @@ import type { WizardDraft } from '@/hooks/useWizardDraft';
 
 export type SurveyPhotoSlot = 'front' | 'side';
 
+export function isSurveyPhotoSlot(value: string | null | undefined): value is SurveyPhotoSlot {
+  return value === 'front' || value === 'side';
+}
+
 export const REQUIRED_SURVEY_PHOTO_SLOTS: SurveyPhotoSlot[] = ['front', 'side'];
 
 export const SURVEY_PHOTO_SLOT_LABEL: Record<SurveyPhotoSlot, string> = {

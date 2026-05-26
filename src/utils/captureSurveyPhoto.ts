@@ -1,6 +1,9 @@
 import type { Id } from '@/convex/_generated/dataModel';
 import { toPhotoErrorMessage, uploadJpegBytesToConvexUrl } from '@/utils/convex-storage';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { compressSurveyPhotoUri } from '@/utils/jpegBytes';
+import type { SurveyPhotoSlot } from '@/utils/surveyPhotos';
+import { isSurveyPhotoSlot } from '@/utils/surveyPhotos';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
@@ -14,15 +17,35 @@ export type SurveyPhotoPickResult =
       jpegBytes: Uint8Array;
     };
 
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
+/** Persisted before opening the camera so we can finish upload after Android process restart. */
+export const PENDING_SURVEY_PHOTO_SLOT_KEY = '@survey_app/pending_photo_slot';
 
 function toCaptureError(e: unknown): Error {
   return new Error(toPhotoErrorMessage(e));
+}
+
+async function processCameraAsset(asset: ImagePicker.ImagePickerAsset): Promise<SurveyPhotoPickResult> {
+  const compressed = await compressSurveyPhotoUri(asset.uri);
+  return { canceled: false, ...compressed };
+}
+
+/**
+ * After Android kills the app while the camera is open, the picker result is
+ * delivered on the next launch via getPendingResultAsync (see expo-image-picker docs).
+ */
+export async function recoverPendingSurveyPhotoPick(): Promise<SurveyPhotoPickResult | null> {
+  if (Platform.OS !== 'android') return null;
+
+  const pending = await ImagePicker.getPendingResultAsync();
+  if (!pending) return null;
+  if ('code' in pending) return null;
+  if (pending.canceled || pending.assets.length === 0) return null;
+
+  try {
+    return await processCameraAsset(pending.assets[0]);
+  } catch (e) {
+    throw toCaptureError(e);
+  }
 }
 
 /** Opens the device camera and returns a compressed JPEG ready to upload. */
@@ -35,36 +58,33 @@ export async function pickSurveyPhotoFromCamera(): Promise<SurveyPhotoPickResult
 
     const picked = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
-      quality: 1,
+      // Downscale in the picker first — full-quality photos OOM on low-RAM Android devices.
+      quality: 0.85,
       exif: false,
       allowsEditing: false,
-      ...(Platform.OS === 'android' ? { skipProcessing: true as const } : {}),
     });
 
     if (picked.canceled || picked.assets.length === 0) {
       return { canceled: true };
     }
 
-    const compressed = await ImageManipulator.manipulateAsync(picked.assets[0].uri, [{ resize: { width: 1280 } }], {
-      compress: 0.7,
-      format: ImageManipulator.SaveFormat.JPEG,
-      base64: true,
-    });
-
-    if (!compressed.base64) {
-      throw new Error('Photo processing failed — try again');
-    }
-
-    return {
-      canceled: false,
-      uri: compressed.uri,
-      width: compressed.width,
-      height: compressed.height,
-      jpegBytes: base64ToBytes(compressed.base64),
-    };
+    return await processCameraAsset(picked.assets[0]);
   } catch (e) {
     throw toCaptureError(e);
   }
+}
+
+export async function setPendingSurveyPhotoSlot(slot: SurveyPhotoSlot): Promise<void> {
+  await AsyncStorage.setItem(PENDING_SURVEY_PHOTO_SLOT_KEY, slot);
+}
+
+export async function clearPendingSurveyPhotoSlot(): Promise<void> {
+  await AsyncStorage.removeItem(PENDING_SURVEY_PHOTO_SLOT_KEY);
+}
+
+export async function readPendingSurveyPhotoSlot(): Promise<SurveyPhotoSlot | null> {
+  const slot = await AsyncStorage.getItem(PENDING_SURVEY_PHOTO_SLOT_KEY);
+  return isSurveyPhotoSlot(slot) ? slot : null;
 }
 
 /** Loads camera native module early so the first tap does not fetch a dev split bundle. */

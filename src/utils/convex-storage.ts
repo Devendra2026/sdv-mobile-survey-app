@@ -1,12 +1,5 @@
 import type { Id } from '@/convex/_generated/dataModel';
-import * as ImageManipulator from 'expo-image-manipulator';
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
+import { compressSurveyPhotoUri } from '@/utils/jpegBytes';
 
 /** User-facing message for camera / upload failures (never raw "blob" from RN fetch). */
 export function toPhotoErrorMessage(err: unknown): string {
@@ -16,6 +9,9 @@ export function toPhotoErrorMessage(err: unknown): string {
   }
   if (/blob|\[object Blob\]|BodyInit|not a valid HTTP header/i.test(raw)) {
     return 'Photo could not be uploaded. Try capturing again.';
+  }
+  if (/out of memory|OOM|allocation failed|Cannot allocate/i.test(raw)) {
+    return 'Photo is too large for this device. Try again in better lighting or restart the app.';
   }
   if (err instanceof Error && raw) return raw;
   return 'Photo upload failed';
@@ -29,8 +25,6 @@ export function uploadJpegBytesToConvexUrl(
   uploadUrl: string,
   jpegBytes: Uint8Array,
 ): Promise<{ storageId: Id<'_storage'> }> {
-  const body = Uint8Array.from(jpegBytes);
-
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', uploadUrl);
@@ -56,7 +50,7 @@ export function uploadJpegBytesToConvexUrl(
 
     xhr.onerror = () => reject(new Error('Photo upload failed — check your connection'));
     xhr.onabort = () => reject(new Error('Photo upload was cancelled'));
-    xhr.send(body);
+    xhr.send(jpegBytes);
   });
 }
 
@@ -65,15 +59,7 @@ export async function uploadImageFromUri(
   uploadUrl: string,
   uri: string,
 ): Promise<{ storageId: Id<'_storage'>; sizeKb: number }> {
-  const processed = await ImageManipulator.manipulateAsync(uri, [], {
-    compress: 1,
-    format: ImageManipulator.SaveFormat.JPEG,
-    base64: true,
-  });
-  if (!processed.base64) {
-    throw new Error('Photo upload failed');
-  }
-  const jpegBytes = base64ToBytes(processed.base64);
+  const { jpegBytes } = await compressSurveyPhotoUri(uri);
   const { storageId } = await uploadJpegBytesToConvexUrl(uploadUrl, jpegBytes);
   return { storageId, sizeKb: Math.max(1, Math.ceil(jpegBytes.byteLength / 1024)) };
 }
