@@ -10,10 +10,12 @@
 
 import type * as addressRules from "../addressRules.js";
 import type * as admin from "../admin.js";
+import type * as allotments from "../allotments.js";
 import type * as analytics from "../analytics.js";
 import type * as analyticsTrends from "../analyticsTrends.js";
 import type * as areaMasters from "../areaMasters.js";
 import type * as audit from "../audit.js";
+import type * as capabilities from "../capabilities.js";
 import type * as clerk from "../clerk.js";
 import type * as floors from "../floors.js";
 import type * as gpsAccuracy from "../gpsAccuracy.js";
@@ -24,8 +26,10 @@ import type * as masters from "../masters.js";
 import type * as ownerConstants from "../ownerConstants.js";
 import type * as ownerMobile from "../ownerMobile.js";
 import type * as ownerRules from "../ownerRules.js";
+import type * as permissionCatalog from "../permissionCatalog.js";
 import type * as photos from "../photos.js";
 import type * as qc from "../qc.js";
+import type * as rbac from "../rbac.js";
 import type * as serviceMasters from "../serviceMasters.js";
 import type * as survey from "../survey.js";
 import type * as taxationMasters from "../taxationMasters.js";
@@ -42,10 +46,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   addressRules: typeof addressRules;
   admin: typeof admin;
+  allotments: typeof allotments;
   analytics: typeof analytics;
   analyticsTrends: typeof analyticsTrends;
   areaMasters: typeof areaMasters;
   audit: typeof audit;
+  capabilities: typeof capabilities;
   clerk: typeof clerk;
   floors: typeof floors;
   gpsAccuracy: typeof gpsAccuracy;
@@ -56,8 +62,10 @@ declare const fullApi: ApiFromModules<{
   ownerConstants: typeof ownerConstants;
   ownerMobile: typeof ownerMobile;
   ownerRules: typeof ownerRules;
+  permissionCatalog: typeof permissionCatalog;
   photos: typeof photos;
   qc: typeof qc;
+  rbac: typeof rbac;
   serviceMasters: typeof serviceMasters;
   survey: typeof survey;
   taxationMasters: typeof taxationMasters;

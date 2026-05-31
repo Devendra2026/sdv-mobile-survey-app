@@ -1,5 +1,5 @@
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { can, canAny, type Capability } from '@/lib/permissions';
+import { canAnyWithCapabilities, canWithCapabilities, type Capability } from '@/lib/permissions';
 import { ReactNode } from 'react';
 
 /**
@@ -17,7 +17,11 @@ export function RoleGate({
   children: ReactNode;
   fallback?: ReactNode;
 }) {
-  const { role } = useCurrentUser();
-  const allowed = capability ? can(role, capability) : anyOf ? canAny(role, anyOf) : false;
+  const { role, capabilities } = useCurrentUser();
+  const allowed = capability
+    ? canWithCapabilities(capabilities, role, capability)
+    : anyOf
+      ? canAnyWithCapabilities(capabilities, role, anyOf)
+      : false;
   return <>{allowed ? children : fallback}</>;
 }

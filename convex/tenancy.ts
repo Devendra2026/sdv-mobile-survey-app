@@ -62,6 +62,44 @@ function scopeForDistrict(
   };
 }
 
+/** Multi-district / multi-ULB scope from userAllotments (Agra + Mathura + Hathras, etc.). */
+async function resolveScopeFromAllotments(
+  ctx: QueryCtx,
+  me: Doc<"users">,
+  districtsAll: Doc<"districts">[],
+  municipalitiesAll: Doc<"municipalities">[],
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] } | null> {
+  const rows = await ctx.db
+    .query("userAllotments")
+    .withIndex("by_user_active", (q) => q.eq("userId", me._id).eq("isActive", true))
+    .collect();
+
+  if (rows.length === 0) return null;
+
+  const districtIds = new Set<Id<"districts">>();
+  const municipalityIds = new Set<Id<"municipalities">>();
+
+  for (const row of rows) {
+    if (row.municipalityId) {
+      municipalityIds.add(row.municipalityId);
+      const muni = await ctx.db.get(row.municipalityId);
+      if (muni && isActive(muni)) districtIds.add(muni.districtId);
+    } else if (row.districtId) {
+      districtIds.add(row.districtId);
+      for (const m of municipalitiesAll) {
+        if (m.districtId === row.districtId) municipalityIds.add(m._id);
+      }
+    }
+  }
+
+  if (municipalityIds.size === 0 && districtIds.size === 0) return null;
+
+  return {
+    districts: districtsAll.filter((d) => districtIds.has(d._id)),
+    municipalities: municipalitiesAll.filter((m) => municipalityIds.has(m._id)),
+  };
+}
+
 /** Districts and ULBs visible to the signed-in user (multitenant isolation). */
 export async function resolveTenantScope(
   ctx: QueryCtx,
@@ -72,6 +110,11 @@ export async function resolveTenantScope(
 
   if (me.role === "admin") {
     return { districts: districtsAll, municipalities: municipalitiesAll };
+  }
+
+  const fromAllotments = await resolveScopeFromAllotments(ctx, me, districtsAll, municipalitiesAll);
+  if (fromAllotments && fromAllotments.municipalities.length > 0) {
+    return fromAllotments;
   }
 
   const districtId = await effectiveDistrictId(ctx, me);
@@ -150,6 +193,21 @@ export async function assertMunicipalityInScope(
   const muni = await ctx.db.get(municipalityId);
   if (!muni || muni.isActive === false) {
     throw new ConvexError({ code: "BAD_REQUEST", message: "Unknown municipality" });
+  }
+
+  const allotmentRows = await ctx.db
+    .query("userAllotments")
+    .withIndex("by_user_active", (q) => q.eq("userId", user._id).eq("isActive", true))
+    .collect();
+  if (allotmentRows.length > 0) {
+    for (const row of allotmentRows) {
+      if (row.municipalityId === municipalityId) return muni;
+      if (!row.municipalityId && row.districtId === muni.districtId) return muni;
+    }
+    throw new ConvexError({
+      code: "FORBIDDEN",
+      message: "This ULB is outside your allotted municipalities.",
+    });
   }
 
   const districtId = await effectiveDistrictId(ctx, user);

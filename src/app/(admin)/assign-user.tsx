@@ -23,13 +23,23 @@ export default function AssignUserScreen() {
 
   const users = useQuery(api.admin.listUsers, convexReady ? {} : 'skip');
   const tree = useQuery(api.tenants.listForAdmin, convexReady ? {} : 'skip');
-  const assignTenant = useMutation(api.admin.assignTenant);
+  const setAllotments = useMutation(api.allotments.setForUser);
+  const existingAllotments = useQuery(
+    api.allotments.listForUser,
+    convexReady && userId ? { userId: userId as Id<'users'> } : 'skip',
+  );
   const updateUser = useMutation(api.admin.updateUser);
 
   const user = users?.find((u) => u._id === userId);
 
-  const [districtId, setDistrictId] = useState('');
-  const [municipalityId, setMunicipalityId] = useState('');
+  type DraftRow = {
+    id: string;
+    scope: 'ulb' | 'district';
+    districtId: string;
+    municipalityId: string;
+    isActive: boolean;
+  };
+  const [rows, setRows] = useState<DraftRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
@@ -39,23 +49,35 @@ export default function AssignUserScreen() {
     [tree],
   );
 
-  const ulbOptions = useMemo(() => {
-    if (!tree || !districtId) return [];
-    const district = tree.find((d) => d._id === districtId);
-    if (!district) return [];
-    return district.ulbs.map((u) => ({
-      value: u._id,
-      label: `${u.name} · ${u.code}`,
-    }));
-  }, [tree, districtId]);
-
-  const canSave = Boolean(municipalityId) && (user?.role === 'surveyor' || user?.role === 'supervisor');
+  const canSave =
+    rows.some((r) => (r.scope === 'ulb' ? r.municipalityId : r.districtId)) &&
+    (user?.role === 'surveyor' || user?.role === 'supervisor');
 
   useEffect(() => {
-    if (!user) return;
-    if (user.districtId) setDistrictId(user.districtId);
-    if (user.municipalityId) setMunicipalityId(user.municipalityId);
-  }, [user?._id, user?.districtId, user?.municipalityId]);
+    if (!existingAllotments) return;
+    if (existingAllotments.length > 0) {
+      setRows(
+        existingAllotments.map((a) => ({
+          id: a._id,
+          scope: a.municipalityId ? 'ulb' : 'district',
+          districtId: a.districtId ?? '',
+          municipalityId: a.municipalityId ?? '',
+          isActive: a.isActive,
+        })),
+      );
+      return;
+    }
+    if (!user || !tree?.length) return;
+    setRows([
+      {
+        id: 'default',
+        scope: 'ulb',
+        districtId: user.districtId ?? tree[0]._id,
+        municipalityId: user.municipalityId ?? '',
+        isActive: true,
+      },
+    ]);
+  }, [existingAllotments, user?._id, user?.districtId, user?.municipalityId, tree]);
 
   if (!userId) {
     return (
@@ -78,15 +100,18 @@ export default function AssignUserScreen() {
   }
 
   const onSave = async () => {
-    if (!municipalityId) return;
+    const payload = rows
+      .filter((r) => (r.scope === 'ulb' ? r.municipalityId : r.districtId))
+      .map((r) => ({
+        isActive: r.isActive,
+        municipalityId: r.scope === 'ulb' ? (r.municipalityId as Id<'municipalities'>) : undefined,
+        districtId: r.scope === 'district' ? (r.districtId as Id<'districts'>) : undefined,
+      }));
+    if (payload.length === 0) return;
     setSubmitting(true);
     try {
-      await assignTenant({
-        userId: user._id,
-        municipalityId: municipalityId as Id<'municipalities'>,
-        wardAssignments: [],
-      });
-      setToast({ title: 'Assignment saved', tone: 'success' });
+      await setAllotments({ userId: user._id, allotments: payload });
+      setToast({ title: 'Allotments saved', tone: 'success' });
       setTimeout(() => router.back(), 600);
     } catch (e) {
       setToast({ title: toUserMessage(e), tone: 'danger' });
@@ -144,7 +169,7 @@ export default function AssignUserScreen() {
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
-      <AdminHeader title="Assign tenant" subtitle={user.name} onBack={() => router.back()} />
+      <AdminHeader title="City allotments" subtitle={user.name} onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 100 + insets.bottom }}>
         <AppCard padded className="mb-4">
@@ -173,40 +198,99 @@ export default function AssignUserScreen() {
           <>
             <Banner
               tone="info"
-              title="Ward chosen at survey start"
-              message="Assign district and ULB here. The user picks the ward when they start each survey."
+              title="Multi-city supervisors"
+              message="Add one row per district or ULB (e.g. Agra MC, Mathura district, Hathras MC). Inactive rows keep history but remove access."
               icon="information-circle-outline"
               className="mb-4"
             />
 
-            <SectionLabel>District</SectionLabel>
-            <AppCard padded className="mb-4">
-              <AppDropdown
-                placeholder="Select district"
-                value={districtId}
-                options={districtOptions}
-                onChange={(id) => {
-                  setDistrictId(id);
-                  setMunicipalityId('');
-                }}
-              />
-            </AppCard>
-
-            <SectionLabel>ULB</SectionLabel>
-            <AppCard padded className="mb-4">
-              <AppDropdown
-                placeholder="Select ULB"
-                value={municipalityId}
-                options={ulbOptions}
-                onChange={setMunicipalityId}
-                disabled={!districtId}
-              />
-              {districtId && ulbOptions.length === 0 ? (
-                <Text className="text-caption text-ink-tertiary-light mt-2">
-                  No ULBs in this district. Add one under Tenants.
-                </Text>
-              ) : null}
-            </AppCard>
+            {rows.map((row, idx) => {
+              const ulbOptions =
+                tree
+                  ?.find((d) => d._id === row.districtId)
+                  ?.ulbs.map((u) => ({ value: u._id, label: `${u.name} · ${u.code}` })) ?? [];
+              return (
+                <AppCard key={row.id} padded className="mb-3">
+                  <AppDropdown
+                    placeholder="Scope"
+                    value={row.scope}
+                    options={[
+                      { value: 'ulb', label: 'Single ULB (city)' },
+                      { value: 'district', label: 'Whole district' },
+                    ]}
+                    onChange={(v) =>
+                      setRows((all) =>
+                        all.map((r, i) =>
+                          i === idx ? { ...r, scope: v as 'ulb' | 'district', municipalityId: '' } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <View className="h-3" />
+                  <AppDropdown
+                    placeholder="District"
+                    value={row.districtId}
+                    options={districtOptions}
+                    onChange={(id) =>
+                      setRows((all) =>
+                        all.map((r, i) => (i === idx ? { ...r, districtId: id, municipalityId: '' } : r)),
+                      )
+                    }
+                  />
+                  {row.scope === 'ulb' ? (
+                    <>
+                      <View className="h-3" />
+                      <AppDropdown
+                        placeholder="ULB"
+                        value={row.municipalityId}
+                        options={ulbOptions}
+                        onChange={(id) =>
+                          setRows((all) => all.map((r, i) => (i === idx ? { ...r, municipalityId: id } : r)))
+                        }
+                        disabled={!row.districtId}
+                      />
+                    </>
+                  ) : null}
+                  <View className="h-3" />
+                  <AppDropdown
+                    placeholder="Status"
+                    value={row.isActive ? 'active' : 'inactive'}
+                    options={[
+                      { value: 'active', label: 'Active' },
+                      { value: 'inactive', label: 'Inactive' },
+                    ]}
+                    onChange={(v) =>
+                      setRows((all) => all.map((r, i) => (i === idx ? { ...r, isActive: v === 'active' } : r)))
+                    }
+                  />
+                  {rows.length > 1 ? (
+                    <AppButton
+                      label="Remove row"
+                      variant="ghost"
+                      className="mt-2"
+                      onPress={() => setRows((all) => all.filter((_, i) => i !== idx))}
+                    />
+                  ) : null}
+                </AppCard>
+              );
+            })}
+            <AppButton
+              label="Add allotment"
+              variant="outline"
+              iconLeft="add-outline"
+              onPress={() =>
+                setRows((all) => [
+                  ...all,
+                  {
+                    id: `new-${Date.now()}`,
+                    scope: 'ulb',
+                    districtId: tree?.[0]?._id ?? '',
+                    municipalityId: '',
+                    isActive: true,
+                  },
+                ])
+              }
+            />
           </>
         )}
 
@@ -246,7 +330,7 @@ export default function AssignUserScreen() {
           style={{ paddingBottom: insets.bottom + 12 }}
         >
           <AppButton
-            label={submitting ? 'Saving…' : 'Save assignment'}
+            label={submitting ? 'Saving…' : 'Save allotments'}
             loading={submitting}
             onPress={onSave}
             disabled={!canSave}

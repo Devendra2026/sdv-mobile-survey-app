@@ -3,12 +3,8 @@ import { v } from "convex/values";
 
 /* ────────────────────────── reusable validators ────────────────────────── */
 
-export const userRole = v.union(
-  v.literal("pending"),
-  v.literal("surveyor"),
-  v.literal("supervisor"),
-  v.literal("admin"),
-);
+/** Role key — built-in: pending | surveyor | supervisor | admin; admin may add custom keys via rbac. */
+export const userRole = v.string();
 
 export const userStatus = v.union(v.literal("pending_approval"), v.literal("active"), v.literal("disabled"));
 
@@ -320,4 +316,43 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_read", ["userId", "readAt"]),
+
+  /** Admin-defined permission catalog (synced to mobile/web via Convex queries). */
+  permissions: defineTable({
+    key: v.string(),
+    label: v.string(),
+    category: v.string(),
+    isActive: v.boolean(),
+  }).index("by_key", ["key"]),
+
+  /** Dynamic roles — system roles are seeded; admin may add custom roles. */
+  roles: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isSystem: v.boolean(),
+    isActive: v.boolean(),
+  }).index("by_key", ["key"]),
+
+  rolePermissions: defineTable({
+    roleId: v.id("roles"),
+    permissionKey: v.string(),
+  })
+    .index("by_role", ["roleId"])
+    .index("by_role_permission", ["roleId", "permissionKey"]),
+
+  /**
+   * Multi-city supervisor/surveyor allotment (district-wide or per-ULB).
+   * Active rows define tenant scope; inactive rows keep history.
+   */
+  userAllotments: defineTable({
+    userId: v.id("users"),
+    districtId: v.optional(v.id("districts")),
+    municipalityId: v.optional(v.id("municipalities")),
+    isActive: v.boolean(),
+    assignedBy: v.id("users"),
+    assignedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "isActive"]),
 });

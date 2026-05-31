@@ -8,13 +8,15 @@
  * Keep in sync with sdv-front-new-app/lib/permissions.ts.
  */
 
-export type Role = 'pending' | 'surveyor' | 'supervisor' | 'admin';
+/** Built-in roles; custom keys come from Convex `roles` table. */
+export type Role = 'pending' | 'surveyor' | 'supervisor' | 'admin' | (string & {});
 
 export type Capability =
   | 'users.approve'
   | 'users.disable'
   | 'users.assignTenant'
   | 'users.view'
+  | 'roles.manage'
   | 'tenants.manage'
   | 'masters.manage'
   | 'surveys.viewAll'
@@ -50,6 +52,7 @@ const MATRIX: Record<Role, Capability[]> = {
     'users.disable',
     'users.assignTenant',
     'users.view',
+    'roles.manage',
     'tenants.manage',
     'masters.manage',
     'surveys.viewAll',
@@ -69,11 +72,31 @@ const MATRIX: Record<Role, Capability[]> = {
 
 export function can(role: Role | undefined, capability: Capability): boolean {
   if (!role) return false;
-  return MATRIX[role]?.includes(capability) ?? false;
+  return MATRIX[role as keyof typeof MATRIX]?.includes(capability) ?? false;
 }
 
 export function canAny(role: Role | undefined, capabilities: Capability[]): boolean {
   return capabilities.some((c) => can(role, c));
+}
+
+/** Prefer `users.currentUser.capabilities` from Convex (dynamic RBAC). */
+export function canWithCapabilities(
+  serverCapabilities: string[] | undefined,
+  role: Role | undefined,
+  capability: Capability,
+): boolean {
+  if (serverCapabilities && serverCapabilities.length > 0) {
+    return serverCapabilities.includes(capability);
+  }
+  return can(role, capability);
+}
+
+export function canAnyWithCapabilities(
+  serverCapabilities: string[] | undefined,
+  role: Role | undefined,
+  capabilities: Capability[],
+): boolean {
+  return capabilities.some((c) => canWithCapabilities(serverCapabilities, role, c));
 }
 
 /** Admin tab keys visible per role (mobile admin shell). */
@@ -81,5 +104,5 @@ export const ADMIN_TAB_VISIBILITY: Record<Role, string[]> = {
   pending: [],
   surveyor: [],
   supervisor: [],
-  admin: ['approvals', 'users', 'reports', 'tenants', 'masters', 'profile'],
+  admin: ['approvals', 'users', 'roles', 'reports', 'tenants', 'masters', 'profile'],
 };

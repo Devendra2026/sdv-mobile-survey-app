@@ -11,6 +11,8 @@ export function useCurrentUser() {
   return {
     user: user ?? null,
     role: (user?.role ?? undefined) as Role | undefined,
+    capabilities: user?.capabilities,
+    roleName: user?.roleName,
     isLoading: user === undefined,
     isActive: user?.status === 'active',
     isPending: user?.status === 'pending_approval',

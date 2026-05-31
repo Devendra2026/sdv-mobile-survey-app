@@ -6,6 +6,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, type MutationCtx, query } from "./_generated/server";
+import { userCapabilities } from "./capabilities";
 import { clientError, requireIdentity, writeAudit } from "./helpers";
 
 const ALLOWED_REQUESTED_ROLES = new Set(["surveyor", "supervisor"]);
@@ -55,7 +56,19 @@ export const currentUser = query({
       }
     }
 
-    return { ...user, municipality, district };
+    const capabilities = await userCapabilities(ctx, user);
+    const roleRow = await ctx.db
+      .query("roles")
+      .withIndex("by_key", (q) => q.eq("key", user.role))
+      .unique();
+
+    return {
+      ...user,
+      municipality,
+      district,
+      capabilities,
+      roleName: roleRow?.name ?? user.role,
+    };
   },
 });
 

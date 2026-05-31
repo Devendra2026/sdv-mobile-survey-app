@@ -8,9 +8,16 @@
  */
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { replaceUserAllotments, upsertAllotmentForUser } from "./allotments";
 import { clientError, requireRole, requireUser, writeAudit } from "./helpers";
 import { userRole } from "./schema";
 import { resolveMasterCategory } from "./taxationMasters";
+
+const allotmentInput = v.object({
+  districtId: v.optional(v.id("districts")),
+  municipalityId: v.optional(v.id("municipalities")),
+  isActive: v.boolean(),
+});
 
 /* ────────────────────────── approval workflow ────────────────────────── */
 
@@ -52,10 +59,11 @@ export const listPendingApprovals = query({
 export const approveUser = mutation({
   args: {
     userId: v.id("users"),
-    role: v.union(v.literal("surveyor"), v.literal("supervisor"), v.literal("admin")),
+    role: v.string(),
     municipalityId: v.optional(v.id("municipalities")),
     districtId: v.optional(v.id("districts")),
     wardAssignments: v.optional(v.array(v.string())),
+    allotments: v.optional(v.array(allotmentInput)),
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
@@ -70,10 +78,22 @@ export const approveUser = mutation({
     // Validate role-specific requirements
     const wards = args.wardAssignments ?? [];
     let districtId = args.districtId;
+    const hasAllotments = (args.allotments?.length ?? 0) > 0;
+    const roleRow = await ctx.db
+      .query("roles")
+      .withIndex("by_key", (q) => q.eq("key", args.role))
+      .unique();
+    if (!roleRow || roleRow.isActive === false) {
+      clientError("BAD_REQUEST", "Unknown or inactive role");
+    }
+    if (args.role === "pending") {
+      clientError("BAD_REQUEST", "Cannot approve with pending role");
+    }
+
     if (args.role !== "admin") {
-      if (!args.municipalityId && !args.districtId) {
-        clientError("BAD_REQUEST", "Assign a district or ULB for surveyor/supervisor", {
-          municipalityId: ["select a ULB or district"],
+      if (!args.municipalityId && !args.districtId && !hasAllotments) {
+        clientError("BAD_REQUEST", "Assign a district, ULB, or allotment list for surveyor/supervisor", {
+          municipalityId: ["select a ULB, district, or allotments"],
         });
       }
       if (args.municipalityId) {
@@ -94,6 +114,21 @@ export const approveUser = mutation({
       approvedBy: me._id,
       approvedAt: Date.now(),
     });
+
+    if (args.role !== "admin" && hasAllotments) {
+      await replaceUserAllotments(ctx, {
+        userId: args.userId,
+        allotments: args.allotments!,
+        assignedBy: me._id,
+      });
+    } else if (args.role !== "admin" && (args.municipalityId || args.districtId)) {
+      await upsertAllotmentForUser(ctx, {
+        userId: args.userId,
+        municipalityId: args.municipalityId,
+        districtId: args.districtId,
+        assignedBy: me._id,
+      });
+    }
 
     await writeAudit(ctx, {
       actorId: me._id,
@@ -237,6 +272,12 @@ export const assignTenant = mutation({
       municipalityId: args.municipalityId,
       districtId: muni.districtId,
       wardAssignments: args.wardAssignments ?? [],
+    });
+
+    await upsertAllotmentForUser(ctx, {
+      userId: args.userId,
+      municipalityId: args.municipalityId,
+      assignedBy: me._id,
     });
 
     await writeAudit(ctx, {
