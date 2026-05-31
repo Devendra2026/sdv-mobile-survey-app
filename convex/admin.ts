@@ -10,6 +10,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { clientError, requireRole, requireUser, writeAudit } from "./helpers";
 import { userRole } from "./schema";
+import { resolveMasterCategory } from "./taxationMasters";
 
 /* ────────────────────────── approval workflow ────────────────────────── */
 
@@ -22,7 +23,6 @@ export const listPendingApprovals = query({
   handler: async (ctx) => {
     const me = await requireUser(ctx);
     requireRole(me, "admin");
-    
 
     const rows = await ctx.db
       .query("users")
@@ -308,10 +308,11 @@ export const upsertMaster = mutation({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     requireRole(me, "admin");
+    const category = resolveMasterCategory(args.category);
 
     const existing = await ctx.db
       .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", args.category).eq("value", args.value))
+      .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", args.value))
       .unique();
 
     if (existing) {
@@ -322,7 +323,7 @@ export const upsertMaster = mutation({
       });
       return existing._id;
     }
-    return await ctx.db.insert("masters", args);
+    return await ctx.db.insert("masters", { ...args, category });
   },
 });
 

@@ -1,5 +1,6 @@
 import { TAB_BAR_CONTENT_HEIGHT, tabBarBottomInset } from '@/constants/tabBar';
 import { api } from '@/convex/_generated/api';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { Tabs } from 'expo-router';
@@ -9,7 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function AdminLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = tabBarBottomInset(insets);
-  const pending = useQuery(api.admin.listPendingApprovals, {});
+  const { convexReady } = useClerkConvexAuth();
+  const pending = useQuery(api.admin.listPendingApprovals, convexReady ? {} : 'skip');
   const pendingCount = pending?.length ?? 0;
 
   return (

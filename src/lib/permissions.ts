@@ -1,0 +1,85 @@
+/**
+ * permissions.ts — Role → capability matrix for the MOBILE UI.
+ *
+ * UI-gating convenience ONLY. Authoritative enforcement is server-side in
+ * Convex (`requireRole`, tenancy checks, admin.ts). Never treat `can()` as
+ * a security boundary.
+ *
+ * Keep in sync with sdv-front-new-app/lib/permissions.ts.
+ */
+
+export type Role = 'pending' | 'surveyor' | 'supervisor' | 'admin';
+
+export type Capability =
+  | 'users.approve'
+  | 'users.disable'
+  | 'users.assignTenant'
+  | 'users.view'
+  | 'tenants.manage'
+  | 'masters.manage'
+  | 'surveys.viewAll'
+  | 'surveys.viewAssigned'
+  | 'surveys.viewOwn'
+  | 'surveys.editDraft'
+  | 'surveys.submit'
+  | 'surveys.uploadPhotos'
+  | 'surveys.delete'
+  | 'qc.review'
+  | 'qc.decide'
+  | 'qc.requestCorrection'
+  | 'qc.reopen'
+  | 'analytics.view'
+  | 'audit.view'
+  | 'reports.export';
+
+const MATRIX: Record<Role, Capability[]> = {
+  pending: [],
+  surveyor: ['surveys.viewOwn', 'surveys.editDraft', 'surveys.submit', 'surveys.uploadPhotos', 'surveys.delete'],
+  supervisor: [
+    'surveys.viewAssigned',
+    'qc.review',
+    'qc.decide',
+    'qc.requestCorrection',
+    'qc.reopen',
+    'analytics.view',
+    'users.view',
+    'reports.export',
+  ],
+  admin: [
+    'users.approve',
+    'users.disable',
+    'users.assignTenant',
+    'users.view',
+    'tenants.manage',
+    'masters.manage',
+    'surveys.viewAll',
+    'surveys.editDraft',
+    'surveys.submit',
+    'surveys.uploadPhotos',
+    'surveys.delete',
+    'qc.review',
+    'qc.decide',
+    'qc.requestCorrection',
+    'qc.reopen',
+    'analytics.view',
+    'audit.view',
+    'reports.export',
+  ],
+};
+
+export function can(role: Role | undefined, capability: Capability): boolean {
+  if (!role) return false;
+  return MATRIX[role]?.includes(capability) ?? false;
+}
+
+export function canAny(role: Role | undefined, capabilities: Capability[]): boolean {
+  return capabilities.some((c) => can(role, c));
+}
+
+/** Admin tab keys visible per role (mobile admin shell). */
+export const ADMIN_TAB_VISIBILITY: Record<Role, string[]> = {
+  pending: [],
+  surveyor: [],
+  supervisor: [],
+  admin: ['approvals', 'users', 'reports', 'tenants', 'masters', 'profile'],
+};

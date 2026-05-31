@@ -3,6 +3,7 @@
  */
 import { AppButton, AppCard, AppDropdown, Banner, SectionLabel, Spinner, Toast } from '@/components';
 import { AdminHeader } from '@/components/admin/admin-header';
+import { RoleGate } from '@/components/role-gate';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
@@ -11,7 +12,7 @@ import { humanizeRole } from '@/utils/format';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AssignUserScreen() {
@@ -23,12 +24,14 @@ export default function AssignUserScreen() {
   const users = useQuery(api.admin.listUsers, convexReady ? {} : 'skip');
   const tree = useQuery(api.tenants.listForAdmin, convexReady ? {} : 'skip');
   const assignTenant = useMutation(api.admin.assignTenant);
+  const updateUser = useMutation(api.admin.updateUser);
 
   const user = users?.find((u) => u._id === userId);
 
   const [districtId, setDistrictId] = useState('');
   const [municipalityId, setMunicipalityId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
   const districtOptions = useMemo(
@@ -91,6 +94,53 @@ export default function AssignUserScreen() {
       setSubmitting(false);
     }
   };
+
+  const onDisable = () => {
+    Alert.alert('Disable account?', `${user.name} will lose access on all devices until reactivated.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disable',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setStatusBusy(true);
+            try {
+              await updateUser({ userId: user._id, status: 'disabled' });
+              setToast({ title: 'User disabled', tone: 'success' });
+            } catch (e) {
+              setToast({ title: toUserMessage(e), tone: 'danger' });
+            } finally {
+              setStatusBusy(false);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const onReactivate = () => {
+    Alert.alert('Reactivate account?', `${user.name} will regain access with their current role and scope.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reactivate',
+        onPress: () => {
+          void (async () => {
+            setStatusBusy(true);
+            try {
+              await updateUser({ userId: user._id, status: 'active' });
+              setToast({ title: 'User reactivated', tone: 'success' });
+            } catch (e) {
+              setToast({ title: toUserMessage(e), tone: 'danger' });
+            } finally {
+              setStatusBusy(false);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const canManageStatus = user.role !== 'admin' && user.status !== 'pending_approval';
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
@@ -159,6 +209,35 @@ export default function AssignUserScreen() {
             </AppCard>
           </>
         )}
+
+        <RoleGate capability="users.disable">
+          {canManageStatus ? (
+            <>
+              <SectionLabel>Access control</SectionLabel>
+              <AppCard padded className="mb-4">
+                {user.status === 'disabled' ? (
+                  <AppButton
+                    label={statusBusy ? 'Reactivating…' : 'Reactivate user'}
+                    variant="outline"
+                    iconLeft="checkmark-circle-outline"
+                    loading={statusBusy}
+                    onPress={onReactivate}
+                    fullWidth
+                  />
+                ) : (
+                  <AppButton
+                    label={statusBusy ? 'Disabling…' : 'Disable user'}
+                    variant="outline"
+                    iconLeft="ban-outline"
+                    loading={statusBusy}
+                    onPress={onDisable}
+                    fullWidth
+                  />
+                )}
+              </AppCard>
+            </>
+          ) : null}
+        </RoleGate>
       </ScrollView>
 
       {user.role === 'surveyor' || user.role === 'supervisor' ? (

@@ -12,10 +12,14 @@
 
 import { CLERK_JWT_ISSUER_DOMAIN } from "./clerk";
 
+/** Deployment env wins at push time; `clerk.ts` is the repo fallback. */
+const issuerDomain =
+  process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() || CLERK_JWT_ISSUER_DOMAIN;
+
 export default {
   providers: [
     {
-      domain: CLERK_JWT_ISSUER_DOMAIN,
+      domain: issuerDomain,
       applicationID: "convex",
     },
   ],

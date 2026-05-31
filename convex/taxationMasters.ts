@@ -191,6 +191,48 @@ export function validateTaxationSection(
 
 type SeedRow = MasterOption & { position: number };
 
+/** Admin UI category aliases → stored `masters.category` keys. */
+export const MASTER_CATEGORY_ALIASES: Record<string, string> = {
+  property_type: "property_use_subcategory",
+};
+
+export function resolveMasterCategory(category: string): string {
+  return MASTER_CATEGORY_ALIASES[category] ?? category;
+}
+
+function flatPropertyUseSubcategoryRows(): SeedRow[] {
+  let subPos = 1;
+  const rows: SeedRow[] = [];
+  for (const opts of Object.values(PROPERTY_USE_SUBCATEGORIES)) {
+    for (const o of opts) {
+      rows.push({ ...o, position: subPos });
+      subPos += 1;
+    }
+  }
+  return rows;
+}
+
+/** Canonical defaults for taxation dropdowns when the DB has no rows yet. */
+export function defaultMasterRowsForCategory(category: string): SeedRow[] {
+  const resolved = resolveMasterCategory(category);
+  switch (resolved) {
+    case "ownership_type":
+      return OWNERSHIP_TYPES.map((o, i) => ({ ...o, position: i + 1 }));
+    case "property_use":
+      return PROPERTY_USES.map((o, i) => ({ ...o, position: i + 1 }));
+    case "property_use_subcategory":
+      return flatPropertyUseSubcategoryRows();
+    case "road_type":
+      return ROAD_TYPES.map((o, i) => ({ ...o, position: i + 1 }));
+    case "tax_rate_zone":
+      return TAX_RATE_ZONES.map((o, i) => ({ ...o, position: i + 1 }));
+    case "situation":
+      return SITUATIONS.map((o, i) => ({ ...o, position: i + 1 }));
+    default:
+      return [];
+  }
+}
+
 async function upsertMasterCategory(ctx: MutationCtx, category: string, rows: SeedRow[]) {
   for (const row of rows) {
     const existing = await ctx.db
@@ -223,12 +265,8 @@ export async function seedTaxationMasters(ctx: MutationCtx) {
     "property_use",
     PROPERTY_USES.map((o, i) => ({ ...o, position: i + 1 })),
   );
-  let subPos = 1;
-  for (const opts of Object.values(PROPERTY_USE_SUBCATEGORIES)) {
-    for (const o of opts) {
-      await upsertMasterCategory(ctx, "property_use_subcategory", [{ ...o, position: subPos }]);
-      subPos += 1;
-    }
+  for (const row of flatPropertyUseSubcategoryRows()) {
+    await upsertMasterCategory(ctx, "property_use_subcategory", [row]);
   }
   await upsertMasterCategory(
     ctx,

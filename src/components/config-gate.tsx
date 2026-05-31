@@ -22,8 +22,8 @@ export function ConfigGate({ children }: { children: ReactNode }) {
           </Text>
         ))}
         <Text style={[authStyles.subtitle, { marginTop: 16 }]}>
-          Local dev: copy `.env.example` to `.env.local`. EAS: run `eas env:list --environment preview` and confirm both
-          keys are present, then `npm run eas:build:android:preview`.
+          Local dev: copy `.env.example` to `.env.local`. EAS: run `npm run verify:eas-preview` so the Clerk key matches
+          the web app, then `npm run eas:build:android:preview`.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -1,12 +1,3 @@
-/**
- * Survey domain — create, read, list, submit. Floors and photos have their
- * own modules (`floors.ts`, `photos.ts`).
- *
- * Idempotency: every call to `upsert` takes a client-generated `localId`.
- * Re-sending the same `localId` updates the existing row instead of
- * creating a new one — this is how the mobile's draft-then-sync flow stays
- * safe across retries.
- */
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
@@ -281,7 +272,7 @@ export const get = query({
 
     return {
       ...survey,
-      districtId: muni?.districtId,
+      districtId: muni?.districtId ?? survey.districtId,
       floors,
       photos: hydratedPhotos,
       qcRemarks,

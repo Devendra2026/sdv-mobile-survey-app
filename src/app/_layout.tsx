@@ -22,7 +22,7 @@ import { RootErrorBoundary } from '@/components/root-error-boundary';
 import { env, envReady } from '@/config/env';
 import { bootScreenStyle } from '@/constants/brand';
 import { useAuthForConvex } from '@/hooks/use-auth-for-convex';
-import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { useAppStateSessionRefresh, useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useSessionBootstrap } from '@/hooks/use-session-bootstrap';
 import { useSyncConvexUser } from '@/hooks/use-sync-convex-user';
@@ -44,13 +44,16 @@ SplashScreen.preventAutoHideAsync().catch(() => undefined);
 /* ────────────────────────── Auth gate ────────────────────────── */
 
 function signedInLoadingMessage(
-  convexAuthLoading: boolean,
+  convexAuthPhase: ReturnType<typeof useClerkConvexAuth>['convexAuthPhase'],
   convexReady: boolean,
   me: unknown,
   needsSync: boolean,
   syncing: boolean,
 ): string {
-  if (convexAuthLoading || !convexReady) return 'Securing your session…';
+  if (convexAuthPhase === 'recovering') {
+    return 'Connecting to server…';
+  }
+  if (convexAuthPhase === 'connecting' || !convexReady) return 'Securing your session…';
   if (me === undefined) return 'Loading your profile…';
   if (needsSync && syncing) return 'Setting up your account…';
   return 'Please wait…';
@@ -58,7 +61,8 @@ function signedInLoadingMessage(
 
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
-  const { convexReady, convexAuthFailed, convexAuthLoading, convexAuthRecovering } = useClerkConvexAuth();
+  const { convexReady, convexAuthFailed, convexAuthPhase } = useClerkConvexAuth();
+  useAppStateSessionRefresh();
   const { me, needsSync, syncing } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
@@ -108,20 +112,12 @@ function AuthGate() {
   }, [isLoaded, navigationReady, isSignedIn, convexReady, me, needsSync, syncing, segments, replace]);
 
   const loadingMessage = useMemo(
-    () => signedInLoadingMessage(convexAuthLoading, convexReady, me, needsSync, syncing),
-    [convexAuthLoading, convexReady, me, needsSync, syncing],
+    () => signedInLoadingMessage(convexAuthPhase, convexReady, me, needsSync, syncing),
+    [convexAuthPhase, convexReady, me, needsSync, syncing],
   );
 
   if (!isLoaded) {
     return <View style={bootScreenStyle} />;
-  }
-
-  if (isSignedIn && convexAuthRecovering) {
-    return (
-      <View className="flex-1">
-        <AppLoadingView message="Connecting — weak signal is OK, this may take a minute…" />
-      </View>
-    );
   }
 
   if (isSignedIn && convexAuthFailed) {

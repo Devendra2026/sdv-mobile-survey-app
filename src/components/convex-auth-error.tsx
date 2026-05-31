@@ -20,7 +20,7 @@ export function ConvexAuthError() {
   const onRetry = async () => {
     setRetrying(true);
     try {
-      retryConvexAuth();
+      retryConvexAuth({ resetPhase: true });
       const waitMs = classifyConvexTokenError(lastConvexTokenError) === 'transient' ? 5000 : 2500;
       await new Promise((r) => setTimeout(r, waitMs));
     } finally {
@@ -33,8 +33,7 @@ export function ConvexAuthError() {
       <ScrollView contentContainerStyle={authStyles.scroll}>
         <Text style={authStyles.title}>Could not connect your session</Text>
         <Text style={authStyles.subtitle}>
-          Your account setup on this device needs attention. Try again when you have a stronger signal, or sign out and
-          sign back in.
+          We could not verify your account with the survey server. Try again, or sign out and sign back in.
         </Text>
 
         {lastConvexTokenError ? (

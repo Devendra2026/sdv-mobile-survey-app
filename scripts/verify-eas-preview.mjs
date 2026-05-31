@@ -18,6 +18,48 @@ function ok(msg) {
   console.log(`[verify-eas-preview] OK — ${msg}`);
 }
 
+function clerkIssuerFromPublishableKey(pk) {
+  const match = pk.trim().match(/^pk_(?:test|live)_(.+)$/);
+  if (!match) return null;
+  try {
+    return Buffer.from(match[1], 'base64').toString('utf8').replace(/\$$/, '');
+  } catch {
+    return null;
+  }
+}
+
+const envLocalPath = '.env.local';
+if (existsSync(envLocalPath)) {
+  const envLocal = readFileSync(envLocalPath, 'utf8');
+  const localPk = envLocal.match(/^EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$/m)?.[1]?.trim();
+  if (localPk) {
+    try {
+      const easOut = execSync('npx eas env:list --environment preview', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const easLine = easOut
+        .split('\n')
+        .find((line) => line.startsWith('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='));
+      const easPk = easLine?.slice('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='.length).trim();
+      if (!easPk) {
+        fail('EAS preview missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
+      } else if (easPk !== localPk) {
+        const localHost = clerkIssuerFromPublishableKey(localPk);
+        const easHost = clerkIssuerFromPublishableKey(easPk);
+        fail(
+          `EAS preview Clerk key does not match .env.local (${easHost ?? 'invalid'} vs ${localHost ?? 'invalid'}). ` +
+          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "<from .env.local>"',
+        );
+      } else {
+        ok(`EAS preview Clerk key matches .env.local (${clerkIssuerFromPublishableKey(localPk)})`);
+      }
+    } catch (err) {
+      fail(`Could not read EAS preview env: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+}
+
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 const lockRaw = readFileSync('package-lock.json', 'utf8');
 const lock = JSON.parse(lockRaw);

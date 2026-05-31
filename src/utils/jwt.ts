@@ -9,6 +9,25 @@ export function sessionClaimsHaveConvexAud(claims: Record<string, unknown> | nul
   return audIncludesConvex(claims?.aud);
 }
 
+export function decodeBase64Utf8(padded: string): string | null {
+  try {
+    if (typeof globalThis.atob === 'function') {
+      return globalThis.atob(padded);
+    }
+    const BufferCtor = (
+      globalThis as {
+        Buffer?: { from: (input: string, encoding: string) => { toString: (encoding: string) => string } };
+      }
+    ).Buffer;
+    if (BufferCtor) {
+      return BufferCtor.from(padded, 'base64').toString('utf-8');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Decode JWT payload (no signature verification — used only to pick token source). */
 export function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -16,7 +35,8 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
     if (!segment) return null;
     const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    const json = atob(padded);
+    const json = decodeBase64Utf8(padded);
+    if (!json) return null;
     return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;

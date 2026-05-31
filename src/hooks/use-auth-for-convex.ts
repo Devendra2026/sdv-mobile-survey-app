@@ -1,31 +1,79 @@
-import { isTokenValid, tokenHasConvexAud } from '@/utils/jwt';
+import { env } from '@/config/env';
+import { clerkJwtIssuerFromPublishableKey } from '@/utils/clerk-issuer';
+import { audIncludesConvex, decodeJwtPayload, isTokenValid, tokenExpiresAtMs, tokenHasConvexAud } from '@/utils/jwt';
 import { useAuth } from '@clerk/expo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /** Last getToken failure — shown on ConvexAuthError. */
 export let lastConvexTokenError: string | null = null;
 
-const RETRY_MS = 1_000;
-const MAX_ATTEMPTS = 14;
-
-/** Bumped on manual retry so Convex re-runs setAuth (user-initiated only). */
-let manualAuthRetrySeq = 0;
-
-const forceRefreshRef = { current: 0 };
-const manualRetryListeners = new Set<() => void>();
-
-/** Last JWT that successfully authenticated with Convex this app session. */
-let lastGoodConvexToken: string | null = null;
-
-function notifyManualAuthRetry() {
-  for (const listener of manualRetryListeners) listener();
+export function setLastConvexTokenError(message: string | null) {
+  lastConvexTokenError = message;
 }
 
-/** Force ConvexProviderWithAuth to fetch a fresh Clerk `convex` JWT (Try again). */
-export function retryConvexAuth() {
+/** True after Convex has accepted a JWT at least once this Clerk session. */
+export let convexSessionEstablished = false;
+
+const RETRY_MS = 800;
+const MAX_ATTEMPTS = 8;
+const REFRESH_BEFORE_EXPIRY_MS = 5 * 60_000;
+
+let authRefetchEpoch = 0;
+const forceRefreshRef = { current: 0 };
+const authRefetchListeners = new Set<() => void>();
+const authPhaseResetListeners = new Set<() => void>();
+
+let lastGoodConvexToken: string | null = null;
+
+const expectedClerkIssuer = clerkJwtIssuerFromPublishableKey(env.clerkPublishableKey);
+
+function notifyAuthRefetch() {
+  for (const listener of authRefetchListeners) listener();
+}
+
+function notifyAuthPhaseReset() {
+  for (const listener of authPhaseResetListeners) listener();
+}
+
+export function subscribeAuthRefetch(listener: () => void) {
+  authRefetchListeners.add(listener);
+  return () => {
+    authRefetchListeners.delete(listener);
+  };
+}
+
+export function subscribeAuthPhaseReset(listener: () => void) {
+  authPhaseResetListeners.add(listener);
+  return () => {
+    authPhaseResetListeners.delete(listener);
+  };
+}
+
+export function setConvexSessionEstablished(established: boolean) {
+  convexSessionEstablished = established;
+}
+
+export function getLastGoodConvexToken(): string | null {
+  return lastGoodConvexToken;
+}
+
+export function retryConvexAuth(opts?: { resetPhase?: boolean }) {
   forceRefreshRef.current += 1;
-  manualAuthRetrySeq += 1;
-  notifyManualAuthRetry();
+  authRefetchEpoch += 1;
+  notifyAuthRefetch();
+  if (opts?.resetPhase) {
+    notifyAuthPhaseReset();
+  }
+}
+
+export function shouldRefreshConvexToken(): boolean {
+  if (!convexSessionEstablished) return false;
+  const token = lastGoodConvexToken;
+  if (!token) return true;
+  if (!isTokenValid(token)) return true;
+  const expMs = tokenExpiresAtMs(token);
+  if (expMs === null) return false;
+  return Date.now() >= expMs - REFRESH_BEFORE_EXPIRY_MS;
 }
 
 function formatTokenError(err: unknown): string {
@@ -44,11 +92,13 @@ function isClerkOfflineError(err: unknown): boolean {
 }
 
 function isTransientTokenErrorMessage(message: string | null): boolean {
-  if (!message) return true;
+  if (!message) return false;
   const msg = message.toLowerCase();
   if (isClerkOfflineError(message)) return true;
   if (msg.includes('missing convex audience') || msg.includes('aud: convex')) return false;
   if (msg.includes('no session token') || msg.includes('sign out and sign in')) return false;
+  if (msg.includes('wrong clerk app') || msg.includes('rebuild the app')) return false;
+  if (msg.includes('server rejected') || msg.includes('integration')) return false;
   return (
     msg.includes('network') ||
     msg.includes('fetch') ||
@@ -62,8 +112,7 @@ function isTransientTokenErrorMessage(message: string | null): boolean {
     msg.includes('failed to fetch') ||
     msg.includes('internet') ||
     msg.includes('temporarily') ||
-    msg.includes('could not') ||
-    msg.includes('unable to')
+    msg.includes('could not reach')
   );
 }
 
@@ -73,65 +122,122 @@ export function classifyConvexTokenError(message: string | null): ConvexTokenErr
   if (!message) return 'unknown';
   const msg = message.toLowerCase();
   if (msg.includes('missing convex audience') || msg.includes('aud: convex')) return 'permanent';
+  if (msg.includes('wrong clerk app') || msg.includes('rebuild the app')) return 'permanent';
+  if (msg.includes('server rejected') || msg.includes('integration')) return 'permanent';
   if (isTransientTokenErrorMessage(message)) return 'transient';
   if (msg.includes('session expired')) return 'transient';
-  if (msg.includes('no session token') || msg.includes('could not reach')) return 'unknown';
   return 'unknown';
 }
 
-function rememberGoodToken(token: string) {
-  if (tokenHasConvexAud(token) && isTokenValid(token)) {
-    lastGoodConvexToken = token;
-  }
+function tokenIssuer(token: string): string | null {
+  const iss = decodeJwtPayload(token)?.iss;
+  return typeof iss === 'string' ? iss : null;
 }
 
-async function readCachedConvexToken(
-  getToken: (opts?: { template?: string; skipCache?: boolean }) => Promise<string | null>,
-): Promise<string | null> {
-  try {
-    const sessionToken = await getToken({ skipCache: false });
-    if (sessionToken && tokenHasConvexAud(sessionToken) && isTokenValid(sessionToken)) {
-      return sessionToken;
+function validateConvexJwt(token: string, fromConvexTemplate: boolean): string | null {
+  if (!isTokenValid(token)) {
+    return 'Session expired — sign in again.';
+  }
+
+  if (!fromConvexTemplate && !tokenHasConvexAud(token)) {
+    return 'Clerk session is missing Convex audience (aud: convex). In Clerk Dashboard → Integrations → Convex → Activate.';
+  }
+
+  if (expectedClerkIssuer) {
+    const iss = tokenIssuer(token);
+    if (iss && iss !== expectedClerkIssuer) {
+      return (
+        `This install uses the wrong Clerk app (token from ${iss}, expected ${expectedClerkIssuer}). ` +
+        'Rebuild the APK after updating EAS environment variables, or sign in with the correct account.'
+      );
     }
-  } catch {
-    /* try template below */
-  }
-
-  try {
-    const templateToken = await getToken({ template: 'convex', skipCache: false });
-    if (templateToken && isTokenValid(templateToken)) return templateToken;
-  } catch {
-    /* fall through */
-  }
-
-  if (lastGoodConvexToken && isTokenValid(lastGoodConvexToken) && tokenHasConvexAud(lastGoodConvexToken)) {
-    return lastGoodConvexToken;
   }
 
   return null;
 }
 
-/**
- * Clerk → Convex auth bridge for `ConvexProviderWithAuth`.
- *
- * On React Native, `getToken({ template: "convex" })` often fails with `clerk_offline`
- * even when the cached session JWT already has `aud: "convex"` (Clerk → Convex integration).
- * Always read the session token first and inspect its `aud` claim before minting a template.
- *
- * `getToken` from Clerk Expo is not referentially stable — keep it in a ref so
- * Convex does not call setAuth on every render (causes "Securing your session" loops).
- */
+function rememberGoodToken(token: string) {
+  const fromTemplate = true;
+  const err = validateConvexJwt(token, fromTemplate);
+  if (err) {
+    lastConvexTokenError = err;
+    return;
+  }
+  lastGoodConvexToken = token;
+  lastConvexTokenError = null;
+}
+
+function sessionUsesConvexIntegration(sessionClaims: Record<string, unknown> | null | undefined): boolean {
+  return sessionClaims?.aud === 'convex' || audIncludesConvex(sessionClaims?.aud);
+}
+
+async function fetchClerkConvexToken(
+  getToken: (opts?: { template?: string; skipCache?: boolean }) => Promise<string | null>,
+  skipCache: boolean,
+  sessionClaims: Record<string, unknown> | null | undefined,
+): Promise<string | null> {
+  const integrated = sessionUsesConvexIntegration(sessionClaims);
+
+  try {
+    if (integrated) {
+      const sessionToken = await getToken({ skipCache });
+      if (sessionToken) {
+        const err = validateConvexJwt(sessionToken, true);
+        if (!err) return sessionToken;
+        lastConvexTokenError = err;
+      }
+    } else {
+      const templateToken = await getToken({ template: 'convex', skipCache });
+      if (templateToken) {
+        const err = validateConvexJwt(templateToken, true);
+        if (!err) return templateToken;
+        lastConvexTokenError = err;
+      }
+    }
+  } catch (err) {
+    lastConvexTokenError = formatTokenError(err);
+  }
+
+  if (!integrated) {
+    try {
+      const templateToken = await getToken({ template: 'convex', skipCache });
+      if (templateToken) {
+        const err = validateConvexJwt(templateToken, true);
+        if (!err) return templateToken;
+        if (!lastConvexTokenError) lastConvexTokenError = err;
+      }
+    } catch (err) {
+      lastConvexTokenError = formatTokenError(err);
+    }
+  }
+
+  const sessionToken = await getToken({ skipCache });
+  if (!sessionToken) {
+    lastConvexTokenError = 'Clerk returned no session token. Sign out and sign in again.';
+    return null;
+  }
+
+  const err = validateConvexJwt(sessionToken, integrated);
+  if (err) {
+    lastConvexTokenError = err;
+    return null;
+  }
+  return sessionToken;
+}
+
 export function useAuthForConvex() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, orgId, orgRole, sessionClaims } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
-  const [retrySeq, setRetrySeq] = useState(manualAuthRetrySeq);
+  const sessionClaimsRef = useRef(sessionClaims);
+  sessionClaimsRef.current = sessionClaims;
+  const [authEpoch, setAuthEpoch] = useState(authRefetchEpoch);
 
   useEffect(() => {
-    const sync = () => setRetrySeq(manualAuthRetrySeq);
-    manualRetryListeners.add(sync);
+    const sync = () => setAuthEpoch(authRefetchEpoch);
+    authRefetchListeners.add(sync);
     return () => {
-      manualRetryListeners.delete(sync);
+      authRefetchListeners.delete(sync);
     };
   }, []);
 
@@ -139,81 +245,61 @@ export function useAuthForConvex() {
     if (!isSignedIn) {
       lastGoodConvexToken = null;
       lastConvexTokenError = null;
+      forceRefreshRef.current = 0;
+      convexSessionEstablished = false;
     }
   }, [isSignedIn]);
 
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
-      void retrySeq;
-      lastConvexTokenError = null;
-      const refresh = forceRefreshToken || forceRefreshRef.current > 0;
       const getToken = (opts?: { template?: string; skipCache?: boolean }) => getTokenRef.current(opts);
 
+      const manualRefresh = forceRefreshRef.current > 0;
+      if (manualRefresh) {
+        forceRefreshRef.current = 0;
+      }
+      const refresh = forceRefreshToken || manualRefresh;
+
       if (!refresh) {
-        const cached = await readCachedConvexToken(getToken);
-        if (cached) {
-          rememberGoodToken(cached);
-          return cached;
+        lastConvexTokenError = null;
+        if (lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
+          const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
+          if (!cachedErr) return lastGoodConvexToken;
+          lastGoodConvexToken = null;
         }
+      } else {
+        lastConvexTokenError = null;
+        lastGoodConvexToken = null;
       }
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
         const skipCache = refresh || attempt > 1;
 
         try {
-          const sessionToken = await getToken({ skipCache });
-          if (sessionToken && tokenHasConvexAud(sessionToken) && isTokenValid(sessionToken)) {
-            rememberGoodToken(sessionToken);
-            return sessionToken;
-          }
-
-          try {
-            const templateToken = await getToken({
-              template: 'convex',
-              skipCache,
-            });
-            if (templateToken && isTokenValid(templateToken)) {
-              rememberGoodToken(templateToken);
-              return templateToken;
-            }
-          } catch (templateErr) {
-            lastConvexTokenError = formatTokenError(templateErr);
-            if (sessionToken && tokenHasConvexAud(sessionToken) && isTokenValid(sessionToken)) {
-              rememberGoodToken(sessionToken);
-              return sessionToken;
-            }
-          }
-
-          if (!sessionToken) {
-            lastConvexTokenError = 'Clerk returned no session token. Sign out and sign in again.';
-          } else if (!tokenHasConvexAud(sessionToken)) {
-            lastConvexTokenError =
-              'Clerk session is missing Convex audience (aud: convex). In Clerk Dashboard → Integrations → Convex → Activate.';
-          } else if (!isTokenValid(sessionToken)) {
-            lastConvexTokenError = 'Session expired — reconnect when you have signal, or sign in again.';
+          const token = await fetchClerkConvexToken(
+            getToken,
+            skipCache,
+            sessionClaimsRef.current as Record<string, unknown> | null | undefined,
+          );
+          if (token) {
+            rememberGoodToken(token);
+            return token;
           }
         } catch (err) {
           lastConvexTokenError = formatTokenError(err);
-          if (isClerkOfflineError(err)) {
-            const cached = await readCachedConvexToken(getToken);
-            if (cached) {
-              rememberGoodToken(cached);
-              return cached;
-            }
+          if (isClerkOfflineError(err) && lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
+            const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
+            if (!cachedErr) return lastGoodConvexToken;
           }
         }
 
         if (attempt < MAX_ATTEMPTS) {
-          await new Promise((r) => setTimeout(r, RETRY_MS * Math.min(attempt, 6)));
+          await new Promise((r) => setTimeout(r, RETRY_MS * Math.min(attempt, 4)));
         }
       }
 
-      if (lastGoodConvexToken && isTokenValid(lastGoodConvexToken) && tokenHasConvexAud(lastGoodConvexToken)) {
-        return lastGoodConvexToken;
-      }
-
       if (!lastConvexTokenError) {
-        lastConvexTokenError = 'Could not reach the server — check your signal and try again.';
+        lastConvexTokenError = 'Could not reach the server — check your connection and try again.';
       }
 
       if (__DEV__ && lastConvexTokenError) {
@@ -221,7 +307,7 @@ export function useAuthForConvex() {
       }
       return null;
     },
-    [retrySeq],
+    [orgId, orgRole, authEpoch],
   );
 
   return useMemo(
