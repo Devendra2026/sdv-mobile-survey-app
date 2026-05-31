@@ -1,21 +1,8 @@
 import 'react-native-gesture-handler';
 
-/**
- * Root layout.
- *
- * Order of providers (outside → in):
- *   ClerkProvider                     → owns sign-in/sign-up state + tokens
- *   ConvexProviderWithAuth           → Clerk session / `convex` JWT bridge (see useAuthForConvex)
- *   ThemeProvider                     → app design tokens
- *
- * AuthGate handles three states:
- *   - not signed in           → redirect to /(auth)/sign-in
- *   - signed in but not approved → /(auth)/awaiting-approval
- *   - signed in + approved + admin role → /(admin)
- *   - signed in + approved + surveyor/supervisor → /dashboard
- */
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { AppLoadingView } from '@/components/app-loading-view';
+import { authStyles } from '@/components/auth/styles';
 import { ConfigGate } from '@/components/config-gate';
 import { ConvexAuthError } from '@/components/convex-auth-error';
 import { RootErrorBoundary } from '@/components/root-error-boundary';
@@ -23,6 +10,7 @@ import { env, envReady } from '@/config/env';
 import { bootScreenStyle } from '@/constants/brand';
 import { useAuthForConvex } from '@/hooks/use-auth-for-convex';
 import { useAppStateSessionRefresh, useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { useHideAppSplash } from '@/hooks/use-hide-app-splash';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useSessionBootstrap } from '@/hooks/use-session-bootstrap';
 import { useSyncConvexUser } from '@/hooks/use-sync-convex-user';
@@ -34,12 +22,14 @@ import { Slot } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import '../../global.css';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+const CLERK_LOAD_TIMEOUT_MS = 15_000;
 
 /* ────────────────────────── Auth gate ────────────────────────── */
 
@@ -59,6 +49,24 @@ function signedInLoadingMessage(
   return 'Please wait…';
 }
 
+function ClerkStartupError() {
+  return (
+    <SafeAreaView style={authStyles.safe}>
+      <ScrollView contentContainerStyle={authStyles.scroll}>
+        <Text style={authStyles.title}>Sign-in could not start</Text>
+        <Text style={authStyles.subtitle}>
+          Clerk did not finish loading. Check mobile data or Wi‑Fi, then force-close and reopen the app.
+        </Text>
+        <Text style={[authStyles.subtitle, { marginTop: 16 }]}>
+          If this keeps happening after a fresh install, the APK may have been built without EAS environment variables.
+          Rebuild with `npm run eas:build:android:preview` after setting EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and
+          EXPO_PUBLIC_CONVEX_URL on EAS.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
   const { convexReady, convexAuthFailed, convexAuthPhase } = useClerkConvexAuth();
@@ -66,11 +74,18 @@ function AuthGate() {
   const { me, needsSync, syncing } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
+  const [clerkLoadTimedOut, setClerkLoadTimedOut] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded || !navigationReady) return;
-    SplashScreen.hideAsync().catch(() => undefined);
-  }, [isLoaded, navigationReady]);
+    if (isLoaded) {
+      setClerkLoadTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setClerkLoadTimedOut(true), CLERK_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
+  useHideAppSplash(isLoaded || clerkLoadTimedOut);
 
   useEffect(() => {
     if (!isLoaded || !navigationReady) return;
@@ -117,7 +132,8 @@ function AuthGate() {
   );
 
   if (!isLoaded) {
-    return <View style={bootScreenStyle} />;
+    if (clerkLoadTimedOut) return <ClerkStartupError />;
+    return <AppLoadingView message="Loading sign-in…" />;
   }
 
   if (isSignedIn && convexAuthFailed) {
@@ -151,6 +167,8 @@ function AppProviders() {
       unsavedChangesWarning: false,
     });
   }, []);
+
+  useHideAppSplash(mounted);
 
   if (!mounted || !convex) {
     return <View style={bootScreenStyle} />;

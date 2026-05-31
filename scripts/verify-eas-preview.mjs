@@ -44,6 +44,13 @@ if (existsSync(envLocalPath)) {
       const easPk = easLine?.slice('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='.length).trim();
       if (!easPk) {
         fail('EAS preview missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
+      } else if (easPk.startsWith('pk_test_')) {
+        fail(
+          'EAS preview uses a Clerk development key (pk_test_…). Field APKs will hit the 100 emails/month limit. ' +
+          'Enable Production in the Clerk Dashboard, then run:\n' +
+          '  npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_live_…"\n' +
+          'Also set CLERK_JWT_ISSUER_DOMAIN on Convex to the production issuer (*.clerk.accounts.com).',
+        );
       } else if (easPk !== localPk) {
         const localHost = clerkIssuerFromPublishableKey(localPk);
         const easHost = clerkIssuerFromPublishableKey(easPk);

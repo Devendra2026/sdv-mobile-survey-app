@@ -31,4 +31,23 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
 
 ## EAS builds
 
-Set `EXPO_PUBLIC_CONVEX_URL` and `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` in EAS environment variables to the **production** values from the web deployment (same Convex project, same Clerk app).
+Field APKs must use **Clerk production** keys (`pk_live_…`). Development keys (`pk_test_…`) are capped at 100 emails/month and will block sign-in MFA / password reset in the field.
+
+1. In [Clerk Dashboard](https://dashboard.clerk.com) → your app → **Production** → copy the publishable key (`pk_live_…`) and note the JWT issuer (`https://….clerk.accounts.com`).
+2. On Convex (same deployment as `EXPO_PUBLIC_CONVEX_URL`):
+   ```bash
+   cd ../sdv-front-new-app
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://YOUR-INSTANCE.clerk.accounts.com"
+   ```
+3. On EAS (preview is used for internal APKs today):
+   ```bash
+   npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_live_…"
+   npx eas env:update preview --variable-name EXPO_PUBLIC_CONVEX_URL --value "https://….convex.cloud"
+   ```
+4. Rebuild and redistribute:
+   ```bash
+   npm run eas:build:android:preview
+   ```
+   Or use `--profile production-apk` once the **production** EAS environment is configured (Play Store uses `production` → AAB).
+
+`npm run verify:eas-preview` fails if preview still points at `pk_test_…`.
