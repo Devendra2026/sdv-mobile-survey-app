@@ -6,6 +6,7 @@
 import { AppCard, AppDropdown, AppInput, ChipSelector, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { formatPropertyId } from '@/convex/propertyId';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
@@ -78,6 +79,12 @@ function PropertyFields({
 
   const selectedWard = wardsForSelectedUlb.find((w) => w.wardNo === draft.wardNo);
   const wardLocked = wardOptions.length === 1;
+  const previewPropertyId = formatPropertyId({
+    ulbCode: selectedUlb?.code ?? '',
+    wardNo: draft.wardNo ?? '',
+    parcelNo: draft.parcelNo ?? '',
+    propertyUse: draft.propertyUse ?? '',
+  });
 
   useEffect(() => {
     if (!draft.municipalityId || liveWards === undefined) return;
@@ -182,12 +189,12 @@ function PropertyFields({
           />
           <AppInput
             label="Property ID"
-            value={draft.propertyId ?? ''}
-            onChangeText={(v) => update({ propertyId: v })}
-            placeholder="e.g. PID-2024-0891"
+            value={previewPropertyId ?? draft.propertyId ?? ''}
+            onChangeText={() => {}}
+            placeholder="Auto-generated after ward, parcel & property use"
             iconLeft="finger-print-outline"
-            helperText="Municipal unique property identifier (PID)"
-            autoCapitalize="characters"
+            helperText="Format: 800828-001-00001-P (ULB–Ward–Parcel–Use)"
+            editable={false}
           />
           <AppInput
             label="Constructed year"

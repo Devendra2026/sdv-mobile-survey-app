@@ -3,9 +3,9 @@
  */
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { userCapabilities } from "./capabilities";
 import { clientError, requireRole, requireUser, writeAudit } from "./helpers";
 import { PERMISSION_CATALOG, SYSTEM_ROLE_PERMISSIONS, SYSTEM_ROLES } from "./permissionCatalog";
-import { userCapabilities } from "./capabilities";
 
 /** Idempotent seed for permissions, system roles, and default grants. */
 export async function seedSystemRbac(ctx: MutationCtx) {

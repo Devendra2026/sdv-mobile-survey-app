@@ -112,7 +112,8 @@ export function useClerkConvexAuth() {
     if (autoRetryCount >= MAX_AUTO_RETRIES) return;
     if (convexAuthLoading) return;
 
-    const delayMs = AUTO_RETRY_BASE_MS * 2 ** Math.min(autoRetryCount, 2);
+    const delayMs =
+      autoRetryCount === 0 && !getLastGoodConvexToken() ? 400 : AUTO_RETRY_BASE_MS * 2 ** Math.min(autoRetryCount, 2);
     retryTimer.current = setTimeout(() => {
       setAutoRetryCount((n) => n + 1);
       retryConvexAuth();

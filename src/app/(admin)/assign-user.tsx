@@ -21,7 +21,7 @@ export default function AssignUserScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const { convexReady } = useClerkConvexAuth();
 
-  const users = useQuery(api.admin.listUsers, convexReady ? {} : 'skip');
+  const user = useQuery(api.admin.getUserForAdmin, convexReady && userId ? { userId: userId as Id<'users'> } : 'skip');
   const tree = useQuery(api.tenants.listForAdmin, convexReady ? {} : 'skip');
   const setAllotments = useMutation(api.allotments.setForUser);
   const existingAllotments = useQuery(
@@ -29,8 +29,6 @@ export default function AssignUserScreen() {
     convexReady && userId ? { userId: userId as Id<'users'> } : 'skip',
   );
   const updateUser = useMutation(api.admin.updateUser);
-
-  const user = users?.find((u) => u._id === userId);
 
   type DraftRow = {
     id: string;
@@ -87,7 +85,7 @@ export default function AssignUserScreen() {
     );
   }
 
-  if (users === undefined || tree === undefined) {
+  if (user === undefined || tree === undefined) {
     return <Spinner label="Loading…" />;
   }
 

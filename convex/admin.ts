@@ -6,8 +6,10 @@
  * Supervisors get a curated subset via `supervisor.ts` (created in a
  * later phase).
  */
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { replaceUserAllotments, upsertAllotmentForUser } from "./allotments";
 import { clientError, requireRole, requireUser, writeAudit } from "./helpers";
 import { userRole } from "./schema";
@@ -190,8 +192,39 @@ export const rejectUser = mutation({
 
 /* ────────────────────────── user management ────────────────────────── */
 
+async function hydrateUsersForAdmin(ctx: QueryCtx, rows: Doc<"users">[]) {
+  const munis = new Map<string, { name: string; code: string; districtId: string }>();
+  const districts = new Map<string, string>();
+  for (const u of rows) {
+    if (u.districtId && !districts.has(u.districtId)) {
+      const d = await ctx.db.get(u.districtId);
+      if (d) districts.set(u.districtId, d.name);
+    }
+    if (u.municipalityId && !munis.has(u.municipalityId)) {
+      const m = await ctx.db.get(u.municipalityId);
+      if (m) munis.set(u.municipalityId, { name: m.name, code: m.code, districtId: m.districtId });
+    }
+  }
+  return rows.map((u) => ({
+    _id: u._id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    status: u.status,
+    districtId: u.districtId,
+    municipalityId: u.municipalityId,
+    wardAssignments: u.wardAssignments,
+    districtName: u.districtId ? (districts.get(u.districtId) ?? null) : null,
+    municipalityName: u.municipalityId ? (munis.get(u.municipalityId)?.name ?? null) : null,
+    municipalityCode: u.municipalityId ? (munis.get(u.municipalityId)?.code ?? null) : null,
+    lastSeenAt: u.lastSeenAt,
+    createdAt: u._creationTime,
+  }));
+}
+
 export const listUsers = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     role: v.optional(userRole),
     status: v.optional(v.union(v.literal("pending_approval"), v.literal("active"), v.literal("disabled"))),
   },
@@ -199,50 +232,54 @@ export const listUsers = query({
     const me = await requireUser(ctx);
     requireRole(me, "admin", "supervisor");
 
-    // Choose the cheapest index for the supplied filter combination.
-    let rows;
+    let q;
     if (args.role && args.status) {
-      rows = await ctx.db
+      q = ctx.db
         .query("users")
-        .withIndex("by_role_status", (q) => q.eq("role", args.role!).eq("status", args.status!))
-        .collect();
+        .withIndex("by_role_status", (qb) => qb.eq("role", args.role!).eq("status", args.status!));
     } else if (args.status) {
-      rows = await ctx.db
-        .query("users")
-        .withIndex("by_status", (q) => q.eq("status", args.status!))
-        .collect();
+      q = ctx.db.query("users").withIndex("by_status", (qb) => qb.eq("status", args.status!));
+    } else if (args.role) {
+      q = ctx.db.query("users").filter((q) => q.eq(q.field("role"), args.role!));
     } else {
-      rows = await ctx.db.query("users").collect();
+      q = ctx.db.query("users");
     }
 
-    // Hydrate municipality names for the admin table.
-    const munis = new Map<string, { name: string; code: string; districtId: string }>();
-    const districts = new Map<string, string>();
-    for (const u of rows) {
-      if (u.districtId && !districts.has(u.districtId)) {
-        const d = await ctx.db.get(u.districtId);
-        if (d) districts.set(u.districtId, d.name);
-      }
-      if (u.municipalityId && !munis.has(u.municipalityId)) {
-        const m = await ctx.db.get(u.municipalityId);
-        if (m) munis.set(u.municipalityId, { name: m.name, code: m.code, districtId: m.districtId });
-      }
-    }
-    return rows.map((u) => ({
-      _id: u._id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      status: u.status,
-      districtId: u.districtId,
-      municipalityId: u.municipalityId,
-      wardAssignments: u.wardAssignments,
-      districtName: u.districtId ? (districts.get(u.districtId) ?? null) : null,
-      municipalityName: u.municipalityId ? (munis.get(u.municipalityId)?.name ?? null) : null,
-      municipalityCode: u.municipalityId ? (munis.get(u.municipalityId)?.code ?? null) : null,
-      lastSeenAt: u.lastSeenAt,
-      createdAt: u._creationTime,
-    }));
+    const page = await q.order("desc").paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: await hydrateUsersForAdmin(ctx, page.page),
+    };
+  },
+});
+
+/** Active user count for admin dashboard cards. */
+export const countActiveUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await requireUser(ctx);
+    requireRole(me, "admin", "supervisor");
+
+    const rows = await ctx.db
+      .query("users")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    return rows.length;
+  },
+});
+
+/** Single user row for admin assignment / detail screens. */
+export const getUserForAdmin = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const me = await requireUser(ctx);
+    requireRole(me, "admin", "supervisor");
+
+    const row = await ctx.db.get(args.userId);
+    if (!row) return null;
+
+    const [user] = await hydrateUsersForAdmin(ctx, [row]);
+    return user ?? null;
   },
 });
 

@@ -126,19 +126,43 @@ export function validatePlotSection(input: { plotSqft?: number; plinthSqft?: num
   return details;
 }
 
+export function builtUpSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  return floors.reduce((sum, f) => {
+    if (isOpenLandFloor(f.floorName)) return sum;
+    return sum + (f.areaSqft > 0 ? f.areaSqft : 0);
+  }, 0);
+}
+
+export function openLandSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  return floors.reduce((sum, f) => {
+    if (!isOpenLandFloor(f.floorName)) return sum;
+    return sum + (f.areaSqft > 0 ? f.areaSqft : 0);
+  }, 0);
+}
+
+export function plinthSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  const ground = floors.find((f) => f.floorName === "ground_floor");
+  return ground && ground.areaSqft > 0 ? ground.areaSqft : 0;
+}
+
 export function validateAreaSection(input: {
   plotSqft?: number;
   plinthSqft?: number;
   floorAreasSqft?: number[];
+  floors?: { floorName: string; areaSqft: number }[];
 }): Record<string, string[]> {
   const details = validatePlotSection(input);
-  const floors = input.floorAreasSqft ?? [];
-  if (floors.length === 0) {
+  const floorRows = input.floors ?? (input.floorAreasSqft ?? []).map((areaSqft) => ({ floorName: "", areaSqft }));
+  if (floorRows.length === 0) {
     details.floors = ["Add at least one floor row"];
   }
-  const builtUp = floors.reduce((s, a) => s + (a > 0 ? a : 0), 0);
-  if (floors.length > 0 && builtUp <= 0) {
+  const builtUp = builtUpSqftFromFloors(floorRows);
+  const openLand = openLandSqftFromFloors(floorRows);
+  if (floorRows.length > 0 && builtUp <= 0 && openLand <= 0) {
     details.floors = ["Each floor must have area greater than 0"];
+  }
+  if (floorRows.length > 0 && builtUp <= 0 && openLand > 0) {
+    details.floors = ["Add at least one built-up floor row (ground floor, first floor, etc.)"];
   }
   return details;
 }

@@ -241,12 +241,22 @@ export function useAuthForConvex() {
     };
   }, []);
 
+  const prevSignedInRef = useRef(false);
+
   useEffect(() => {
     if (!isSignedIn) {
       lastGoodConvexToken = null;
       lastConvexTokenError = null;
       forceRefreshRef.current = 0;
       convexSessionEstablished = false;
+      prevSignedInRef.current = false;
+      return;
+    }
+
+    if (!prevSignedInRef.current) {
+      // Fresh Clerk session — bypass SecureStore token cache and reconnect Convex.
+      prevSignedInRef.current = true;
+      retryConvexAuth({ resetPhase: true });
     }
   }, [isSignedIn]);
 
@@ -273,7 +283,8 @@ export function useAuthForConvex() {
       }
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-        const skipCache = refresh || attempt > 1;
+        // Without skipCache, Clerk can return a stale null JWT from before sign-in.
+        const skipCache = refresh || attempt > 1 || !lastGoodConvexToken;
 
         try {
           const token = await fetchClerkConvexToken(
@@ -307,7 +318,7 @@ export function useAuthForConvex() {
       }
       return null;
     },
-    [orgId, orgRole, authEpoch],
+    [isSignedIn, orgId, orgRole, authEpoch],
   );
 
   return useMemo(

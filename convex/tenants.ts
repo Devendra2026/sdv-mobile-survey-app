@@ -12,9 +12,9 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { seedAreaMasters } from "./areaMasters";
 import { clientError, requireRole, requireUser, writeAudit } from "./helpers";
+import { seedSystemRbac } from "./rbac";
 import { ulbBodyType } from "./schema";
 import { seedServiceMasters } from "./serviceMasters";
-import { seedSystemRbac } from "./rbac";
 import { seedTaxationMasters } from "./taxationMasters";
 
 export { resolveTenantScope } from "./tenancy";

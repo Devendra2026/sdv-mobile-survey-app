@@ -5,7 +5,7 @@ import { AppButton, AppCard, AppDropdown, AreaPairField, SectionLabel, Spinner }
 import { api } from '@/convex/_generated/api';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { WizardStepFrame } from '@/hooks/WizardStepFrame';
-import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
+import { builtUpSqftFromFloors, openLandSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { usageTypeToOccupied } from '@/utils/floorRow';
 import { formatArea, humanizeRole } from '@/utils/format';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
@@ -54,13 +54,26 @@ export default function StepAreaDetail() {
 
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
-  const openNewFloor = () => {
+  const openNewBuiltUpFloor = () => {
     setEditing({
       clientFloorId: newFloorId(),
       floorName: '',
       usageFactor: '',
       usageType: '',
       constructionType: '',
+      isOccupied: true,
+      areaSqft: 0,
+    });
+    setEditorOpen(true);
+  };
+
+  const openNewOpenLand = () => {
+    setEditing({
+      clientFloorId: newFloorId(),
+      floorName: 'open_land',
+      usageFactor: '',
+      usageType: '',
+      constructionType: 'open_land_plot',
       isOccupied: true,
       areaSqft: 0,
     });
@@ -84,6 +97,9 @@ export default function StepAreaDetail() {
         const floors = draft.floors ?? [];
         const plinthSqft = plinthSqftFromFloors(floors);
         const builtUpSqft = builtUpSqftFromFloors(floors);
+        const openLandSqft = openLandSqftFromFloors(floors);
+        const builtUpFloors = floors.filter((f) => f.floorName !== 'open_land');
+        const openLandFloors = floors.filter((f) => f.floorName === 'open_land');
 
         const saveFloor = async (f: Floor) => {
           const existing = floors.findIndex((x) => x.clientFloorId === f.clientFloorId);
@@ -165,26 +181,26 @@ export default function StepAreaDetail() {
             </AppCard>
 
             <View className="flex-row items-center justify-between mb-2 mt-1">
-              <SectionLabel>Floor area</SectionLabel>
+              <SectionLabel>Built-up floors</SectionLabel>
               <Pressable
-                onPress={openNewFloor}
-                accessibilityLabel="Add floor"
+                onPress={openNewBuiltUpFloor}
+                accessibilityLabel="Add built-up floor"
                 className="w-11 h-11 rounded-full bg-brand items-center justify-center active:opacity-90"
               >
                 <Ionicons name="add" size={24} color="#FFFFFF" />
               </Pressable>
             </View>
             <Text className="text-helper text-ink-tertiary-light mb-3 px-1 leading-5">
-              Each row is part of built-up area. Tap a row to edit; long press to delete.
+              Ground floor, first floor, and other constructed levels. Tap a row to edit; long press to delete.
             </Text>
 
             <AppCard padded={false} className="mb-4 overflow-hidden">
-              {floors.length === 0 ? (
+              {builtUpFloors.length === 0 ? (
                 <Text className="text-helper text-ink-tertiary-light text-center py-8 px-4 leading-5">
-                  Tap + to add a floor. Choose floor no., usage factor, usage type, and construction type.
+                  Tap + to add a built-up floor row.
                 </Text>
               ) : (
-                floors.map((f, index) => (
+                builtUpFloors.map((f, index) => (
                   <Pressable
                     key={f.clientFloorId}
                     onPress={() => openEditFloor(f)}
@@ -192,7 +208,7 @@ export default function StepAreaDetail() {
                     delayLongPress={400}
                     className={[
                       'px-4 py-3.5 active:bg-page-light dark:active:bg-page-dark',
-                      index < floors.length - 1 ? 'border-b border-line-subtle' : '',
+                      index < builtUpFloors.length - 1 ? 'border-b border-line-subtle' : '',
                     ].join(' ')}
                   >
                     <View className="flex-row items-start justify-between gap-3">
@@ -225,13 +241,70 @@ export default function StepAreaDetail() {
             </AppCard>
 
             <SectionLabel>Total built-up area</SectionLabel>
-            <AppCard padded className="mb-2 border-brand/25 bg-brand-soft/30">
+            <AppCard padded className="mb-4 border-brand/25 bg-brand-soft/30">
               <AreaPairField
                 label="Total Built-up Area"
                 sqft={builtUpSqft}
                 onSqftChange={() => {}}
                 readOnly
-                helperText="Sum of all floor rows except open land"
+                helperText="Sum of built-up floor rows only (excludes open land)"
+              />
+            </AppCard>
+
+            <View className="flex-row items-center justify-between mb-2 mt-1">
+              <SectionLabel>Open land area</SectionLabel>
+              <Pressable
+                onPress={openNewOpenLand}
+                accessibilityLabel="Add open land row"
+                className="w-11 h-11 rounded-full border-2 border-brand bg-surface-light dark:bg-surface-dark items-center justify-center active:opacity-90"
+              >
+                <Ionicons name="add" size={24} color="#2563EB" />
+              </Pressable>
+            </View>
+            <Text className="text-helper text-ink-tertiary-light mb-3 px-1 leading-5">
+              Vacant or undeveloped plot area — kept separate from built-up floors.
+            </Text>
+
+            <AppCard padded={false} className="mb-4 overflow-hidden">
+              {openLandFloors.length === 0 ? (
+                <Text className="text-helper text-ink-tertiary-light text-center py-6 px-4 leading-5">
+                  Add an open land row if part of the plot is vacant.
+                </Text>
+              ) : (
+                openLandFloors.map((f, index) => (
+                  <Pressable
+                    key={f.clientFloorId}
+                    onPress={() => openEditFloor(f)}
+                    onLongPress={() => removeFloor(f.clientFloorId)}
+                    delayLongPress={400}
+                    className={[
+                      'px-4 py-3.5 active:bg-page-light dark:active:bg-page-dark',
+                      index < openLandFloors.length - 1 ? 'border-b border-line-subtle' : '',
+                    ].join(' ')}
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1 min-w-0">
+                        <Text className="text-body font-medium text-ink-primary-light dark:text-ink-primary-dark leading-5">
+                          {labelFor(masters.floors, f.floorName)}
+                        </Text>
+                      </View>
+                      <Text className="text-body font-medium text-brand shrink-0">
+                        {f.areaSqft > 0 ? formatArea(f.areaSqft) : '—'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </AppCard>
+
+            <SectionLabel>Total open land area</SectionLabel>
+            <AppCard padded className="mb-2 bg-page-light dark:bg-page-dark border-line-default">
+              <AreaPairField
+                label="Total Open Land Area"
+                sqft={openLandSqft}
+                onSqftChange={() => {}}
+                readOnly
+                helperText="Sum of open land rows only"
               />
             </AppCard>
 

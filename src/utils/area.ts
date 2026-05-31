@@ -29,6 +29,14 @@ export function builtUpSqftFromFloors(floors: { floorName: string; areaSqft: num
   }, 0);
 }
 
+/** Open land area = sum of open_land floor rows only. */
+export function openLandSqftFromFloors(floors: { floorName: string; areaSqft: number }[]): number {
+  return floors.reduce((sum, f) => {
+    if (!isOpenLandFloor(f.floorName)) return sum;
+    return sum + (f.areaSqft > 0 ? f.areaSqft : 0);
+  }, 0);
+}
+
 export function sqmFromSqft(sqft: number): number {
   return sqft * SQM_PER_SQFT;
 }

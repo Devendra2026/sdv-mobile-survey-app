@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
@@ -6,6 +7,7 @@ import { presentFloorRow, validateAreaSection } from "./areaMasters";
 import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_TARGET_ACCURACY_METERS } from "./gpsAccuracy";
 import { assertCanReadWard, clientError, requireRole, requireUser, writeAudit } from "./helpers";
 import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from "./ownerRules";
+import { comparePropertyIds, resolvePropertyId } from "./propertyId";
 import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "./schema";
 import { validateServicesSection } from "./serviceMasters";
 import { validateTaxationSection } from "./taxationMasters";
@@ -228,7 +230,100 @@ export const list = query({
     if (args.wardNo) {
       rows = rows.filter((r) => r.wardNo === args.wardNo);
     }
+    rows.sort((a, b) => comparePropertyIds(a.propertyId, b.propertyId));
     return rows;
+  },
+});
+
+const listFilterArgs = {
+  status: v.optional(surveyStatus),
+  qcStatus: v.optional(qcStatus),
+  wardNo: v.optional(v.string()),
+  districtId: v.optional(v.id("districts")),
+  municipalityId: v.optional(v.id("municipalities")),
+  surveyorId: v.optional(v.id("users")),
+};
+
+function applySurveyListFilters(
+  rows: Doc<"surveys">[],
+  args: {
+    status?: Doc<"surveys">["status"];
+    qcStatus?: Doc<"surveys">["qcStatus"];
+    wardNo?: string;
+    districtId?: Id<"districts">;
+    municipalityId?: Id<"municipalities">;
+    surveyorId?: Id<"users">;
+  },
+  me: Doc<"users">,
+  muniIds: Set<Id<"municipalities">>,
+): Doc<"surveys">[] {
+  let filtered = rows.filter((r) => muniIds.has(r.municipalityId));
+  if (args.districtId) filtered = filtered.filter((r) => r.districtId === args.districtId);
+  if (args.municipalityId) filtered = filtered.filter((r) => r.municipalityId === args.municipalityId);
+  if (args.surveyorId) filtered = filtered.filter((r) => r.surveyorId === args.surveyorId);
+  if (args.status && me.role !== "supervisor") {
+    filtered = filtered.filter((r) => r.status === args.status);
+  }
+  if (args.qcStatus) filtered = filtered.filter((r) => r.qcStatus === args.qcStatus);
+  if (args.wardNo) filtered = filtered.filter((r) => r.wardNo === args.wardNo);
+  return filtered.sort((a, b) => comparePropertyIds(a.propertyId, b.propertyId));
+}
+
+/** Cursor-paginated survey list sorted by Property ID ascending. */
+export const listPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    ...listFilterArgs,
+  },
+  handler: async (ctx, args) => {
+    const me = await requireUser(ctx);
+    const scope = await resolveTenantScope(ctx, me);
+    const districtIds = tenantDistrictIds(scope);
+    const muniIds = tenantMunicipalityIds(scope);
+
+    if (args.municipalityId) {
+      await assertMunicipalityInScope(ctx, me, args.municipalityId);
+    }
+    if (args.districtId && me.role !== "admin" && !districtIds.has(args.districtId)) {
+      clientError("FORBIDDEN", "This district is outside your assigned scope");
+    }
+
+    let baseQuery;
+    if (me.role === "surveyor") {
+      baseQuery = ctx.db
+        .query("surveys")
+        .withIndex("by_surveyor", (q) => q.eq("surveyorId", me._id))
+        .order("desc");
+    } else if (args.municipalityId) {
+      baseQuery = ctx.db
+        .query("surveys")
+        .withIndex("by_municipality_status", (q) =>
+          args.status
+            ? q.eq("municipalityId", args.municipalityId!).eq("status", args.status)
+            : q.eq("municipalityId", args.municipalityId!),
+        )
+        .order("desc");
+    } else if (args.districtId) {
+      baseQuery = ctx.db
+        .query("surveys")
+        .withIndex("by_district_status", (q) =>
+          args.status
+            ? q.eq("districtId", args.districtId!).eq("status", args.status)
+            : q.eq("districtId", args.districtId!),
+        )
+        .order("desc");
+    } else if (args.surveyorId) {
+      baseQuery = ctx.db
+        .query("surveys")
+        .withIndex("by_surveyor", (q) => q.eq("surveyorId", args.surveyorId!))
+        .order("desc");
+    } else {
+      baseQuery = ctx.db.query("surveys").withIndex("by_property_id").order("asc");
+    }
+
+    const page = await baseQuery.paginate(args.paginationOpts);
+    const filtered = applySurveyListFilters(page.page, args, me, muniIds);
+    return { ...page, page: filtered };
   },
 });
 
@@ -357,7 +452,10 @@ export const saveDraft = mutation({
     };
 
     const merged = mergeDraftArgs(existing, args, muni);
-    const normalized = normalizeAddressFields(normalizeOwnerFields(normalizePropertyFields(merged)), muni);
+    const normalized = normalizeAddressFields(
+      normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code)),
+      muni,
+    );
     validateBusinessRules(normalized, addressCtx, "draft");
 
     const writable = { ...stripLocalId(normalized as SurveyUpsertArgs), districtId: muni.districtId };
@@ -422,7 +520,10 @@ export const upsert = mutation({
       ...addressTenantContext(muni, district),
       configuredPostalCode: muni.postalCode,
     };
-    const normalized = normalizeAddressFields(normalizeOwnerFields(normalizePropertyFields(args)), muni);
+    const normalized = normalizeAddressFields(
+      normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(args), muni.code)),
+      muni,
+    );
     validateBusinessRules(normalized, addressCtx, "submit");
 
     // Confirm ward exists within the municipality
@@ -537,7 +638,7 @@ export const submit = mutation({
     const areaErrors = validateAreaSection({
       plotSqft: survey.plotSqft,
       plinthSqft: survey.plinthSqft,
-      floorAreasSqft: floors.map((f) => f.areaSqft),
+      floors: floors.map((f) => ({ floorName: f.floorName, areaSqft: f.areaSqft })),
     });
     if (Object.keys(areaErrors).length > 0) {
       clientError("VALIDATION", "Area details incomplete", areaErrors);
@@ -679,6 +780,20 @@ function normalizePropertyFields<
     parcelNo: (args.parcelNo ?? "").trim(),
     unitNo: (args.unitNo ?? "").trim(),
     constructedYear: args.constructedYear,
+  };
+}
+
+function withResolvedPropertyId<
+  T extends {
+    propertyId?: string;
+    wardNo?: string;
+    parcelNo?: string;
+    propertyUse?: string;
+  },
+>(args: T, ulbCode: string): T {
+  return {
+    ...args,
+    propertyId: resolvePropertyId(args, ulbCode),
   };
 }
 

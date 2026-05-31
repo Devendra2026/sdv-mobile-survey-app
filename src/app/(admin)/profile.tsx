@@ -11,13 +11,13 @@ export default function AdminProfileScreen() {
   const router = useRouter();
   const me = useQuery(api.users.currentUser, {});
   const pending = useQuery(api.admin.listPendingApprovals, {});
-  const users = useQuery(api.admin.listUsers, {});
+  const activeUsers = useQuery(api.admin.countActiveUsers, {});
   const { signOut } = useAuth();
 
   if (!me) return <Spinner label="Loading profile…" />;
 
   const pendingCount = pending?.length ?? 0;
-  const activeUsers = users?.filter((u) => u.status === 'active').length ?? 0;
+  const activeUsersLabel = activeUsers === undefined ? '—' : String(activeUsers);
 
   const onSignOut = () => {
     Alert.alert('Sign out?', "You'll need to sign in again to continue.", [
@@ -53,7 +53,7 @@ export default function AdminProfileScreen() {
           </View>
           <View className="flex-1 p-3 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle items-center">
             <Text className="text-h2 font-semibold text-ink-primary-light dark:text-ink-primary-dark">
-              {activeUsers}
+              {activeUsersLabel}
             </Text>
             <Text className="text-caption text-ink-tertiary-light mt-0.5">Active users</Text>
           </View>

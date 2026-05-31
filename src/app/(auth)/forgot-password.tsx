@@ -8,6 +8,7 @@
 import { AppButton, AppInput } from '@/components';
 import { AuthHero } from '@/components/auth/auth-hero';
 import { clerkErrorMessage } from '@/components/auth/field-error';
+import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignIn } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -79,6 +80,8 @@ export default function ForgotPasswordScreen() {
       const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) {
         setError(clerkErrorMessage(finalizeError));
+      } else {
+        retryConvexAuth({ resetPhase: true });
       }
     } finally {
       setLoading(false);

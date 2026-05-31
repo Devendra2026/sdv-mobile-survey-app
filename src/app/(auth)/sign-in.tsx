@@ -8,6 +8,7 @@
 import { AppButton, AppInput } from '@/components';
 import { AuthHero } from '@/components/auth/auth-hero';
 import { clerkErrorMessage } from '@/components/auth/field-error';
+import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignIn } from '@clerk/expo';
 import { Link } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -128,7 +129,11 @@ export default function SignInScreen() {
 
       if (signIn.status === 'complete') {
         const { error: finalizeError } = await signIn.finalize();
-        if (finalizeError) setError(clerkErrorMessage(finalizeError));
+        if (finalizeError) {
+          setError(clerkErrorMessage(finalizeError));
+        } else {
+          retryConvexAuth({ resetPhase: true });
+        }
         return;
       }
 
@@ -162,7 +167,11 @@ export default function SignInScreen() {
       }
 
       const { error: finalizeError } = await signIn.finalize();
-      if (finalizeError) setError(clerkErrorMessage(finalizeError));
+      if (finalizeError) {
+        setError(clerkErrorMessage(finalizeError));
+      } else {
+        retryConvexAuth({ resetPhase: true });
+      }
     } finally {
       setLoading(false);
     }

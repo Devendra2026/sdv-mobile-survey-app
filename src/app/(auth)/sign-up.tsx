@@ -10,6 +10,7 @@
 import { AppButton, AppInput, RadioGroup } from '@/components';
 import { AuthHero } from '@/components/auth/auth-hero';
 import { clerkErrorMessage } from '@/components/auth/field-error';
+import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignUp } from '@clerk/expo';
 import { Link, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -67,7 +68,11 @@ export default function SignUpScreen() {
 
       if (signUp.status === 'complete') {
         const { error: finalizeError } = await signUp.finalize();
-        if (finalizeError) setError(clerkErrorMessage(finalizeError));
+        if (finalizeError) {
+          setError(clerkErrorMessage(finalizeError));
+        } else {
+          retryConvexAuth({ resetPhase: true });
+        }
         return;
       }
 
@@ -102,6 +107,8 @@ export default function SignUpScreen() {
       const { error: finalizeError } = await signUp.finalize();
       if (finalizeError) {
         setError(clerkErrorMessage(finalizeError));
+      } else {
+        retryConvexAuth({ resetPhase: true });
       }
     } finally {
       setLoading(false);

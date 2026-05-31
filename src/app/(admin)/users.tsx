@@ -4,10 +4,12 @@ import { FilterChipItem, FilterChips } from '@/components/admin/filter-chips';
 import { api } from '@/convex/_generated/api';
 import { humanizeRole, timeAgo } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from 'convex/react';
+import { usePaginatedQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+
+const PAGE_SIZE = 30;
 
 const ROLE_FILTERS = [
   { value: undefined, label: 'All' },
@@ -22,10 +24,20 @@ export default function AdminUsersScreen() {
   const [role, setRole] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const users = useQuery(api.admin.listUsers, { role: role as never });
+
+  const queryArgs = useMemo(() => ({ role: role as never }), [role]);
+  const {
+    results: users,
+    status,
+    loadMore,
+  } = usePaginatedQuery(api.admin.listUsers, queryArgs, {
+    initialNumItems: PAGE_SIZE,
+  });
+
+  const isLoading = status === 'LoadingFirstPage';
+  const isLoadingMore = status === 'LoadingMore';
 
   const filtered = useMemo(() => {
-    if (!users) return undefined;
     const q = search.trim().toLowerCase();
     if (!q) return users;
     return users.filter(
@@ -36,19 +48,9 @@ export default function AdminUsersScreen() {
     );
   }, [users, search]);
 
-  const roleCounts = useMemo(() => {
-    if (!users) return {} as Record<string, number>;
-    return {
-      surveyor: users.filter((u) => u.role === 'surveyor').length,
-      supervisor: users.filter((u) => u.role === 'supervisor').length,
-      admin: users.filter((u) => u.role === 'admin').length,
-      pending: users.filter((u) => u.role === 'pending').length,
-    };
-  }, [users]);
-
   const chips: FilterChipItem<string | undefined>[] = ROLE_FILTERS.map((r) => ({
     ...r,
-    count: r.value === undefined ? users?.length : r.value ? roleCounts[r.value] : undefined,
+    count: r.value === undefined ? users.length : undefined,
   }));
 
   return (
@@ -57,11 +59,7 @@ export default function AdminUsersScreen() {
         variant="surface"
         eyebrow=""
         title="Users"
-        subtitle={
-          users === undefined
-            ? 'Loading directory…'
-            : `${users.length} account${users.length === 1 ? '' : 's'} on platform`
-        }
+        subtitle={isLoading ? 'Loading directory…' : `${users.length} account${users.length === 1 ? '' : 's'} loaded`}
         footer={
           <View className="mt-3 flex-row items-center bg-page-light dark:bg-page-dark rounded-xl border border-line-default px-3 h-11">
             <Ionicons name="search-outline" size={18} color="#9AA3AF" />
@@ -81,7 +79,7 @@ export default function AdminUsersScreen() {
 
       <FilterChips items={chips} value={role} onChange={setRole} />
 
-      {filtered === undefined ? (
+      {isLoading ? (
         <Spinner label="Loading users…" />
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -100,6 +98,17 @@ export default function AdminUsersScreen() {
           data={filtered}
           keyExtractor={(u) => u._id}
           contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 24 }}
+          onEndReached={() => {
+            if (status === 'CanLoadMore') loadMore(PAGE_SIZE);
+          }}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View className="py-4 items-center">
+                <ActivityIndicator color="#003B8E" />
+              </View>
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

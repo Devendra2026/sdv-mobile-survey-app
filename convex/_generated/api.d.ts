@@ -28,6 +28,7 @@ import type * as ownerMobile from "../ownerMobile.js";
 import type * as ownerRules from "../ownerRules.js";
 import type * as permissionCatalog from "../permissionCatalog.js";
 import type * as photos from "../photos.js";
+import type * as propertyId from "../propertyId.js";
 import type * as qc from "../qc.js";
 import type * as rbac from "../rbac.js";
 import type * as serviceMasters from "../serviceMasters.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   ownerRules: typeof ownerRules;
   permissionCatalog: typeof permissionCatalog;
   photos: typeof photos;
+  propertyId: typeof propertyId;
   qc: typeof qc;
   rbac: typeof rbac;
   serviceMasters: typeof serviceMasters;

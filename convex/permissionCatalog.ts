@@ -31,13 +31,7 @@ export type PermissionKey = (typeof PERMISSION_CATALOG)[number]["key"];
 /** Default permission sets for built-in roles (mirrors client MATRIX). */
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly PermissionKey[]> = {
   pending: [],
-  surveyor: [
-    "surveys.viewOwn",
-    "surveys.editDraft",
-    "surveys.submit",
-    "surveys.uploadPhotos",
-    "surveys.delete",
-  ],
+  surveyor: ["surveys.viewOwn", "surveys.editDraft", "surveys.submit", "surveys.uploadPhotos", "surveys.delete"],
   supervisor: [
     "surveys.viewAssigned",
     "qc.review",
