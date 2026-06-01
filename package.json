@@ -15,6 +15,7 @@
     "generate:logo": "node scripts/generate-logo-assets.mjs",
     "lockfile:eas": "node ./scripts/lockfile-eas.mjs",
     "verify:preview-native": "node ./scripts/verify-no-dev-client.mjs preview",
+    "verify:clerk-convex": "node ./scripts/verify-clerk-convex.mjs",
     "verify:eas-preview": "node ./scripts/verify-eas-preview.mjs",
     "eas:build:android": "eas build --platform android",
     "eas:build:android:preview": "npm run verify:eas-preview && eas build --platform android --profile preview --non-interactive",

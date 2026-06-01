@@ -2,7 +2,7 @@ import 'react-native-gesture-handler';
 
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { AppLoadingView } from '@/components/app-loading-view';
-import { authStyles } from '@/components/auth/styles';
+import { ClerkStartupError } from '@/components/clerk-startup-error';
 import { ConfigGate } from '@/components/config-gate';
 import { ConvexAuthError } from '@/components/convex-auth-error';
 import { RootErrorBoundary } from '@/components/root-error-boundary';
@@ -22,9 +22,9 @@ import { Slot } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { InteractionManager, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import '../../global.css';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -49,21 +49,37 @@ function signedInLoadingMessage(
   return 'Please wait…';
 }
 
-function ClerkStartupError() {
+/**
+ * Convex mounts only after Clerk has loaded so startup work does not block clerk-js FAPI.
+ * @see https://github.com/clerk/javascript/issues/8245
+ */
+function ClerkThenConvex({ convex }: { convex: ConvexReactClient }) {
+  const { isLoaded } = useAuth();
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded) {
+      setLoadTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadTimedOut(true), CLERK_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
+  useHideAppSplash(isLoaded || loadTimedOut);
+
+  if (!isLoaded) {
+    if (loadTimedOut) return <ClerkStartupError />;
+    return <AppLoadingView message="Loading sign-in…" />;
+  }
+
   return (
-    <SafeAreaView style={authStyles.safe}>
-      <ScrollView contentContainerStyle={authStyles.scroll}>
-        <Text style={authStyles.title}>Sign-in could not start</Text>
-        <Text style={authStyles.subtitle}>
-          Clerk did not finish loading. Check mobile data or Wi‑Fi, then force-close and reopen the app.
-        </Text>
-        <Text style={[authStyles.subtitle, { marginTop: 16 }]}>
-          If this keeps happening after a fresh install, the APK may have been built without EAS environment variables.
-          Rebuild with `npm run eas:build:android:preview` after setting EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and
-          EXPO_PUBLIC_CONVEX_URL on EAS.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+    <ConvexProviderWithAuth client={convex} useAuth={useAuthForConvex}>
+      <ThemeProvider>
+        <StatusBar style="auto" />
+        <AuthGate />
+      </ThemeProvider>
+    </ConvexProviderWithAuth>
   );
 }
 
@@ -74,18 +90,6 @@ function AuthGate() {
   const { me, needsSync, syncing } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
-  const [clerkLoadTimedOut, setClerkLoadTimedOut] = useState(false);
-
-  useEffect(() => {
-    if (isLoaded) {
-      setClerkLoadTimedOut(false);
-      return;
-    }
-    const timer = setTimeout(() => setClerkLoadTimedOut(true), CLERK_LOAD_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [isLoaded]);
-
-  useHideAppSplash(isLoaded || clerkLoadTimedOut);
 
   useEffect(() => {
     if (!isLoaded || !navigationReady) return;
@@ -131,11 +135,6 @@ function AuthGate() {
     [convexAuthPhase, convexReady, me, needsSync, syncing],
   );
 
-  if (!isLoaded) {
-    if (clerkLoadTimedOut) return <ClerkStartupError />;
-    return <AppLoadingView message="Loading sign-in…" />;
-  }
-
   if (isSignedIn && convexAuthFailed) {
     return <ConvexAuthError />;
   }
@@ -158,7 +157,8 @@ function AppProviders() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const task = InteractionManager.runAfterInteractions(() => setMounted(true));
+    return () => task.cancel();
   }, []);
 
   const convex = useMemo(() => {
@@ -176,12 +176,7 @@ function AppProviders() {
 
   return (
     <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
-      <ConvexProviderWithAuth client={convex} useAuth={useAuthForConvex}>
-        <ThemeProvider>
-          <StatusBar style="auto" />
-          <AuthGate />
-        </ThemeProvider>
-      </ConvexProviderWithAuth>
+      <ClerkThenConvex convex={convex} />
     </ClerkProvider>
   );
 }

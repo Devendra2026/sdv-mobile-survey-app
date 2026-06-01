@@ -1,7 +1,20 @@
-export const env = {
-  convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL ?? '',
-  clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',
+import { clerkFrontendApiFromPublishableKey } from '@/utils/clerk-issuer';
+import Constants from 'expo-constants';
+
+const extra = (Constants.expoConfig?.extra ?? {}) as {
+  convexUrl?: string;
+  clerkPublishableKey?: string;
 };
+
+/** EAS inlines `EXPO_PUBLIC_*` at build time; `extra` is a fallback from app.config.js. */
+export const env = {
+  convexUrl: (process.env.EXPO_PUBLIC_CONVEX_URL ?? extra.convexUrl ?? '').trim(),
+  clerkPublishableKey: (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? extra.clerkPublishableKey ?? '').trim(),
+};
+
+export function clerkFrontendApiHost(): string | null {
+  return clerkFrontendApiFromPublishableKey(env.clerkPublishableKey);
+}
 
 const CONVEX_URL_RE = /^https:\/\/[a-z0-9-]+\.convex\.cloud\/?$/i;
 const CLERK_KEY_RE = /^pk_(test|live)_/;

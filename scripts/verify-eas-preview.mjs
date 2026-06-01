@@ -162,6 +162,14 @@ try {
   fail(`autolinking check failed: ${err instanceof Error ? err.message : err}`);
 }
 
+if (!failed) {
+  try {
+    execSync('node ./scripts/verify-clerk-convex.mjs', { stdio: 'inherit', cwd: process.cwd() });
+  } catch {
+    failed = true;
+  }
+}
+
 if (failed) {
   console.error('\n[verify-eas-preview] Fix the issues above, then run: npm run eas:build:android:preview\n');
   process.exit(1);

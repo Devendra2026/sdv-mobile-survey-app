@@ -2,13 +2,24 @@
 
 Field survey capture for Android/iOS. Writes to the **same Convex deployment** as the admin web app in [`../sdv-front-new-app`](../sdv-front-new-app).
 
-## Shared backend
+## Shared backend (Clerk + Convex)
 
-- **Do not run `convex dev` here.** Start the backend from the web repo: `cd ../sdv-front-new-app && npm run dev`.
-- **Do not run `npm run deploy` here** — it exits with instructions; deploy from `sdv-front-new-app`.
-- `convex/` in this repo is kept in sync with the web app for TypeScript types (`api.survey.*`, etc.).
-- `EXPO_PUBLIC_CONVEX_URL` must match `NEXT_PUBLIC_CONVEX_URL` in the web app.
-- Use the **same Clerk application** as the web (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_JWT_ISSUER_DOMAIN`).
+| Setting               | Mobile (EAS / `.env.local`)         | Web (`sdv-front-new-app/.env.local`) | Convex deployment                            |
+| --------------------- | ----------------------------------- | ------------------------------------ | -------------------------------------------- |
+| Convex URL            | `EXPO_PUBLIC_CONVEX_URL`            | `NEXT_PUBLIC_CONVEX_URL`             | same `*.convex.cloud`                        |
+| Clerk publishable key | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`  | **must be the same Clerk app**               |
+| Clerk JWT issuer      | (from key)                          | `CLERK_JWT_ISSUER_DOMAIN`            | `npx convex env get CLERK_JWT_ISSUER_DOMAIN` |
+
+Production Clerk for SDV: `pk_live_…` → `https://clerk.sdvedutech.in`. Web and mobile must **not** use different Clerk instances (e.g. web on `pk_test_` / `organic-halibut-21` while mobile uses `pk_live_` / `sdvedutech.in`).
+
+Before every field APK build:
+
+```bash
+npm run verify:clerk-convex   # EAS + Convex + web .env.local alignment
+npm run verify:eas-preview    # includes verify:clerk-convex
+```
+
+In [Clerk Dashboard](https://dashboard.clerk.com) → **Integrations → Convex → Activate** (adds `aud: convex` to session tokens).
 
 ## Getting started
 
@@ -20,7 +31,7 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
    cp .env.example .env.local
    ```
 
-   Copy `EXPO_PUBLIC_CONVEX_URL` and Clerk values from `../sdv-front-new-app/.env.local`.
+   Copy `EXPO_PUBLIC_CONVEX_URL` and **the same** `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` as `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` in the web app.
 
 3. Install and run Expo:
 
@@ -29,25 +40,31 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
    npm run dev
    ```
 
-## EAS builds
+## EAS builds (internal distribution APK)
 
-Field APKs must use **Clerk production** keys (`pk_live_…`). Development keys (`pk_test_…`) are capped at 100 emails/month and will block sign-in MFA / password reset in the field.
+Field APKs use the **preview** EAS environment (`eas.json` → `environment: "preview"`).
 
-1. In [Clerk Dashboard](https://dashboard.clerk.com) → your app → **Production** → copy the publishable key (`pk_live_…`) and note the JWT issuer (`https://….clerk.accounts.com`).
-2. On Convex (same deployment as `EXPO_PUBLIC_CONVEX_URL`):
-   ```bash
-   cd ../sdv-front-new-app
-   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://YOUR-INSTANCE.clerk.accounts.com"
-   ```
-3. On EAS (preview is used for internal APKs today):
+1. Set EAS preview variables (match `.env.local`):
+
    ```bash
    npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_live_…"
-   npx eas env:update preview --variable-name EXPO_PUBLIC_CONVEX_URL --value "https://….convex.cloud"
+   npx eas env:update preview --variable-name EXPO_PUBLIC_CONVEX_URL --value "https://basic-shark-848.convex.cloud"
    ```
-4. Rebuild and redistribute:
+
+2. Align Convex issuer with that Clerk app:
+
    ```bash
+   cd ../sdv-front-new-app
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://clerk.sdvedutech.in"
+   ```
+
+3. Align the **web** `.env.local` to the same `pk_live_…` and issuer (see table above).
+
+4. Build and install:
+
+   ```bash
+   cd ../survey-app
    npm run eas:build:android:preview
    ```
-   Or use `--profile production-apk` once the **production** EAS environment is configured (Play Store uses `production` → AAB).
 
-`npm run verify:eas-preview` fails if preview still points at `pk_test_…`.
+`npm run verify:eas-preview` fails if preview still uses `pk_test_…` or if web/mobile/Convex Clerk settings disagree.
