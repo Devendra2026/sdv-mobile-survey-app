@@ -96,8 +96,8 @@ if (webPk && easPk) {
       `  Web: ${webIssuerFromPk ?? webPk.slice(0, 20)}…\n` +
       `  Mobile/EAS: ${easIssuer ?? 'invalid'}\n` +
       `  Update sdv-front-new-app/.env.local:\n` +
-      `    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<same pk_live as survey-app>\n` +
-      `    CLERK_JWT_ISSUER_DOMAIN=${easIssuer ?? 'https://clerk.sdvedutech.in'}`,
+      `    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<same pk_test as survey-app>\n` +
+      `    CLERK_JWT_ISSUER_DOMAIN=${easIssuer ?? 'https://organic-halibut-21.clerk.accounts.dev'}`,
     );
   } else {
     ok('Web .env.local uses the same Clerk app as mobile/EAS');

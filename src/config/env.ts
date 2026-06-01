@@ -19,11 +19,6 @@ export function clerkFrontendApiHost(): string | null {
 const CONVEX_URL_RE = /^https:\/\/[a-z0-9-]+\.convex\.cloud\/?$/i;
 const CLERK_KEY_RE = /^pk_(test|live)_/;
 
-/** True when the APK was built with a Clerk **development** instance (100 emails/month cap). */
-export function isClerkDevelopmentKey(): boolean {
-  return env.clerkPublishableKey.trim().startsWith('pk_test_');
-}
-
 /** Human-readable problems when the APK was built without required EAS env vars. */
 export function getEnvIssues(): string[] {
   const issues: string[] = [];

@@ -10,7 +10,7 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
 | Clerk publishable key | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`  | **must be the same Clerk app**               |
 | Clerk JWT issuer      | (from key)                          | `CLERK_JWT_ISSUER_DOMAIN`            | `npx convex env get CLERK_JWT_ISSUER_DOMAIN` |
 
-Production Clerk for SDV: `pk_live_…` → `https://clerk.sdvedutech.in`. Web and mobile must **not** use different Clerk instances (e.g. web on `pk_test_` / `organic-halibut-21` while mobile uses `pk_live_` / `sdvedutech.in`).
+Development Clerk: `pk_test_…` → `https://organic-halibut-21.clerk.accounts.dev`. Web and mobile must use the **same** Clerk app and issuer (check with `npm run verify:clerk-convex`).
 
 Before every field APK build:
 
@@ -47,7 +47,7 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
 1. Set EAS preview variables (match `.env.local`):
 
    ```bash
-   npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_live_…"
+   npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_test_…"
    npx eas env:update preview --variable-name EXPO_PUBLIC_CONVEX_URL --value "https://basic-shark-848.convex.cloud"
    ```
 
@@ -55,10 +55,11 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
 
    ```bash
    cd ../sdv-front-new-app
-   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://clerk.sdvedutech.in"
+   npm run deploy:backend:dev
+   # or: npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://organic-halibut-21.clerk.accounts.dev"
    ```
 
-3. Align the **web** `.env.local` to the same `pk_live_…` and issuer (see table above).
+3. Align the **web** `.env.local` to the same `pk_test_…` and issuer (see table above).
 
 4. Build and install:
 
@@ -67,4 +68,4 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
    npm run eas:build:android:preview
    ```
 
-`npm run verify:eas-preview` fails if preview still uses `pk_test_…` or if web/mobile/Convex Clerk settings disagree.
+`npm run verify:eas-preview` fails if web/mobile/Convex Clerk settings disagree.
