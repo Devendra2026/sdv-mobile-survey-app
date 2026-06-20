@@ -69,11 +69,11 @@ export function coerceSanitationType(raw?: string): string | undefined {
   return v;
 }
 
-export function isValidWaterSource(value?: string): boolean {
+function isValidWaterSource(value?: string): boolean {
   return Boolean(value?.trim() && WATER_SOURCE_SET.has(value.trim()));
 }
 
-export function isValidSanitationType(value?: string): boolean {
+function isValidSanitationType(value?: string): boolean {
   return Boolean(value?.trim() && SANITATION_SET.has(value.trim()));
 }
 

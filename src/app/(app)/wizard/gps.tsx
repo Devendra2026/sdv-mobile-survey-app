@@ -10,7 +10,7 @@ import {
   GPS_TARGET_ACCURACY_METERS,
 } from '@/convex/gpsAccuracy';
 import { stepCompletion } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import { WizardStepFrame } from '@/components/wizard';
 import {
   captureGpsWithTargetAccuracy,
   GpsAccuracyError,

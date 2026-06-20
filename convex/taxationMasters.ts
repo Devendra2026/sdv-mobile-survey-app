@@ -234,69 +234,72 @@ export function defaultMasterRowsForCategory(category: string): SeedRow[] {
 }
 
 async function upsertMasterCategory(ctx: MutationCtx, category: string, rows: SeedRow[]) {
-  for (const row of rows) {
-    const existing = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
-    } else {
-      await ctx.db.insert("masters", {
-        category,
-        value: row.value,
-        label: row.label,
-        position: row.position,
-        isActive: true,
-      });
-    }
-  }
+  await Promise.all(
+    rows.map(async (row) => {
+      const existing = await ctx.db
+        .query("masters")
+        .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
+      } else {
+        await ctx.db.insert("masters", {
+          category,
+          value: row.value,
+          label: row.label,
+          position: row.position,
+          isActive: true,
+        });
+      }
+    }),
+  );
+}
+
+async function deactivateMasterValues(ctx: MutationCtx, category: string, values: readonly string[]) {
+  await Promise.all(
+    values.map(async (value) => {
+      const row = await ctx.db
+        .query("masters")
+        .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", value))
+        .unique();
+      if (row?.isActive) await ctx.db.patch(row._id, { isActive: false });
+    }),
+  );
 }
 
 /** Idempotent seed for taxation dropdown masters (dev + admin reference data). */
 export async function seedTaxationMasters(ctx: MutationCtx) {
-  await upsertMasterCategory(
-    ctx,
-    "ownership_type",
-    OWNERSHIP_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "property_use",
-    PROPERTY_USES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  for (const row of flatPropertyUseSubcategoryRows()) {
-    await upsertMasterCategory(ctx, "property_use_subcategory", [row]);
-  }
-  await upsertMasterCategory(
-    ctx,
-    "road_type",
-    ROAD_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "tax_rate_zone",
-    TAX_RATE_ZONES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "situation",
-    SITUATIONS.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-
-  for (const value of [...LEGACY_MIX_SUBCATEGORIES, ...LEGACY_COMMERCIAL_SUBCATEGORIES]) {
-    const row = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", "property_use_subcategory").eq("value", value))
-      .unique();
-    if (row?.isActive) await ctx.db.patch(row._id, { isActive: false });
-  }
-
-  for (const value of LEGACY_PROPERTY_USES) {
-    const row = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", "property_use").eq("value", value))
-      .unique();
-    if (row?.isActive) await ctx.db.patch(row._id, { isActive: false });
-  }
+  await Promise.all([
+    upsertMasterCategory(
+      ctx,
+      "ownership_type",
+      OWNERSHIP_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "property_use",
+      PROPERTY_USES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(ctx, "property_use_subcategory", flatPropertyUseSubcategoryRows()),
+    upsertMasterCategory(
+      ctx,
+      "road_type",
+      ROAD_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "tax_rate_zone",
+      TAX_RATE_ZONES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "situation",
+      SITUATIONS.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    deactivateMasterValues(ctx, "property_use_subcategory", [
+      ...LEGACY_MIX_SUBCATEGORIES,
+      ...LEGACY_COMMERCIAL_SUBCATEGORIES,
+    ]),
+    deactivateMasterValues(ctx, "property_use", [...LEGACY_PROPERTY_USES]),
+  ]);
 }

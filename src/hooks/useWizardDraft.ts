@@ -61,6 +61,9 @@ function migrateWizardDraft(
     raw.oldPropertyNo = raw.propertyNo;
   }
   delete raw.propertyNo;
+  if (!raw.owners?.length && !raw.ownerName?.trim() && !raw.fatherOrHusbandName?.trim()) {
+    raw.owners = [newOwnerRow()];
+  }
   if (!raw.owners?.length && (raw.ownerName?.trim() || raw.fatherOrHusbandName?.trim())) {
     raw.owners = [
       {
@@ -190,7 +193,7 @@ export interface WizardDraft {
   }>;
 }
 
-export function newLocalId(): string {
+function newLocalId(): string {
   return `ls_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -202,6 +205,7 @@ export async function createNewDraft(): Promise<WizardDraft> {
     isSlum: false,
     floors: [],
     photos: [],
+    owners: [newOwnerRow()],
   };
   await AsyncStorage.setItem(KEY(draft.localId), JSON.stringify(draft));
   return draft;
@@ -397,15 +401,23 @@ export async function listDrafts(): Promise<WizardDraft[]> {
  */
 export function useWizardDraft(localId: string | undefined) {
   const [draft, setDraft] = useState<WizardDraft | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(localId));
+  const [prevLocalId, setPrevLocalId] = useState(localId);
 
-  useEffect(() => {
-    let alive = true;
+  if (localId !== prevLocalId) {
+    setPrevLocalId(localId);
     if (!localId) {
       setDraft(null);
       setLoading(false);
-      return;
+    } else {
+      setLoading(true);
     }
+  }
+
+  useEffect(() => {
+    if (!localId) return;
+
+    let alive = true;
     AsyncStorage.getItem(KEY(localId))
       .then(async (raw) => {
         if (!alive) return;
@@ -430,6 +442,7 @@ export function useWizardDraft(localId: string | undefined) {
           isSlum: false,
           floors: [],
           photos: [],
+          owners: [newOwnerRow()],
         };
         await AsyncStorage.setItem(KEY(localId), JSON.stringify(empty));
         setDraft(empty);
@@ -449,21 +462,31 @@ export function useWizardDraft(localId: string | undefined) {
     });
   }, []);
 
-  return { draft, loading, update };
+  return { draft: localId ? draft : null, loading: localId ? loading : false, update };
 }
 
 /** Map local draft → `survey.saveDraft` payload (only fields the user has filled). */
-export function draftToSaveDraftPayload(d: WizardDraft) {
-  if (!d.municipalityId) return null;
-
-  const owners = d.owners
-    ?.map((o) => ({
+function cleanedOwnersFromDraft(owners: WizardDraft['owners'] | undefined) {
+  if (!owners) return undefined;
+  const cleaned = [];
+  for (const o of owners) {
+    const row = {
       name: o.name?.trim() || undefined,
       fatherOrHusbandName: o.fatherOrHusbandName?.trim() || undefined,
       mobileNo: o.mobileNo?.trim() || undefined,
       altMobileNo: o.altMobileNo?.trim() || undefined,
-    }))
-    .filter((o) => o.name || o.fatherOrHusbandName || o.mobileNo || o.altMobileNo);
+    };
+    if (row.name || row.fatherOrHusbandName || row.mobileNo || row.altMobileNo) {
+      cleaned.push(row);
+    }
+  }
+  return cleaned.length ? cleaned : undefined;
+}
+
+export function draftToSaveDraftPayload(d: WizardDraft) {
+  if (!d.municipalityId) return null;
+
+  const owners = cleanedOwnersFromDraft(d.owners);
 
   return {
     localId: d.localId,
@@ -550,17 +573,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     isSlum: !!d.isSlum,
     respondentName: d.respondentName?.trim() || undefined,
     relationship: d.relationship?.trim() || undefined,
-    owners: (() => {
-      const cleaned = d.owners
-        ?.map((o) => ({
-          name: o.name?.trim() || undefined,
-          fatherOrHusbandName: o.fatherOrHusbandName?.trim() || undefined,
-          mobileNo: o.mobileNo?.trim() || undefined,
-          altMobileNo: o.altMobileNo?.trim() || undefined,
-        }))
-        .filter((o) => o.name || o.fatherOrHusbandName || o.mobileNo || o.altMobileNo);
-      return cleaned?.length ? cleaned : undefined;
-    })(),
+    owners: cleanedOwnersFromDraft(d.owners),
     familySize: d.familySize,
     mobileNo: primaryOwnerMobileFromDraft(d) ?? '',
     altMobileNo: d.owners?.[0]?.altMobileNo?.trim() || undefined,
@@ -593,7 +606,7 @@ function primaryOwnerMobileFromDraft(d: WizardDraft): string | undefined {
 }
 
 /** Owner step: respondent is owner → valid primary mobile required; else mobile optional but must be valid if set. */
-export function ownerStepComplete(d: WizardDraft): boolean {
+function ownerStepComplete(d: WizardDraft): boolean {
   const owners = d.owners ?? [];
   if (!owners.length) return false;
   const relationship = d.relationship?.trim();

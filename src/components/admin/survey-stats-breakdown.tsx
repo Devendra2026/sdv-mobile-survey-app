@@ -4,6 +4,8 @@
 import { AppCard, AppDropdown, KpiCard, SectionLabel, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { useClientNowMs } from '@/hooks/use-client-now';
 import { useQuery } from 'convex/react';
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -76,12 +78,26 @@ export function SurveyStatsBreakdown({ eyebrow, showFilters = true }: SurveyStat
   const [districtId, setDistrictId] = useState('');
   const [municipalityId, setMunicipalityId] = useState('');
   const [surveyorId, setSurveyorId] = useState('');
+  const { convexReady } = useClerkConvexAuth();
+  const nowMs = useClientNowMs();
+  const queryArgs = useMemo(():
+    | 'skip'
+    | {
+        districtId: Id<'districts'> | undefined;
+        municipalityId: Id<'municipalities'> | undefined;
+        surveyorId: Id<'users'> | undefined;
+        nowMs: number;
+      } => {
+    if (!convexReady || !Number.isFinite(nowMs)) return 'skip';
+    return {
+      districtId: districtId ? (districtId as Id<'districts'>) : undefined,
+      municipalityId: municipalityId ? (municipalityId as Id<'municipalities'>) : undefined,
+      surveyorId: surveyorId ? (surveyorId as Id<'users'>) : undefined,
+      nowMs,
+    };
+  }, [convexReady, nowMs, districtId, municipalityId, surveyorId]);
 
-  const stats = useQuery(api.analytics.surveyStatsBreakdown, {
-    districtId: districtId ? (districtId as Id<'districts'>) : undefined,
-    municipalityId: municipalityId ? (municipalityId as Id<'municipalities'>) : undefined,
-    surveyorId: surveyorId ? (surveyorId as Id<'users'>) : undefined,
-  });
+  const stats = useQuery(api.analytics.surveyStatsBreakdown, queryArgs);
 
   const districtOptions = useMemo(
     () => [

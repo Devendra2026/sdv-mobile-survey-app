@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-export const authColors = {
+const authColors = {
   background: "#F5F7FA",
   primary: "#003B8E",
   text: "#1A1A2E",

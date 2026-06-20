@@ -12,79 +12,122 @@ import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignIn } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
 type Stage = 'email' | 'reset';
 
+type ForgotPasswordState = {
+  stage: Stage;
+  email: string;
+  code: string;
+  newPassword: string;
+  showPassword: boolean;
+  loading: boolean;
+  error: string | null;
+};
+
+type ForgotPasswordAction =
+  | { type: 'setStage'; stage: Stage }
+  | { type: 'setEmail'; email: string }
+  | { type: 'setCode'; code: string }
+  | { type: 'setNewPassword'; newPassword: string }
+  | { type: 'toggleShowPassword' }
+  | { type: 'setLoading'; loading: boolean }
+  | { type: 'setError'; error: string | null };
+
+const initialForgotPasswordState: ForgotPasswordState = {
+  stage: 'email',
+  email: '',
+  code: '',
+  newPassword: '',
+  showPassword: false,
+  loading: false,
+  error: null,
+};
+
+function forgotPasswordReducer(state: ForgotPasswordState, action: ForgotPasswordAction): ForgotPasswordState {
+  switch (action.type) {
+    case 'setStage':
+      return { ...state, stage: action.stage };
+    case 'setEmail':
+      return { ...state, email: action.email };
+    case 'setCode':
+      return { ...state, code: action.code };
+    case 'setNewPassword':
+      return { ...state, newPassword: action.newPassword };
+    case 'toggleShowPassword':
+      return { ...state, showPassword: !state.showPassword };
+    case 'setLoading':
+      return { ...state, loading: action.loading };
+    case 'setError':
+      return { ...state, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export default function ForgotPasswordScreen() {
   const { signIn, fetchStatus } = useSignIn();
   const router = useRouter();
-
-  const [stage, setStage] = useState<Stage>('email');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(forgotPasswordReducer, initialForgotPasswordState);
 
   const requestReset = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'setError', error: null });
+    dispatch({ type: 'setLoading', loading: true });
     try {
-      const { error: createError } = await signIn.create({ identifier: email.trim() });
+      const { error: createError } = await signIn.create({ identifier: state.email.trim() });
       if (createError) {
-        setError(clerkErrorMessage(createError));
+        dispatch({ type: 'setError', error: clerkErrorMessage(createError) });
         return;
       }
 
       const { error: sendError } = await signIn.resetPasswordEmailCode.sendCode();
       if (sendError) {
-        setError(clerkErrorMessage(sendError));
+        dispatch({ type: 'setError', error: clerkErrorMessage(sendError) });
         return;
       }
 
-      setStage('reset');
+      dispatch({ type: 'setStage', stage: 'reset' });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'setLoading', loading: false });
     }
   };
 
   const completeReset = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'setError', error: null });
+    dispatch({ type: 'setLoading', loading: true });
     try {
-      const { error: verifyError } = await signIn.resetPasswordEmailCode.verifyCode({ code });
+      const { error: verifyError } = await signIn.resetPasswordEmailCode.verifyCode({ code: state.code });
       if (verifyError) {
-        setError(clerkErrorMessage(verifyError));
+        dispatch({ type: 'setError', error: clerkErrorMessage(verifyError) });
         return;
       }
 
       const { error: passwordError } = await signIn.resetPasswordEmailCode.submitPassword({
-        password: newPassword,
+        password: state.newPassword,
         signOutOfOtherSessions: true,
       });
       if (passwordError) {
-        setError(clerkErrorMessage(passwordError));
+        dispatch({ type: 'setError', error: clerkErrorMessage(passwordError) });
         return;
       }
 
       if (signIn.status !== 'complete') {
-        setError('Reset incomplete — try again.');
+        dispatch({ type: 'setError', error: 'Reset incomplete — try again.' });
         return;
       }
 
       const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) {
-        setError(clerkErrorMessage(finalizeError));
+        dispatch({ type: 'setError', error: clerkErrorMessage(finalizeError) });
       } else {
         retryConvexAuth({ resetPhase: true });
       }
     } finally {
-      setLoading(false);
+      dispatch({ type: 'setLoading', loading: false });
     }
   };
 
@@ -99,7 +142,7 @@ export default function ForgotPasswordScreen() {
           contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled"
         >
-          {stage === 'email' ? (
+          {state.stage === 'email' ? (
             <>
               <Text className="text-h1 font-medium text-ink-primary-light dark:text-ink-primary-dark">
                 Reset password
@@ -110,19 +153,19 @@ export default function ForgotPasswordScreen() {
               <AppInput
                 label="Email"
                 required
-                value={email}
-                onChangeText={setEmail}
+                value={state.email}
+                onChangeText={(v) => dispatch({ type: 'setEmail', email: v })}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 iconLeft="mail-outline"
-                errorText={error ?? undefined}
+                errorText={state.error ?? undefined}
                 containerClassName="mb-5"
               />
               <AppButton
-                label={loading ? 'Sending…' : 'Send code'}
-                loading={loading}
+                label={state.loading ? 'Sending…' : 'Send code'}
+                loading={state.loading}
                 onPress={requestReset}
-                disabled={!email.trim() || loading || fetchStatus === 'fetching'}
+                disabled={!state.email.trim() || state.loading || fetchStatus === 'fetching'}
                 fullWidth
               />
             </>
@@ -132,13 +175,13 @@ export default function ForgotPasswordScreen() {
                 Enter new password
               </Text>
               <Text className="text-helper text-ink-tertiary-light dark:text-ink-tertiary-dark mt-1 mb-6">
-                Code sent to <Text className="font-medium">{email}</Text>
+                Code sent to <Text className="font-medium">{state.email}</Text>
               </Text>
               <AppInput
                 label="Code"
                 required
-                value={code}
-                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+                value={state.code}
+                onChangeText={(v) => dispatch({ type: 'setCode', code: v.replace(/\D/g, '').slice(0, 6) })}
                 keyboardType="number-pad"
                 iconLeft="key-outline"
                 containerClassName="mb-3.5"
@@ -146,21 +189,23 @@ export default function ForgotPasswordScreen() {
               <AppInput
                 label="New password"
                 required
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showPassword}
+                value={state.newPassword}
+                onChangeText={(v) => dispatch({ type: 'setNewPassword', newPassword: v })}
+                secureTextEntry={!state.showPassword}
                 helperText="At least 8 characters"
                 iconLeft="lock-closed-outline"
-                iconRight={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                onPressRightIcon={() => setShowPassword((v) => !v)}
-                errorText={error ?? undefined}
+                iconRight={state.showPassword ? 'eye-off-outline' : 'eye-outline'}
+                onPressRightIcon={() => dispatch({ type: 'toggleShowPassword' })}
+                errorText={state.error ?? undefined}
                 containerClassName="mb-5"
               />
               <AppButton
-                label={loading ? 'Resetting…' : 'Reset password'}
-                loading={loading}
+                label={state.loading ? 'Resetting…' : 'Reset password'}
+                loading={state.loading}
                 onPress={completeReset}
-                disabled={code.length !== 6 || newPassword.length < 8 || loading || fetchStatus === 'fetching'}
+                disabled={
+                  state.code.length !== 6 || state.newPassword.length < 8 || state.loading || fetchStatus === 'fetching'
+                }
                 fullWidth
               />
             </>

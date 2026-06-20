@@ -56,11 +56,13 @@ export const currentUser = query({
       }
     }
 
-    const capabilities = await userCapabilities(ctx, user);
-    const roleRow = await ctx.db
-      .query("roles")
-      .withIndex("by_key", (q) => q.eq("key", user.role))
-      .unique();
+    const [capabilities, roleRow] = await Promise.all([
+      userCapabilities(ctx, user),
+      ctx.db
+        .query("roles")
+        .withIndex("by_key", (q) => q.eq("key", user.role))
+        .unique(),
+    ]);
 
     return {
       ...user,

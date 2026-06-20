@@ -28,7 +28,7 @@ export const WIZARD_STEPS: StepConfig[] = [
   { key: 'photos', label: 'Photos', short: 'C', route: '/(app)/wizard/photos' },
 ];
 
-export const REVIEW_ROUTE = '/(app)/wizard/review';
+const REVIEW_ROUTE = '/(app)/wizard/review';
 
 /** Last wizard step before review (photos). */
 export const STEP_BEFORE_REVIEW_ROUTE = WIZARD_STEPS[WIZARD_STEPS.length - 1]!.route;

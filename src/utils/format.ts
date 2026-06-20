@@ -18,15 +18,17 @@ export function timeAgo(iso: string | number | Date): string {
   });
 }
 
-export function formatNumber(n: number): string {
-  return new Intl.NumberFormat('en-IN').format(n);
+const numberFormatter = new Intl.NumberFormat('en-IN');
+
+function formatNumber(n: number): string {
+  return numberFormatter.format(n);
 }
 
 export function formatArea(sqft: number): string {
   return `${formatNumber(Math.round(sqft))} sq ft`;
 }
 
-export function capitalize(s: string): string {
+function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
@@ -44,7 +46,7 @@ export function formatSurveyParcelLabel(parcelNo: string, unitNo: string): strin
 }
 
 /** Indian mobile: 10 digits, first digit 6–9. */
-export const INDIAN_MOBILE_RE = /^[6-9]\d{9}$/;
+const INDIAN_MOBILE_RE = /^[6-9]\d{9}$/;
 
 export function isValidIndianMobile(value: string): boolean {
   return INDIAN_MOBILE_RE.test(value);

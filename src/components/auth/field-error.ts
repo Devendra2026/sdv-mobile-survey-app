@@ -1,4 +1,4 @@
-export function fieldError<T extends object>(fields: T | undefined, name: keyof T & string): string | undefined {
+function fieldError<T extends object>(fields: T | undefined, name: keyof T & string): string | undefined {
   if (!fields || !(name in fields)) return undefined;
 
   const field = fields[name as keyof T];

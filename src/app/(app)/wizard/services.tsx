@@ -2,13 +2,10 @@
  * Step 6 — Municipal services: water supply, sanitation, solid waste.
  */
 import { AppCard, AppDropdown, ChipSelector, SectionLabel, Spinner } from '@/components';
-import { api } from '@/convex/_generated/api';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
-import { normalizeMastersBundle } from '@/utils/mastersBundle';
+import { WizardStepFrame } from '@/components/wizard';
+import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { servicesStepComplete } from '@/utils/services';
-import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
 const FIELD_GAP = 16;
@@ -49,8 +46,7 @@ function YesNoField({
 
 export default function StepServices() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const mastersRaw = useQuery(api.masters.bundle, {});
-  const masters = useMemo(() => (mastersRaw ? normalizeMastersBundle(mastersRaw) : undefined), [mastersRaw]);
+  const masters = useMastersBundle();
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
   return (

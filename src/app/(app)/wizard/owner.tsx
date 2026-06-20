@@ -1,19 +1,17 @@
 /**
  * Step 2 — Owner & respondent.
  *
- * Each owner row keeps its own mobile fields. Owners are persisted on mount
- * so "Add another owner" does not reset contact details.
+ * Each owner row keeps its own mobile fields. New drafts include one empty owner row.
  */
 import { AppButton, AppCard, AppDropdown, AppInput, NumberStepper, SectionLabel, Spinner } from '@/components';
+import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import { isRespondentOwner, isValidIndianOwnerMobile } from '@/convex/ownerMobile';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { newOwnerRow, stepCompletion, type WizardDraft, type WizardOwnerRow } from '@/hooks/useWizardDraft';
 import { isValidIndianMobile, sanitizeMobileDigits } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
 const MOBILE_HELPER = '10 digits, starting with 6, 7, 8 or 9';
@@ -50,12 +48,6 @@ function OwnerStepBody({
 }) {
   const owners = draft.owners ?? [];
   const maxOwners = ownerRules.maxOwners;
-
-  useEffect(() => {
-    if (!draft.owners?.length) {
-      void update({ owners: [newOwnerRow()] });
-    }
-  }, [draft.owners?.length, update]);
 
   if (!owners.length) {
     return <Spinner label="Preparing owner form…" />;

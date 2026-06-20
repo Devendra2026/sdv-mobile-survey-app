@@ -139,40 +139,46 @@ export function validateServicesSection(
 type SeedRow = MasterOption & { position: number };
 
 async function upsertMasterCategory(ctx: MutationCtx, category: string, rows: SeedRow[]) {
-  for (const row of rows) {
-    const existing = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
-    } else {
-      await ctx.db.insert("masters", {
-        category,
-        value: row.value,
-        label: row.label,
-        position: row.position,
-        isActive: true,
-      });
-    }
-  }
+  await Promise.all(
+    rows.map(async (row) => {
+      const existing = await ctx.db
+        .query("masters")
+        .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
+      } else {
+        await ctx.db.insert("masters", {
+          category,
+          value: row.value,
+          label: row.label,
+          position: row.position,
+          isActive: true,
+        });
+      }
+    }),
+  );
 }
 
 /** Idempotent seed for services dropdown masters (dev + admin reference data). */
 export async function seedServiceMasters(ctx: MutationCtx) {
-  await upsertMasterCategory(
-    ctx,
-    "water_source",
-    WATER_SOURCES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "sanitation_type",
-    SANITATION_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
+  await Promise.all([
+    upsertMasterCategory(
+      ctx,
+      "water_source",
+      WATER_SOURCES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "sanitation_type",
+      SANITATION_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+  ]);
 
   const legacySolidWaste = (await ctx.db.query("masters").collect()).filter((m) => m.category === "solid_waste_type");
-  for (const row of legacySolidWaste) {
-    if (row.isActive) await ctx.db.patch(row._id, { isActive: false });
-  }
+  await Promise.all(
+    legacySolidWaste.map(async (row) => {
+      if (row.isActive) await ctx.db.patch(row._id, { isActive: false });
+    }),
+  );
 }

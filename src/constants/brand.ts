@@ -1,5 +1,5 @@
 /** Brand colors safe before NativeWind/CSS loads (startup screens). */
-export const BRAND_BLUE = '#003B8E';
+const BRAND_BLUE = '#003B8E';
 
 export const bootScreenStyle = {
   flex: 1,

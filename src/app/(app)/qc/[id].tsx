@@ -8,10 +8,37 @@ import { toUserMessage } from '@/utils/errors';
 import { formatSurveyParcelLabel, timeAgo } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
+import type { FunctionReturnType } from 'convex/server';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+type RemarkItem = FunctionReturnType<typeof api.qc.listRemarks>[number];
+
+function RemarkRow({ item, onResolve }: { item: RemarkItem; onResolve: (id: Id<'qcRemarks'>) => void }) {
+  return (
+    <AppCard padded className="mb-2">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-1.5">
+          <Tag label={item.authorRole} tone={item.authorRole === 'surveyor' ? 'neutral' : 'brand'} />
+          <Text className="text-caption text-ink-tertiary-light">
+            {item.author?.name ?? 'Unknown'} · {timeAgo(item._creationTime)}
+          </Text>
+        </View>
+        {item.status === 'open' ? (
+          <Pressable onPress={() => onResolve(item._id)} hitSlop={6} className="flex-row items-center">
+            <Ionicons name="checkmark-circle-outline" size={16} color="#003B8E" />
+            <Text className="ml-1 text-helper text-brand">Resolve</Text>
+          </Pressable>
+        ) : (
+          <Tag label="Resolved" tone="success" icon="checkmark" />
+        )}
+      </View>
+      <Text className="mt-2 text-body text-ink-primary-light dark:text-ink-primary-dark">{item.message}</Text>
+    </AppCard>
+  );
+}
 
 export default function QcConversationScreen() {
   const router = useRouter();
@@ -26,6 +53,18 @@ export default function QcConversationScreen() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
+
+  const onResolve = useCallback(
+    (id: Id<'qcRemarks'>) => {
+      void resolveRemark({ id });
+    },
+    [resolveRemark],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: RemarkItem }) => <RemarkRow item={item} onResolve={onResolve} />,
+    [onResolve],
+  );
 
   if (!surveyId) {
     return (
@@ -105,31 +144,7 @@ export default function QcConversationScreen() {
               </Text>
             </AppCard>
           }
-          renderItem={({ item }) => (
-            <AppCard padded className="mb-2">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-1.5">
-                  <Tag label={item.authorRole} tone={item.authorRole === 'surveyor' ? 'neutral' : 'brand'} />
-                  <Text className="text-caption text-ink-tertiary-light">
-                    {item.author?.name ?? 'Unknown'} · {timeAgo(item._creationTime)}
-                  </Text>
-                </View>
-                {item.status === 'open' ? (
-                  <Pressable
-                    onPress={() => void resolveRemark({ id: item._id })}
-                    hitSlop={6}
-                    className="flex-row items-center"
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={16} color="#003B8E" />
-                    <Text className="ml-1 text-helper text-brand">Resolve</Text>
-                  </Pressable>
-                ) : (
-                  <Tag label="Resolved" tone="success" icon="checkmark" />
-                )}
-              </View>
-              <Text className="mt-2 text-body text-ink-primary-light dark:text-ink-primary-dark">{item.message}</Text>
-            </AppCard>
-          )}
+          renderItem={renderItem}
         />
 
         <View className="border-t border-line-subtle bg-surface-light dark:bg-surface-dark px-3.5 pt-3 pb-4">

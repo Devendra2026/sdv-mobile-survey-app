@@ -6,17 +6,18 @@
  * Values are tenant-filtered server-side.
  */
 import { AppCard, AppDropdown, Banner, SectionLabel, Spinner } from '@/components';
+import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { humanizeUlbBodyType } from '@/utils/format';
 import type { MastersBundle } from '@/utils/mastersBundle';
+import { startTenantAutoPatch, useApplyDraftPatch } from '@/utils/wizard-draft-patch';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
 const convexIdEq = (a?: string | null, b?: string | null) => a != null && b != null && String(a) === String(b);
@@ -100,44 +101,7 @@ function StartFields({
     );
   }, [masters.ulbs, selectedDistrict]);
 
-  useEffect(() => {
-    const validDistricts = new Set(masters.districts.map((d) => String(d._id)));
-    const validUlbs = new Set(masters.ulbs.map((u) => String(u._id)));
-
-    let districtId = draft.districtId;
-    let municipalityId = draft.municipalityId;
-    if (districtId && !validDistricts.has(String(districtId))) {
-      districtId = undefined;
-      municipalityId = undefined;
-    }
-    if (municipalityId && !validUlbs.has(String(municipalityId))) {
-      municipalityId = undefined;
-    }
-
-    if (!districtId && !municipalityId) {
-      if (me.municipalityId && validUlbs.has(String(me.municipalityId))) {
-        municipalityId = me.municipalityId;
-        const ulb = masters.ulbs.find((u) => convexIdEq(u._id, me.municipalityId));
-        if (ulb) districtId = ulb.districtId;
-      } else if (me.districtId && validDistricts.has(String(me.districtId))) {
-        districtId = me.districtId;
-      } else if (masters.districts.length === 1) {
-        districtId = masters.districts[0]!._id;
-      }
-    }
-
-    if (districtId && !municipalityId) {
-      const district = masters.districts.find((d) => convexIdEq(d._id, districtId));
-      const inDistrict = masters.ulbs.filter(
-        (u) => convexIdEq(u.districtId, districtId) || (district != null && u.districtCode === district.code),
-      );
-      if (inDistrict.length === 1) municipalityId = inDistrict[0]!._id;
-    }
-
-    if (!convexIdEq(districtId, draft.districtId) || !convexIdEq(municipalityId, draft.municipalityId)) {
-      void update({ districtId, municipalityId });
-    }
-  }, [draft.districtId, draft.municipalityId, masters.districts, masters.ulbs, me, update]);
+  useApplyDraftPatch(update, startTenantAutoPatch(draft, masters, me));
 
   const ulbNameOptions = ulbsInDistrict.map((u) => ({
     value: u._id,

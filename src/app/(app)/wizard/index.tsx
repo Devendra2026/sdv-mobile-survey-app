@@ -43,8 +43,8 @@ export default function WizardEntry() {
       }
 
       router.replace({
-        pathname: FIRST_WIZARD_ROUTE as never,
-        params: { localId },
+        pathname: (surveyId ? FIRST_WIZARD_ROUTE : '/(app)/wizard/flow') as never,
+        params: surveyId ? { localId } : { localId, q: '0' },
       });
     })().catch(() => undefined);
   }, [params.resume, params.localId, surveyId, survey, router]);

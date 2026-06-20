@@ -1,7 +1,10 @@
-import { Link, Stack } from 'expo-router';
+import { AppButton } from '@/components';
+import { Stack, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
 export default function NotFoundScreen() {
+  const router = useRouter();
+
   return (
     <>
       <Stack.Screen options={{ title: 'Not found' }} />
@@ -10,9 +13,9 @@ export default function NotFoundScreen() {
         <Text className="text-body text-ink-tertiary-light dark:text-ink-tertiary-dark mt-2 text-center">
           This screen does not exist or the link is outdated.
         </Text>
-        <Link href="/dashboard" className="mt-6 text-brand font-medium text-body">
-          Go to home
-        </Link>
+        <View className="mt-6 w-full max-w-xs">
+          <AppButton label="Go to home" onPress={() => router.replace('/dashboard')} fullWidth />
+        </View>
       </View>
     </>
   );

@@ -12,7 +12,7 @@ export function setLastConvexTokenError(message: string | null) {
 }
 
 /** True after Convex has accepted a JWT at least once this Clerk session. */
-export let convexSessionEstablished = false;
+let convexSessionEstablished = false;
 
 const RETRY_MS = 800;
 const MAX_ATTEMPTS = 8;
@@ -225,8 +225,49 @@ async function fetchClerkConvexToken(
   return sessionToken;
 }
 
+type ClerkGetToken = (opts?: { template?: string; skipCache?: boolean }) => Promise<string | null>;
+
+async function fetchConvexTokenWithRetry(
+  getToken: ClerkGetToken,
+  refresh: boolean,
+  claims: Record<string, unknown> | null | undefined,
+): Promise<string | null> {
+  const attempt = async (attemptNo: number): Promise<string | null> => {
+    const skipCache = refresh || attemptNo > 1 || !lastGoodConvexToken;
+
+    try {
+      const token = await fetchClerkConvexToken(getToken, skipCache, claims);
+      if (token) {
+        rememberGoodToken(token);
+        return token;
+      }
+    } catch (err) {
+      lastConvexTokenError = formatTokenError(err);
+      if (isClerkOfflineError(err) && lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
+        const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
+        if (!cachedErr) return lastGoodConvexToken;
+      }
+    }
+
+    if (attemptNo >= MAX_ATTEMPTS) {
+      if (!lastConvexTokenError) {
+        lastConvexTokenError = 'Could not reach the server — check your connection and try again.';
+      }
+      if (__DEV__ && lastConvexTokenError) {
+        console.warn('[convex-auth]', lastConvexTokenError);
+      }
+      return null;
+    }
+
+    await new Promise((r) => setTimeout(r, RETRY_MS * Math.min(attemptNo, 4)));
+    return attempt(attemptNo + 1);
+  };
+
+  return attempt(1);
+}
+
 export function useAuthForConvex() {
-  const { isLoaded, isSignedIn, getToken, orgId, orgRole, sessionClaims } = useAuth();
+  const { isLoaded, isSignedIn, getToken, sessionClaims } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const sessionClaimsRef = useRef(sessionClaims);
@@ -260,73 +301,41 @@ export function useAuthForConvex() {
     }
   }, [isSignedIn]);
 
-  const fetchAccessToken = useCallback(
-    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
-      const getToken = (opts?: { template?: string; skipCache?: boolean }) => getTokenRef.current(opts);
+  const fetchAccessToken = useCallback(async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+    const getToken = (opts?: { template?: string; skipCache?: boolean }) => getTokenRef.current(opts);
 
-      const manualRefresh = forceRefreshRef.current > 0;
-      if (manualRefresh) {
-        forceRefreshRef.current = 0;
-      }
-      const refresh = forceRefreshToken || manualRefresh;
+    const manualRefresh = forceRefreshRef.current > 0;
+    if (manualRefresh) {
+      forceRefreshRef.current = 0;
+    }
+    const refresh = forceRefreshToken || manualRefresh;
 
-      if (!refresh) {
-        lastConvexTokenError = null;
-        if (lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
-          const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
-          if (!cachedErr) return lastGoodConvexToken;
-          lastGoodConvexToken = null;
-        }
-      } else {
-        lastConvexTokenError = null;
+    if (!refresh) {
+      lastConvexTokenError = null;
+      if (lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
+        const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
+        if (!cachedErr) return lastGoodConvexToken;
         lastGoodConvexToken = null;
       }
+    } else {
+      lastConvexTokenError = null;
+      lastGoodConvexToken = null;
+    }
 
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-        // Without skipCache, Clerk can return a stale null JWT from before sign-in.
-        const skipCache = refresh || attempt > 1 || !lastGoodConvexToken;
-
-        try {
-          const token = await fetchClerkConvexToken(
-            getToken,
-            skipCache,
-            sessionClaimsRef.current as Record<string, unknown> | null | undefined,
-          );
-          if (token) {
-            rememberGoodToken(token);
-            return token;
-          }
-        } catch (err) {
-          lastConvexTokenError = formatTokenError(err);
-          if (isClerkOfflineError(err) && lastGoodConvexToken && isTokenValid(lastGoodConvexToken)) {
-            const cachedErr = validateConvexJwt(lastGoodConvexToken, true);
-            if (!cachedErr) return lastGoodConvexToken;
-          }
-        }
-
-        if (attempt < MAX_ATTEMPTS) {
-          await new Promise((r) => setTimeout(r, RETRY_MS * Math.min(attempt, 4)));
-        }
-      }
-
-      if (!lastConvexTokenError) {
-        lastConvexTokenError = 'Could not reach the server — check your connection and try again.';
-      }
-
-      if (__DEV__ && lastConvexTokenError) {
-        console.warn('[convex-auth]', lastConvexTokenError);
-      }
-      return null;
-    },
-    [isSignedIn, orgId, orgRole, authEpoch],
-  );
+    return fetchConvexTokenWithRetry(
+      getToken,
+      refresh,
+      sessionClaimsRef.current as Record<string, unknown> | null | undefined,
+    );
+  }, []);
 
   return useMemo(
     () => ({
       isLoading: !isLoaded,
       isAuthenticated: isSignedIn ?? false,
       fetchAccessToken,
+      authEpoch,
     }),
-    [isLoaded, isSignedIn, fetchAccessToken],
+    [isLoaded, isSignedIn, fetchAccessToken, authEpoch],
   );
 }

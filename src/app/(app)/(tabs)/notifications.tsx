@@ -1,10 +1,14 @@
 import { EmptyState, Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
+import type { Doc } from '@/convex/_generated/dataModel';
+import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
 import { timeAgo } from '@/utils/format';
-import { flatListProps, useTabScreenPadding } from '@/utils/ui-layout';
+import { flatListProps } from '@/utils/scroll-props';
+import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQuery } from 'convex/react';
-import { useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useMutation } from 'convex/react';
+import { useCallback, useRef } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,16 +20,71 @@ const ICONS: Record<string, { name: keyof typeof Ionicons.glyphMap; tone: string
   qc_remark_received: { name: 'chatbubble-ellipses', tone: '#2563EB' },
 };
 
+const ListSeparator = () => <View className="h-2" />;
+
+function NotificationRow({
+  item,
+  onMarkRead,
+}: {
+  item: Doc<'notifications'>;
+  onMarkRead: (id: Doc<'notifications'>['_id']) => void;
+}) {
+  const ic = ICONS[item.type] ?? { name: 'notifications', tone: '#6B7280' };
+  const unread = !item.readAt;
+  return (
+    <Pressable
+      onPress={() => unread && onMarkRead(item._id)}
+      className={`p-3.5 rounded-xl border border-line-subtle ${unread ? 'bg-brand-soft' : 'bg-surface-light dark:bg-surface-dark'}`}
+    >
+      <View className="flex-row items-start">
+        <Ionicons name={ic.name} size={22} color={ic.tone} />
+        <View className="flex-1 ml-3">
+          <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
+            {item.title}
+          </Text>
+          <Text className="text-caption text-ink-secondary-light dark:text-ink-secondary-dark mt-0.5">{item.body}</Text>
+          <Text className="text-caption text-ink-tertiary-light mt-1.5">{timeAgo(item._creationTime)}</Text>
+        </View>
+        {unread ? <View className="w-2 h-2 rounded-full bg-brand mt-1.5" /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
 export default function NotificationsScreen() {
-  const tabPad = useTabScreenPadding();
-  const list = useQuery(api.masters.listNotifications, {});
+  const list = useConvexReadyQuery(api.masters.listNotifications);
   const markAllRead = useMutation(api.masters.markAllRead);
   const markRead = useMutation(api.masters.markRead);
+  const markedOnFocus = useRef(false);
 
-  // Mark all read on focus
-  useEffect(() => {
-    if (list && list.some((n) => !n.readAt)) markAllRead({}).catch(() => undefined);
-  }, [list, markAllRead]);
+  useFocusEffect(
+    useCallback(() => {
+      markedOnFocus.current = false;
+      return () => {
+        markedOnFocus.current = false;
+      };
+    }, []),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!list || markedOnFocus.current || !list.some((n: Doc<'notifications'>) => !n.readAt)) return;
+      markedOnFocus.current = true;
+      void markAllRead({});
+    }, [list, markAllRead]),
+  );
+
+  const handleMarkRead = useCallback(
+    (id: Doc<'notifications'>['_id']) => {
+      void markRead({ id });
+    },
+    [markRead],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Doc<'notifications'> }) => <NotificationRow item={item} onMarkRead={handleMarkRead} />,
+    [handleMarkRead],
+  );
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
@@ -43,33 +102,11 @@ export default function NotificationsScreen() {
         <FlatList
           data={list}
           keyExtractor={(n) => n._id}
-          contentContainerStyle={{ padding: 14, paddingBottom: tabPad }}
+          contentContainerStyle={{ padding: 14 }}
           {...flatListProps}
-          ItemSeparatorComponent={() => <View className="h-2" />}
-          renderItem={({ item }) => {
-            const ic = ICONS[item.type] ?? { name: 'notifications', tone: '#6B7280' };
-            const unread = !item.readAt;
-            return (
-              <Pressable
-                onPress={() => unread && markRead({ id: item._id })}
-                className={`p-3.5 rounded-xl border border-line-subtle ${unread ? 'bg-brand-soft' : 'bg-surface-light dark:bg-surface-dark'}`}
-              >
-                <View className="flex-row items-start">
-                  <Ionicons name={ic.name} size={22} color={ic.tone} />
-                  <View className="flex-1 ml-3">
-                    <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
-                      {item.title}
-                    </Text>
-                    <Text className="text-caption text-ink-secondary-light dark:text-ink-secondary-dark mt-0.5">
-                      {item.body}
-                    </Text>
-                    <Text className="text-caption text-ink-tertiary-light mt-1.5">{timeAgo(item._creationTime)}</Text>
-                  </View>
-                  {unread ? <View className="w-2 h-2 rounded-full bg-brand mt-1.5" /> : null}
-                </View>
-              </Pressable>
-            );
-          }}
+          ItemSeparatorComponent={ListSeparator}
+          renderItem={renderItem}
+          ListFooterComponent={TabScreenBottomSpacer}
         />
       )}
     </View>

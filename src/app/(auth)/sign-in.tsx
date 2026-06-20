@@ -8,15 +8,70 @@
 import { AppButton, AppInput } from '@/components';
 import { AuthHero } from '@/components/auth/auth-hero';
 import { clerkErrorMessage } from '@/components/auth/field-error';
+import { OAuthButtons } from '@/components/auth/oauth-buttons';
 import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignIn } from '@clerk/expo';
 import { Link } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 type Stage = 'credentials' | 'mfa';
 type MfaStrategy = 'email_code' | 'phone_code' | 'totp' | 'backup_code';
+
+type SignInState = {
+  stage: Stage;
+  email: string;
+  password: string;
+  showPassword: boolean;
+  code: string;
+  mfaStrategy: MfaStrategy;
+  useBackupCode: boolean;
+  loading: boolean;
+  error: string | null;
+};
+
+type SignInAction =
+  | { type: 'patch'; patch: Partial<SignInState> }
+  | { type: 'request_start' }
+  | { type: 'request_end' }
+  | { type: 'set_error'; error: string }
+  | { type: 'toggle_show_password' }
+  | { type: 'toggle_backup_code' }
+  | { type: 'back_to_credentials' };
+
+const initialSignInState: SignInState = {
+  stage: 'credentials',
+  email: '',
+  password: '',
+  showPassword: false,
+  code: '',
+  mfaStrategy: 'email_code',
+  useBackupCode: false,
+  loading: false,
+  error: null,
+};
+
+function signInReducer(state: SignInState, action: SignInAction): SignInState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.patch };
+    case 'request_start':
+      return { ...state, error: null, loading: true };
+    case 'request_end':
+      return { ...state, loading: false };
+    case 'set_error':
+      return { ...state, error: action.error, loading: false };
+    case 'toggle_show_password':
+      return { ...state, showPassword: !state.showPassword };
+    case 'toggle_backup_code':
+      return { ...state, useBackupCode: !state.useBackupCode, code: '', error: null };
+    case 'back_to_credentials':
+      return { ...state, stage: 'credentials', code: '', useBackupCode: false, error: null };
+    default:
+      return state;
+  }
+}
 
 function incompleteSignInMessage(status: string): string {
   switch (status) {
@@ -81,56 +136,45 @@ async function verifyMfaCode(
 
 export default function SignInScreen() {
   const { signIn, fetchStatus } = useSignIn();
-
-  const [stage, setStage] = useState<Stage>('credentials');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [code, setCode] = useState('');
-  const [mfaStrategy, setMfaStrategy] = useState<MfaStrategy>('email_code');
-  const [useBackupCode, setUseBackupCode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(signInReducer, initialSignInState);
+  const { stage, email, password, showPassword, code, mfaStrategy, useBackupCode, loading, error } = state;
 
   const beginMfa = async (strategy: MfaStrategy) => {
-    setMfaStrategy(strategy);
-    setCode('');
-    setError(null);
+    dispatch({ type: 'patch', patch: { mfaStrategy: strategy, code: '', error: null } });
 
     if (strategy === 'totp' || strategy === 'backup_code') {
-      setStage('mfa');
+      dispatch({ type: 'patch', patch: { stage: 'mfa' } });
       return;
     }
 
     const { error: sendError } = await sendMfaCode(signIn, strategy);
     if (sendError) {
-      setError(clerkErrorMessage(sendError));
+      dispatch({ type: 'set_error', error: clerkErrorMessage(sendError) });
       return;
     }
-    setStage('mfa');
+    dispatch({ type: 'patch', patch: { stage: 'mfa' } });
   };
 
   const onSubmit = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request_start' });
     try {
       const { error: createError } = await signIn.create({ identifier: email.trim() });
       if (createError) {
-        setError(clerkErrorMessage(createError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(createError) });
         return;
       }
 
       const { error: passwordError } = await signIn.password({ password });
       if (passwordError) {
-        setError(clerkErrorMessage(passwordError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(passwordError) });
         return;
       }
 
       if (signIn.status === 'complete') {
         const { error: finalizeError } = await signIn.finalize();
         if (finalizeError) {
-          setError(clerkErrorMessage(finalizeError));
+          dispatch({ type: 'set_error', error: clerkErrorMessage(finalizeError) });
         } else {
           retryConvexAuth({ resetPhase: true });
         }
@@ -143,53 +187,49 @@ export default function SignInScreen() {
         return;
       }
 
-      setError(incompleteSignInMessage(signIn.status));
+      dispatch({ type: 'set_error', error: incompleteSignInMessage(signIn.status) });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request_end' });
     }
   };
 
   const onVerifyMfa = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request_start' });
     try {
       const strategy = useBackupCode ? 'backup_code' : mfaStrategy;
       const { error: verifyError } = await verifyMfaCode(signIn, strategy, code.trim());
       if (verifyError) {
-        setError(clerkErrorMessage(verifyError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(verifyError) });
         return;
       }
 
       if (signIn.status !== 'complete') {
-        setError('Verification incomplete. Try again.');
+        dispatch({ type: 'set_error', error: 'Verification incomplete. Try again.' });
         return;
       }
 
       const { error: finalizeError } = await signIn.finalize();
       if (finalizeError) {
-        setError(clerkErrorMessage(finalizeError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(finalizeError) });
       } else {
         retryConvexAuth({ resetPhase: true });
       }
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request_end' });
     }
   };
 
   const resendMfaCode = async () => {
     if (fetchStatus === 'fetching' || mfaStrategy === 'totp' || mfaStrategy === 'backup_code') return;
-    setError(null);
+    dispatch({ type: 'patch', patch: { error: null } });
     const { error: sendError } = await sendMfaCode(signIn, mfaStrategy);
-    if (sendError) setError(clerkErrorMessage(sendError));
+    if (sendError) dispatch({ type: 'set_error', error: clerkErrorMessage(sendError) });
   };
 
   const backToCredentials = () => {
     signIn.reset();
-    setStage('credentials');
-    setCode('');
-    setUseBackupCode(false);
-    setError(null);
+    dispatch({ type: 'back_to_credentials' });
   };
 
   const hasBackupFactor = signIn.supportedSecondFactors?.some((f) => f.strategy === 'backup_code');
@@ -223,7 +263,7 @@ export default function SignInScreen() {
                 label="Email"
                 required
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { email: v } })}
                 placeholder="surveyor@ulb.gov.in"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -236,11 +276,11 @@ export default function SignInScreen() {
                 label="Password"
                 required
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { password: v } })}
                 secureTextEntry={!showPassword}
                 iconLeft="lock-closed-outline"
                 iconRight={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                onPressRightIcon={() => setShowPassword((v) => !v)}
+                onPressRightIcon={() => dispatch({ type: 'toggle_show_password' })}
                 errorText={error ?? undefined}
                 containerClassName="mb-3"
               />
@@ -258,6 +298,8 @@ export default function SignInScreen() {
                 disabled={!canSubmit}
                 fullWidth
               />
+
+              <OAuthButtons />
 
               <View className="flex-row justify-center items-center mt-6">
                 <Text className="text-caption text-ink-tertiary-light">Do not have an account? </Text>
@@ -281,7 +323,12 @@ export default function SignInScreen() {
                 label={useBackupCode ? 'Backup code' : 'Verification code'}
                 required
                 value={code}
-                onChangeText={(v) => (useBackupCode ? setCode(v.trim()) : setCode(v.replace(/\D/g, '').slice(0, 6)))}
+                onChangeText={(v) =>
+                  dispatch({
+                    type: 'patch',
+                    patch: { code: useBackupCode ? v.trim() : v.replace(/\D/g, '').slice(0, 6) },
+                  })
+                }
                 placeholder={useBackupCode ? 'Backup code' : '6-digit code'}
                 keyboardType={useBackupCode ? 'default' : 'number-pad'}
                 autoCapitalize="none"
@@ -294,11 +341,7 @@ export default function SignInScreen() {
 
               {hasBackupFactor && mfaStrategy !== 'backup_code' ? (
                 <Pressable
-                  onPress={() => {
-                    setUseBackupCode((v) => !v);
-                    setCode('');
-                    setError(null);
-                  }}
+                  onPress={() => dispatch({ type: 'toggle_backup_code' })}
                   className="flex-row items-center mb-5"
                   hitSlop={6}
                 >

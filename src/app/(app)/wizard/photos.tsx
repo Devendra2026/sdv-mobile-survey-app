@@ -2,10 +2,10 @@
  * Step 8 — Photos (front + side required).
  */
 import { AppCard, Banner, PhotoSlot, Tag, Toast } from '@/components';
+import { WizardStepFrame } from '@/components/wizard';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { stepCompletion } from '@/hooks/useWizardDraft';
 import { useWizardPhotoCapture } from '@/hooks/useWizardPhotoCapture';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { warmCameraModule } from '@/utils/captureSurveyPhoto';
 import { REQUIRED_SURVEY_PHOTO_SLOTS, type SurveyPhotoSlot } from '@/utils/surveyPhotos';
 import { useLocalSearchParams } from 'expo-router';
@@ -29,7 +29,7 @@ export default function StepPhotos() {
       subtitle="Front + side view required"
       nextDisabled={(d) => !stepCompletion(d).photos}
     >
-      {({ draft, update }) => <PhotoFields draft={draft} update={update} />}
+      {({ draft, update }) => <PhotoFields draft={draft} update={update} localId={localId} />}
     </WizardStepFrame>
   );
 }
@@ -37,9 +37,11 @@ export default function StepPhotos() {
 function PhotoFields({
   draft,
   update,
+  localId,
 }: {
   draft: WizardDraft;
   update: (patch: Partial<WizardDraft>) => Promise<void>;
+  localId: string;
 }) {
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
@@ -52,6 +54,7 @@ function PhotoFields({
       draft,
       update,
       serverSurveyId: draft.serverSurveyId,
+      localId,
     });
 
   const allCaptured = capturedCount === requiredCount;

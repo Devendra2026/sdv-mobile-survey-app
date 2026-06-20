@@ -2,23 +2,22 @@
  * Step 5 — Area: plot area, plinth (ground floor), floor rows, total built-up.
  */
 import { AppButton, AppCard, AppDropdown, AreaPairField, SectionLabel, Spinner } from '@/components';
-import { api } from '@/convex/_generated/api';
+import { WizardStepFrame } from '@/components/wizard';
+import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import { builtUpSqftFromFloors, openLandSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { usageTypeToOccupied } from '@/utils/floorRow';
 import { formatArea, humanizeRole } from '@/utils/format';
-import { normalizeMastersBundle } from '@/utils/mastersBundle';
-import { scrollViewProps } from '@/utils/ui-layout';
+import type { MastersBundle } from '@/utils/mastersBundle';
+import { scrollViewProps } from '@/utils/scroll-props';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Floor = NonNullable<WizardDraft['floors']>[number];
-type Masters = ReturnType<typeof normalizeMastersBundle>;
+type Masters = MastersBundle;
 
 const FIELD_GAP = 16;
 
@@ -46,11 +45,10 @@ function withSyncedPlinth(floors: Floor[]): Partial<WizardDraft> {
 
 export default function StepAreaDetail() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const rawMasters = useQuery(api.masters.bundle, {});
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Floor | null>(null);
 
-  const masters = useMemo(() => (rawMasters ? normalizeMastersBundle(rawMasters) : null), [rawMasters]);
+  const masters = useMastersBundle();
 
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
@@ -313,6 +311,7 @@ export default function StepAreaDetail() {
                 masters={masters}
                 value={editing}
                 open={editorOpen}
+                onChange={setEditing}
                 onClose={() => {
                   setEditorOpen(false);
                   setEditing(null);
@@ -331,19 +330,15 @@ interface FloorEditorModalProps {
   masters: Masters;
   value: Floor;
   open: boolean;
+  onChange: (f: Floor) => void;
   onClose: () => void;
   onSave: (f: Floor) => void;
 }
 
-function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditorModalProps) {
+function FloorEditorModal({ masters, value, open, onChange, onClose, onSave }: FloorEditorModalProps) {
   const insets = useSafeAreaInsets();
-  const [f, setF] = useState<Floor>(value);
 
-  useEffect(() => {
-    if (open) setF(value);
-  }, [open, value.clientFloorId]);
-
-  const canSave = floorRowComplete(f);
+  const canSave = floorRowComplete(value);
   const isEdit = value.areaSqft > 0 && value.floorName;
 
   return (
@@ -386,15 +381,15 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
               required
               placeholder="Select floor"
               modalTitle="Floor No."
-              value={f.floorName}
+              value={value.floorName}
               options={masters.floors}
-              onChange={(v) => setF({ ...f, floorName: v })}
+              onChange={(v) => onChange({ ...value, floorName: v })}
             />
             <AreaPairField
               label="Floor Area"
               required
-              sqft={f.areaSqft}
-              onSqftChange={(v) => setF({ ...f, areaSqft: v })}
+              sqft={value.areaSqft}
+              onSqftChange={(v) => onChange({ ...value, areaSqft: v })}
               helperText="Area of this floor level in sq.ft"
             />
             <AppDropdown
@@ -402,9 +397,9 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
               required
               placeholder="Select usage factor"
               modalTitle="Usage factor"
-              value={f.usageFactor}
+              value={value.usageFactor}
               options={masters.usageFactors}
-              onChange={(v) => setF({ ...f, usageFactor: v })}
+              onChange={(v) => onChange({ ...value, usageFactor: v })}
               helperText="How this floor area is used (residential, commercial, etc.)"
             />
             <AppDropdown
@@ -412,9 +407,9 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
               required
               placeholder="Select usage type"
               modalTitle="Usage type"
-              value={f.usageType}
+              value={value.usageType}
               options={masters.usageTypes}
-              onChange={(v) => setF({ ...f, usageType: v })}
+              onChange={(v) => onChange({ ...value, usageType: v })}
               helperText="Occupancy — self-occupied or rented"
             />
             <AppDropdown
@@ -422,14 +417,14 @@ function FloorEditorModal({ masters, value, open, onClose, onSave }: FloorEditor
               required
               placeholder="Select construction type"
               modalTitle="Construction Type"
-              value={f.constructionType}
+              value={value.constructionType}
               options={masters.constructionTypes}
-              onChange={(v) => setF({ ...f, constructionType: v })}
+              onChange={(v) => onChange({ ...value, constructionType: v })}
             />
           </ScrollView>
           <View className="flex-row justify-end gap-2 px-4 py-3 border-t border-line-subtle">
             <AppButton label="Cancel" variant="outline" onPress={onClose} />
-            <AppButton label={isEdit ? 'Save' : 'Add'} onPress={() => onSave(f)} disabled={!canSave} />
+            <AppButton label={isEdit ? 'Save' : 'Add'} onPress={() => onSave(value)} disabled={!canSave} />
           </View>
         </View>
       </View>

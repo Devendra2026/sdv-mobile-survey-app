@@ -18,7 +18,7 @@ export type SurveyPhotoPickResult =
     };
 
 /** Persisted before opening the camera so we can finish upload after Android process restart. */
-export const PENDING_SURVEY_PHOTO_SLOT_KEY = '@survey_app/pending_photo_slot';
+const PENDING_SURVEY_PHOTO_SLOT_KEY = '@survey_app/pending_photo_slot';
 
 function toCaptureError(e: unknown): Error {
   return new Error(toPhotoErrorMessage(e));

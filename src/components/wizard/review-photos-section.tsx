@@ -31,7 +31,7 @@ export function ReviewPhotosSection({
   onEditStep: () => void;
 }) {
   const { photoBySlot, previewBySlot, uploadingSlot, capturedCount, requiredCount, capture, confirmRemove } =
-    useWizardPhotoCapture({ draft, update, serverSurveyId });
+    useWizardPhotoCapture({ draft, update, serverSurveyId, localId: draft.localId });
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
   const onCapture = async (slot: SurveyPhotoSlot) => {
@@ -49,7 +49,11 @@ export function ReviewPhotosSection({
   }, []);
 
   const storageIds = useMemo(
-    () => REQUIRED_SURVEY_PHOTO_SLOTS.map((s) => photoBySlot.get(s)?.storageId).filter(Boolean) as Id<'_storage'>[],
+    () =>
+      REQUIRED_SURVEY_PHOTO_SLOTS.flatMap((s) => {
+        const id = photoBySlot.get(s)?.storageId;
+        return id ? [id] : [];
+      }),
     [photoBySlot],
   );
 

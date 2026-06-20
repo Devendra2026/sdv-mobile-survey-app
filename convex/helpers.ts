@@ -11,8 +11,10 @@
  * trust client-supplied userId — derive everything from `ctx.auth`.
  */
 import { ConvexError, v } from "convex/values";
+import { canReadWard as canReadWardPure } from "../lib/ward-access";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
+import { mergeActorSnapshotIntoMetadata } from "./lib/auditActor";
 
 export type { QueryCtx };
 
@@ -93,21 +95,34 @@ export function requireRole(user: Doc<"users">, ...allowed: Role[]): void {
 }
 
 /**
- * Tenant + ward check. Surveyors can only act on their assigned wards
- * inside their assigned municipality. Supervisors get ULB-wide access.
- * Admins bypass everything.
+ * Ward limits apply to surveyors and QC supervisors with explicit ward assignments.
+ * Field supervisors see every ward in their allotted ULBs.
  */
+export function canReadWard(user: Doc<"users">, municipalityId: Id<"municipalities">, wardNo: string): boolean {
+  return canReadWardPure(user, municipalityId, wardNo);
+}
+
+/** Tenant + ward check — municipality scope is enforced via assertMunicipalityInScope. */
 export function assertCanReadWard(user: Doc<"users">, municipalityId: Id<"municipalities">, wardNo: string): void {
-  if (user.role === "admin") return;
-  // Municipality / district scope is enforced separately via assertMunicipalityInScope.
-  if (user.role === "supervisor") return;
-  // surveyor — restrict to assigned wards when any are listed
-  if (user.role === "surveyor" && user.wardAssignments.length > 0 && !user.wardAssignments.includes(wardNo)) {
+  if (!canReadWard(user, municipalityId, wardNo)) {
     throw new ConvexError({
       code: "FORBIDDEN",
       message: "This ward is not assigned to you.",
     });
   }
+}
+
+/** Filter ward rows for dropdowns; QC supervisors with ward assignments see only their wards. */
+export function filterWardsForUser<T extends { municipalityId: Id<"municipalities">; wardNo: string }>(
+  user: Doc<"users">,
+  wards: T[],
+): T[] {
+  if (user.role === "admin" || user.role === "supervisor") return wards;
+  if (user.role === "qc_supervisor" && user.wardAssignments.length > 0) {
+    return wards.filter((w) => canReadWard(user, w.municipalityId, w.wardNo));
+  }
+  if (user.role !== "surveyor") return wards;
+  return wards.filter((w) => canReadWard(user, w.municipalityId, w.wardNo));
 }
 
 /* ────────────────────────── audit helpers ────────────────────────── */
@@ -121,12 +136,24 @@ interface AuditWriteInput {
 }
 
 export async function writeAudit(ctx: MutationCtx, input: AuditWriteInput): Promise<void> {
+  let metadata: unknown = input.metadata;
+
+  if (input.actorId) {
+    const actor = await ctx.db.get("users", input.actorId);
+    if (actor) {
+      metadata = mergeActorSnapshotIntoMetadata(metadata, {
+        actorName: actor.name,
+        actorEmail: actor.email,
+      });
+    }
+  }
+
   await ctx.db.insert("auditLogs", {
     actorId: input.actorId,
     action: input.action,
     entity: input.entity,
     entityId: input.entityId,
-    metadata: input.metadata,
+    metadata,
   });
 }
 
@@ -144,4 +171,13 @@ export interface ConvexErrPayload {
 
 export function clientError(code: string, message: string, details?: Record<string, string[]>): never {
   throw new ConvexError(details ? { code, message, details } : { code, message });
+}
+
+/** Map nullable DB rows by `_id` in a single pass (avoids `.filter().map()` chains). */
+export function mapTruthyById<T extends { _id: string }>(rows: (T | null | undefined)[]): Map<T["_id"], T> {
+  const map = new Map<T["_id"], T>();
+  for (const row of rows) {
+    if (row) map.set(row._id, row);
+  }
+  return map;
 }

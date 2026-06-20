@@ -1,33 +1,25 @@
-import { api } from "@/convex/_generated/api";
-import { toUserMessage } from "@/utils/errors";
-import { useUser } from "@clerk/expo";
-import { useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useClerkConvexAuth } from "./use-clerk-convex-auth";
+import { api } from '@/convex/_generated/api';
+import { toUserMessage } from '@/utils/errors';
+import { useUser } from '@clerk/expo';
+import { useMutation, useQuery } from 'convex/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useClerkConvexAuth } from './use-clerk-convex-auth';
 
 const RETRY_MS = 1500;
 const MAX_ATTEMPTS = 15;
 
-function readSignupMetadata(user: NonNullable<ReturnType<typeof useUser>["user"]>) {
+function readSignupMetadata(user: NonNullable<ReturnType<typeof useUser>['user']>) {
   const meta = user.unsafeMetadata as Record<string, unknown> | undefined;
   return {
-    requestedRole:
-      typeof meta?.requestedRole === "string" ? meta.requestedRole : undefined,
-    requestedReason:
-      typeof meta?.requestedReason === "string" ? meta.requestedReason : undefined,
+    requestedRole: typeof meta?.requestedRole === 'string' ? meta.requestedRole : 'surveyor',
+    requestedReason: typeof meta?.requestedReason === 'string' ? meta.requestedReason : undefined,
   };
 }
 
-function profileFromClerk(user: NonNullable<ReturnType<typeof useUser>["user"]>) {
-  const email =
-    user.primaryEmailAddress?.emailAddress ??
-    user.emailAddresses[0]?.emailAddress ??
-    undefined;
+function profileFromClerk(user: NonNullable<ReturnType<typeof useUser>['user']>) {
+  const email = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? undefined;
   const name =
-    user.fullName?.trim() ||
-    [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-    user.username ||
-    email;
+    user.fullName?.trim() || [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.username || email;
 
   return {
     email,
@@ -44,19 +36,24 @@ function profileFromClerk(user: NonNullable<ReturnType<typeof useUser>["user"]>)
 export function useSyncConvexUser() {
   const { convexReady } = useClerkConvexAuth();
   const { user, isLoaded: userLoaded } = useUser();
-  const me = useQuery(api.users.currentUser, convexReady ? {} : "skip");
+  const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
   const provision = useMutation(api.users.provisionCurrentUser);
 
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userRef = useRef(user);
+  userRef.current = user;
+  const meRef = useRef(me);
+  meRef.current = me;
 
   const sync = useCallback(async () => {
-    if (!convexReady || !user || me) return true;
+    const currentUser = userRef.current;
+    const currentMe = meRef.current;
+    if (!convexReady || !currentUser || currentMe) return true;
 
     setSyncing(true);
     try {
-      await provision(profileFromClerk(user));
+      await provision(profileFromClerk(currentUser));
       setError(null);
       return true;
     } catch (err) {
@@ -65,25 +62,30 @@ export function useSyncConvexUser() {
     } finally {
       setSyncing(false);
     }
-  }, [convexReady, user, me, provision]);
+  }, [convexReady, provision]);
 
-  const needsSync = convexReady && userLoaded && Boolean(user) && me === null;
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
+
+  const clerkUserId = user?.id ?? null;
+  const needsSync = convexReady && userLoaded && clerkUserId !== null && me === null;
 
   useEffect(() => {
     if (!needsSync) return;
 
     let cancelled = false;
     let attempt = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     setError(null);
 
     const schedule = (delay: number) => {
-      timer.current = setTimeout(() => void tick(), delay);
+      timeoutId = setTimeout(() => void tick(), delay);
     };
 
     const tick = async () => {
       if (cancelled) return;
       attempt += 1;
-      const ok = await sync();
+      const ok = await syncRef.current();
       if (cancelled || ok) return;
       if (attempt < MAX_ATTEMPTS) schedule(RETRY_MS);
     };
@@ -92,9 +94,9 @@ export function useSyncConvexUser() {
 
     return () => {
       cancelled = true;
-      if (timer.current) clearTimeout(timer.current);
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [needsSync, sync]);
+  }, [needsSync]);
 
   return {
     me,

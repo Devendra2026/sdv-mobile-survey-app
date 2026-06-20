@@ -4,25 +4,51 @@
  * Every widget is a `useQuery` — Convex pushes updates live, so the KPI
  * tiles and recent list refresh themselves as new surveys land.
  */
-import { AppButton, Banner, EmptyState, KpiCard, PulseDot, SectionLabel, Spinner, SurveyCard } from '@/components';
+import {
+  AppButton,
+  Banner,
+  DashboardSkeleton,
+  EmptyState,
+  KpiCard,
+  PulseDot,
+  SectionLabel,
+  SurveyCard,
+} from '@/components';
 import { SurveyStatsBreakdown } from '@/components/admin/survey-stats-breakdown';
 import { api } from '@/convex/_generated/api';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { useDashboardCounts } from '@/hooks/use-dashboard-counts';
+import { useNetworkStatus } from '@/hooks/use-network-status';
+import { listDrafts, type WizardDraft } from '@/hooks/useWizardDraft';
 import { humanizeRole, surveyOwnerListLabel } from '@/utils/format';
-import { scrollViewProps, useTabScreenPadding } from '@/utils/ui-layout';
+import { scrollViewProps } from '@/utils/scroll-props';
+import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const tabPad = useTabScreenPadding();
-  const me = useQuery(api.users.currentUser, {});
-  const counts = useQuery(api.masters.dashboardCounts, {});
-  const recent = useQuery(api.survey.list, { limit: 5 });
+  const { convexReady } = useClerkConvexAuth();
+  const counts = useDashboardCounts();
+  const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
+  const recent = useQuery(api.survey.list, convexReady ? { limit: 5 } : 'skip');
+
+  const { isOnline } = useNetworkStatus();
+  const [localDrafts, setLocalDrafts] = useState<WizardDraft[]>([]);
+
+  useEffect(() => {
+    void listDrafts().then(setLocalDrafts);
+  }, []);
 
   if (me === undefined || counts === undefined || recent === undefined) {
-    return <Spinner label="Loading…" />;
+    return (
+      <View className="flex-1 bg-page-light dark:bg-page-dark p-4 pt-16">
+        <DashboardSkeleton />
+      </View>
+    );
   }
   if (!me) return null;
 
@@ -40,8 +66,8 @@ export default function DashboardScreen() {
               </Text>
             </View>
             <View className="flex-row items-center bg-white/15 px-2.5 py-1 rounded-full gap-1.5">
-              <PulseDot />
-              <Text className="text-[11px] font-medium text-white">Online</Text>
+              <PulseDot tone={isOnline ? 'success' : 'warning'} />
+              <Text className="text-[11px] font-medium text-white">{isOnline ? 'Online' : 'Offline'}</Text>
             </View>
           </View>
           {me.municipality ? (
@@ -53,7 +79,7 @@ export default function DashboardScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: tabPad }} {...scrollViewProps}>
+      <ScrollView contentContainerStyle={{ padding: 14 }} {...scrollViewProps}>
         {isSupervisor ? (
           <>
             <SectionLabel>Team analytics</SectionLabel>
@@ -80,6 +106,29 @@ export default function DashboardScreen() {
             message="Open the surveys list to review supervisor remarks."
             className="mb-4"
           />
+        ) : null}
+
+        {!isSupervisor && localDrafts.length > 0 ? (
+          <View className="mb-4">
+            <SectionLabel>Continue draft</SectionLabel>
+            <View className="gap-2 mt-2">
+              {localDrafts.slice(0, 3).map((d) => (
+                <SurveyCard
+                  key={d.localId}
+                  parcelNo={d.parcelNo || 'Draft'}
+                  unitNo={d.unitNo || '—'}
+                  ownerName={d.owners?.[0]?.name ?? 'In progress'}
+                  wardNo={d.wardNo ?? '—'}
+                  status="draft"
+                  qcStatus="pending"
+                  updatedAt={d.updatedAt ?? 0}
+                  onPress={() =>
+                    router.push({ pathname: '/(app)/wizard/flow', params: { localId: d.localId, q: '0' } })
+                  }
+                />
+              ))}
+            </View>
+          </View>
         ) : null}
 
         {!isSupervisor ? (
@@ -122,6 +171,7 @@ export default function DashboardScreen() {
             ))}
           </View>
         )}
+        <TabScreenBottomSpacer />
       </ScrollView>
     </View>
   );

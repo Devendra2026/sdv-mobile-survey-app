@@ -83,11 +83,20 @@ function ClerkThenConvex({ convex }: { convex: ConvexReactClient }) {
   );
 }
 
+/**
+ * AuthGate route map (expo-router groups):
+ * - (auth): sign-in, sign-up, forgot-password, setup, awaiting-approval
+ * - (app): surveyor / supervisor / qc_supervisor — dashboard, surveys, wizard, QC
+ * - (admin): admin-only tabs — approvals, users, reports, tenants, masters
+ *
+ * Server-side Convex functions are the authoritative access boundary; this gate
+ * only steers navigation for signed-in users with an active profile.
+ */
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
   const { convexReady, convexAuthFailed, convexAuthPhase } = useClerkConvexAuth();
   useAppStateSessionRefresh();
-  const { me, needsSync, syncing } = useSyncConvexUser();
+  const { me, needsSync, syncing, error: syncError } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
 
@@ -125,15 +134,17 @@ function AuthGate() {
       if (!inAdminGroup && !inAppGroup) replace('/(admin)/approvals');
       return;
     }
-    if (me.role === 'surveyor' || me.role === 'supervisor') {
+    if (me.role === 'qc_supervisor' || me.role === 'surveyor' || me.role === 'supervisor') {
       if (!inAppGroup) replace('/dashboard');
     }
-  }, [isLoaded, navigationReady, isSignedIn, convexReady, me, needsSync, syncing, segments, replace]);
+  }, [isLoaded, navigationReady, isSignedIn, convexReady, me, segments, replace]);
 
-  const loadingMessage = useMemo(
-    () => signedInLoadingMessage(convexAuthPhase, convexReady, me, needsSync, syncing),
-    [convexAuthPhase, convexReady, me, needsSync, syncing],
-  );
+  const loadingMessage = useMemo(() => {
+    if (syncError && segments[0] === '(auth)' && segments[1] === 'setup') {
+      return syncError;
+    }
+    return signedInLoadingMessage(convexAuthPhase, convexReady, me, needsSync, syncing);
+  }, [convexAuthPhase, convexReady, me, needsSync, syncing, syncError, segments]);
 
   if (isSignedIn && convexAuthFailed) {
     return <ConvexAuthError />;

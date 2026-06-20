@@ -11,7 +11,7 @@ import {
 } from '@/hooks/use-auth-for-convex';
 import { useAuth } from '@clerk/expo';
 import { useConvexAuth } from 'convex/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { AppState } from 'react-native';
 
 const MAX_AUTO_RETRIES = 5;
@@ -21,11 +21,65 @@ const MAX_STALL_MS = 45_000;
 
 export type ConvexAuthPhase = 'idle' | 'connecting' | 'recovering' | 'failed';
 
+type AuthState = {
+  autoRetryCount: number;
+  retrySeq: number;
+  phase: ConvexAuthPhase;
+};
+
+type AuthAction =
+  | { type: 'refetch' }
+  | { type: 'phase_reset' }
+  | { type: 'evaluate'; isSignedIn: boolean; isAuthenticated: boolean; convexAuthLoading: boolean; stalledMs: number }
+  | { type: 'retry_tick' };
+
+const initialAuthState: AuthState = {
+  autoRetryCount: 0,
+  retrySeq: 0,
+  phase: 'idle',
+};
+
 function serverRejectedMessage(): string {
   return (
     'The server rejected your session token. Your administrator must verify Convex + Clerk ' +
     'integration (Clerk → Integrations → Convex, and CLERK_JWT_ISSUER_DOMAIN on the Convex deployment).'
   );
+}
+
+function authReducer(state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case 'refetch':
+      return { ...state, retrySeq: state.retrySeq + 1 };
+    case 'phase_reset':
+      return { ...state, autoRetryCount: 0, phase: 'connecting' };
+    case 'retry_tick':
+      return { ...state, autoRetryCount: state.autoRetryCount + 1 };
+    case 'evaluate': {
+      const { isSignedIn, isAuthenticated, convexAuthLoading, stalledMs } = action;
+      if (!isSignedIn) {
+        return { ...state, autoRetryCount: 0, phase: 'idle' };
+      }
+      if (isAuthenticated) {
+        return { ...state, autoRetryCount: 0, phase: 'idle' };
+      }
+      if (convexAuthLoading) {
+        return { ...state, phase: 'connecting' };
+      }
+
+      const failureKind = classifyConvexTokenError(lastConvexTokenError);
+      if (failureKind === 'permanent') {
+        return { ...state, phase: 'failed' };
+      }
+
+      if (state.autoRetryCount >= MAX_AUTO_RETRIES || stalledMs >= MAX_STALL_MS) {
+        return { ...state, phase: 'failed' };
+      }
+
+      return { ...state, phase: 'recovering' };
+    }
+    default:
+      return state;
+  }
 }
 
 /**
@@ -34,20 +88,17 @@ function serverRejectedMessage(): string {
 export function useClerkConvexAuth() {
   const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
   const { isLoading: convexAuthLoading, isAuthenticated } = useConvexAuth();
-  const [autoRetryCount, setAutoRetryCount] = useState(0);
-  const [retrySeq, setRetrySeq] = useState(0);
-  const [phase, setPhase] = useState<ConvexAuthPhase>('idle');
+  const [state, dispatch] = useReducer(authReducer, initialAuthState);
   const stallStartedAt = useRef<number | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => subscribeAuthRefetch(() => setRetrySeq((n) => n + 1)), []);
+  useEffect(() => subscribeAuthRefetch(() => dispatch({ type: 'refetch' })), []);
 
   useEffect(
     () =>
       subscribeAuthPhaseReset(() => {
         stallStartedAt.current = Date.now();
-        setAutoRetryCount(0);
-        setPhase('connecting');
+        dispatch({ type: 'phase_reset' });
       }),
     [],
   );
@@ -66,56 +117,46 @@ export function useClerkConvexAuth() {
 
     if (!isSignedIn) {
       stallStartedAt.current = null;
-      setAutoRetryCount(0);
-      setPhase('idle');
-      return;
-    }
-
-    if (isAuthenticated) {
+    } else if (isAuthenticated) {
       stallStartedAt.current = null;
-      setAutoRetryCount(0);
-      setPhase('idle');
-      return;
-    }
-
-    if (convexAuthLoading) {
-      setPhase('connecting');
-      return;
-    }
-
-    if (stallStartedAt.current === null) {
+    } else if (convexAuthLoading) {
+      // stall timer unchanged while Convex auth is in flight
+    } else if (stallStartedAt.current === null) {
       stallStartedAt.current = Date.now();
     }
 
-    const stalledMs = Date.now() - (stallStartedAt.current ?? Date.now());
-    const failureKind = classifyConvexTokenError(lastConvexTokenError);
+    const stalledMs =
+      isSignedIn && !isAuthenticated && !convexAuthLoading ? Date.now() - (stallStartedAt.current ?? Date.now()) : 0;
 
-    if (failureKind === 'permanent') {
-      setPhase('failed');
-      return;
-    }
-
-    if (autoRetryCount >= MAX_AUTO_RETRIES || stalledMs >= MAX_STALL_MS) {
-      if (!lastConvexTokenError) {
-        const stalledWithToken = getLastGoodConvexToken() && stalledMs >= 20_000 ? serverRejectedMessage() : null;
-        setLastConvexTokenError(stalledWithToken ?? 'Connection timed out. Check your network and try again.');
-      }
-      setPhase('failed');
-      return;
-    }
-
-    setPhase('recovering');
-  }, [isSignedIn, isAuthenticated, convexAuthLoading, retrySeq, autoRetryCount]);
+    dispatch({
+      type: 'evaluate',
+      isSignedIn: Boolean(isSignedIn),
+      isAuthenticated: Boolean(isAuthenticated),
+      convexAuthLoading,
+      stalledMs,
+    });
+  }, [isSignedIn, isAuthenticated, convexAuthLoading, state.retrySeq, state.autoRetryCount]);
 
   useEffect(() => {
-    if (phase !== 'recovering') return;
-    if (autoRetryCount >= MAX_AUTO_RETRIES) return;
+    if (state.phase !== 'failed') return;
+    if (lastConvexTokenError) return;
+
+    const stalledMs = stallStartedAt.current ? Date.now() - stallStartedAt.current : 0;
+    const stalledWithToken = getLastGoodConvexToken() && stalledMs >= 20_000 ? serverRejectedMessage() : null;
+    setLastConvexTokenError(stalledWithToken ?? 'Connection timed out. Check your network and try again.');
+  }, [state.phase]);
+
+  useEffect(() => {
+    if (state.phase !== 'recovering') return;
+    if (state.autoRetryCount >= MAX_AUTO_RETRIES) return;
     if (convexAuthLoading) return;
 
     const delayMs =
-      autoRetryCount === 0 && !getLastGoodConvexToken() ? 400 : AUTO_RETRY_BASE_MS * 2 ** Math.min(autoRetryCount, 2);
+      state.autoRetryCount === 0 && !getLastGoodConvexToken()
+        ? 400
+        : AUTO_RETRY_BASE_MS * 2 ** Math.min(state.autoRetryCount, 2);
     retryTimer.current = setTimeout(() => {
-      setAutoRetryCount((n) => n + 1);
+      dispatch({ type: 'retry_tick' });
       retryConvexAuth();
     }, delayMs);
 
@@ -125,16 +166,16 @@ export function useClerkConvexAuth() {
         retryTimer.current = null;
       }
     };
-  }, [phase, autoRetryCount, convexAuthLoading]);
+  }, [state.phase, state.autoRetryCount, convexAuthLoading]);
 
   return {
     clerkLoaded,
     isSignedIn: Boolean(isSignedIn),
     convexAuthLoading,
-    convexAuthPhase: phase,
+    convexAuthPhase: state.phase,
     convexReady,
-    convexAuthFailed: phase === 'failed',
-    convexAuthRecovering: phase === 'recovering',
+    convexAuthFailed: state.phase === 'failed',
+    convexAuthRecovering: state.phase === 'recovering',
   };
 }
 

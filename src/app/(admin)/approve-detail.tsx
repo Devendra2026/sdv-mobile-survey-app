@@ -19,14 +19,60 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { toUserMessage } from '@/utils/errors';
+import { BottomBarClearance } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useMemo, useReducer } from 'react';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Role = 'surveyor' | 'supervisor' | 'admin';
+
+type ApproveState = {
+  role: Role;
+  districtId: string;
+  municipalityId: string;
+  submitting: boolean;
+  toast: { title: string; tone: 'success' | 'danger' } | null;
+};
+
+type ApproveAction =
+  | { type: 'setRole'; role: Role }
+  | { type: 'setDistrict'; districtId: string }
+  | { type: 'setMunicipality'; municipalityId: string }
+  | { type: 'setSubmitting'; submitting: boolean }
+  | { type: 'setToast'; toast: ApproveState['toast'] }
+  | { type: 'clearToast' };
+
+const initialApproveState: ApproveState = {
+  role: 'surveyor',
+  districtId: '',
+  municipalityId: '',
+  submitting: false,
+  toast: null,
+};
+
+function approveReducer(state: ApproveState, action: ApproveAction): ApproveState {
+  switch (action.type) {
+    case 'setRole':
+      return action.role === 'admin'
+        ? { ...state, role: action.role, districtId: '', municipalityId: '' }
+        : { ...state, role: action.role };
+    case 'setDistrict':
+      return { ...state, districtId: action.districtId, municipalityId: '' };
+    case 'setMunicipality':
+      return { ...state, municipalityId: action.municipalityId };
+    case 'setSubmitting':
+      return { ...state, submitting: action.submitting };
+    case 'setToast':
+      return { ...state, toast: action.toast };
+    case 'clearToast':
+      return { ...state, toast: null };
+    default:
+      return state;
+  }
+}
 
 export default function ApproveDetailScreen() {
   const router = useRouter();
@@ -40,13 +86,8 @@ export default function ApproveDetailScreen() {
   const approve = useMutation(api.admin.approveUser);
   const rejectUser = useMutation(api.admin.rejectUser);
 
-  const user = pendingList?.find((u) => u._id === userId);
-
-  const [role, setRole] = useState<Role>('surveyor');
-  const [districtId, setDistrictId] = useState('');
-  const [municipalityId, setMunicipalityId] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
+  const [state, dispatch] = useReducer(approveReducer, initialApproveState);
+  const hideToast = useCallback(() => dispatch({ type: 'clearToast' }), []);
 
   const districtOptions = useMemo(
     () => tree?.map((d) => ({ value: d._id, label: `${d.name} (${d.stateName})` })) ?? [],
@@ -54,18 +95,18 @@ export default function ApproveDetailScreen() {
   );
 
   const ulbOptions = useMemo(() => {
-    if (!tree || !districtId) return [];
-    const district = tree.find((d) => d._id === districtId);
+    if (!tree || !state.districtId) return [];
+    const district = tree.find((d) => d._id === state.districtId);
     if (!district) return [];
     return district.ulbs.map((u) => ({
       value: u._id,
       label: `${u.name} · ${u.code}`,
     }));
-  }, [tree, districtId]);
+  }, [tree, state.districtId]);
 
-  const selectedUlb = tree?.flatMap((d) => d.ulbs).find((u) => u._id === municipalityId);
-
-  const scopeReady = role === 'admin' || (!!districtId && !!municipalityId);
+  const user = pendingList?.find((u) => u._id === userId);
+  const selectedUlb = tree?.flatMap((d) => d.ulbs).find((u) => u._id === state.municipalityId);
+  const scopeReady = state.role === 'admin' || (!!state.districtId && !!state.municipalityId);
   const workflowStep = scopeReady ? 2 : 1;
 
   if (!userId) {
@@ -108,15 +149,15 @@ export default function ApproveDetailScreen() {
         text: 'Reject',
         style: 'destructive',
         onPress: async () => {
-          setSubmitting(true);
+          dispatch({ type: 'setSubmitting', submitting: true });
           try {
             await rejectUser({ userId });
-            setToast({ title: 'Request rejected', tone: 'success' });
+            dispatch({ type: 'setToast', toast: { title: 'Request rejected', tone: 'success' } });
             setTimeout(() => router.back(), 600);
           } catch (e) {
-            setToast({ title: toUserMessage(e), tone: 'danger' });
+            dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
           } finally {
-            setSubmitting(false);
+            dispatch({ type: 'setSubmitting', submitting: false });
           }
         },
       },
@@ -124,21 +165,21 @@ export default function ApproveDetailScreen() {
   };
 
   const handleApprove = async () => {
-    setSubmitting(true);
+    dispatch({ type: 'setSubmitting', submitting: true });
     try {
       await approve({
         userId,
-        role,
-        municipalityId: municipalityId ? (municipalityId as Id<'municipalities'>) : undefined,
-        districtId: districtId ? (districtId as Id<'districts'>) : undefined,
+        role: state.role,
+        municipalityId: state.municipalityId ? (state.municipalityId as Id<'municipalities'>) : undefined,
+        districtId: state.districtId ? (state.districtId as Id<'districts'>) : undefined,
         wardAssignments: [],
       });
-      setToast({ title: `${user.name} approved`, tone: 'success' });
+      dispatch({ type: 'setToast', toast: { title: `${user.name} approved`, tone: 'success' } });
       setTimeout(() => router.back(), 700);
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
     } finally {
-      setSubmitting(false);
+      dispatch({ type: 'setSubmitting', submitting: false });
     }
   };
 
@@ -167,7 +208,8 @@ export default function ApproveDetailScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={{ padding: 14, paddingBottom: 120 + insets.bottom }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 120 }}
+        contentInset={Platform.OS === 'ios' ? { bottom: insets.bottom } : undefined}
         keyboardShouldPersistTaps="handled"
       >
         <AppCard padded className="mb-4">
@@ -198,37 +240,28 @@ export default function ApproveDetailScreen() {
               { value: 'supervisor', label: 'Supervisor', helper: 'Reviews surveys in assigned ULB' },
               { value: 'admin', label: 'Admin', helper: 'Platform-wide administration' },
             ]}
-            value={role}
-            onChange={(r) => {
-              setRole(r);
-              if (r === 'admin') {
-                setDistrictId('');
-                setMunicipalityId('');
-              }
-            }}
+            value={state.role}
+            onChange={(r) => dispatch({ type: 'setRole', role: r })}
           />
         </AppCard>
 
-        {role !== 'admin' ? (
+        {state.role !== 'admin' ? (
           <>
             <SectionLabel>2 · District & ULB</SectionLabel>
             <AppCard padded className="mb-3">
               <View style={{ gap: 12 }}>
                 <AppDropdown
                   placeholder="District"
-                  value={districtId}
+                  value={state.districtId}
                   options={districtOptions}
-                  onChange={(id) => {
-                    setDistrictId(id);
-                    setMunicipalityId('');
-                  }}
+                  onChange={(id) => dispatch({ type: 'setDistrict', districtId: id })}
                 />
                 <AppDropdown
                   placeholder="ULB name / code"
-                  value={municipalityId}
+                  value={state.municipalityId}
                   options={ulbOptions}
-                  onChange={setMunicipalityId}
-                  disabled={!districtId}
+                  onChange={(id) => dispatch({ type: 'setMunicipality', municipalityId: id })}
+                  disabled={!state.districtId}
                 />
               </View>
             </AppCard>
@@ -253,6 +286,7 @@ export default function ApproveDetailScreen() {
             className="mb-4"
           />
         )}
+        {Platform.OS === 'android' ? <BottomBarClearance height={insets.bottom} /> : null}
       </ScrollView>
 
       <View
@@ -260,8 +294,8 @@ export default function ApproveDetailScreen() {
         style={{ paddingBottom: insets.bottom + 12 }}
       >
         <AppButton
-          label={submitting ? 'Approving…' : 'Approve and grant access'}
-          loading={submitting}
+          label={state.submitting ? 'Approving…' : 'Approve and grant access'}
+          loading={state.submitting}
           onPress={handleApprove}
           disabled={!scopeReady}
           fullWidth
@@ -272,7 +306,7 @@ export default function ApproveDetailScreen() {
         ) : null}
       </View>
 
-      {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}
+      {state.toast ? <Toast visible title={state.toast.title} tone={state.toast.tone} onHide={hideToast} /> : null}
     </View>
   );
 }

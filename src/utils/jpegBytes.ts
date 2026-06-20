@@ -5,7 +5,7 @@ const SURVEY_PHOTO_MAX_WIDTH = 1280;
 const SURVEY_PHOTO_JPEG_QUALITY = 0.7;
 
 /** Read local file:// JPEG without base64 (avoids large JS string allocations). */
-export async function readJpegBytesFromUri(uri: string): Promise<Uint8Array> {
+async function readJpegBytesFromUri(uri: string): Promise<Uint8Array> {
   const buffer = await new File(uri).arrayBuffer();
   return new Uint8Array(buffer);
 }

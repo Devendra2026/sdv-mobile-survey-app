@@ -186,11 +186,15 @@ async function captureGpsWithTargetAccuracyInner(
 
   try {
     const deadline = started + GPS_SAMPLE_DURATION_MS;
-    while (Date.now() < deadline) {
+    const pollUntilDeadline = async (): Promise<void> => {
       const elapsedMs = Date.now() - started;
-      if (shouldStopSampling(best.coords?.accuracy, samples.length, elapsedMs)) break;
+      if (Date.now() >= deadline || shouldStopSampling(best.coords?.accuracy, samples.length, elapsedMs)) {
+        return;
+      }
       await new Promise((r) => setTimeout(r, GPS_SAMPLE_POLL_MS));
-    }
+      return pollUntilDeadline();
+    };
+    await pollUntilDeadline();
     await quickFix;
   } finally {
     subscription.remove();

@@ -21,11 +21,7 @@ export function ConfigGate({ children }: { children: ReactNode }) {
           This install is missing API keys that must be set on EAS before building the APK. Add them under Project →
           Environment variables → preview (or production), then create a new build and install again from the QR code.
         </Text>
-        {issues.map((key) => (
-          <Text key={key} style={[authStyles.label, { fontFamily: 'monospace' }]}>
-            {key}
-          </Text>
-        ))}
+        <Text style={[authStyles.label, { fontFamily: 'monospace' }]}>{issues.join('\n')}</Text>
         <Text style={[authStyles.subtitle, { marginTop: 16 }]}>
           Local dev: copy `.env.example` to `.env.local`. EAS: run `npm run verify:eas-preview` so the Clerk key matches
           the web app, then `npm run eas:build:android:preview`.

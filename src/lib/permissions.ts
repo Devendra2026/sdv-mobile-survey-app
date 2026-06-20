@@ -9,7 +9,7 @@
  */
 
 /** Built-in roles; custom keys come from Convex `roles` table. */
-export type Role = 'pending' | 'surveyor' | 'supervisor' | 'admin' | (string & {});
+export type Role = 'pending' | 'surveyor' | 'supervisor' | 'qc_supervisor' | 'admin' | (string & {});
 
 export type Capability =
   | 'users.approve'
@@ -39,12 +39,20 @@ const MATRIX: Record<Role, Capability[]> = {
   surveyor: ['surveys.viewOwn', 'surveys.editDraft', 'surveys.submit', 'surveys.uploadPhotos', 'surveys.delete'],
   supervisor: [
     'surveys.viewAssigned',
+    'surveys.editDraft',
+    'surveys.submit',
+    'surveys.uploadPhotos',
+    'analytics.view',
+    'users.view',
+    'reports.export',
+  ],
+  qc_supervisor: [
     'qc.review',
     'qc.decide',
     'qc.requestCorrection',
     'qc.reopen',
+    'surveys.uploadPhotos',
     'analytics.view',
-    'users.view',
     'reports.export',
   ],
   admin: [
@@ -70,13 +78,14 @@ const MATRIX: Record<Role, Capability[]> = {
   ],
 };
 
-export function can(role: Role | undefined, capability: Capability): boolean {
+export function can(role: Role | undefined, capability: Capability, serverCapabilities?: string[]): boolean {
+  if (serverCapabilities?.length) return serverCapabilities.includes(capability);
   if (!role) return false;
   return MATRIX[role as keyof typeof MATRIX]?.includes(capability) ?? false;
 }
 
-export function canAny(role: Role | undefined, capabilities: Capability[]): boolean {
-  return capabilities.some((c) => can(role, c));
+function canAny(role: Role | undefined, capabilities: Capability[], serverCapabilities?: string[]): boolean {
+  return capabilities.some((c) => can(role, c, serverCapabilities));
 }
 
 /** Prefer `users.currentUser.capabilities` from Convex (dynamic RBAC). */
@@ -100,9 +109,10 @@ export function canAnyWithCapabilities(
 }
 
 /** Admin tab keys visible per role (mobile admin shell). */
-export const ADMIN_TAB_VISIBILITY: Record<Role, string[]> = {
+const ADMIN_TAB_VISIBILITY: Record<Role, string[]> = {
   pending: [],
   surveyor: [],
   supervisor: [],
+  qc_supervisor: [],
   admin: ['approvals', 'users', 'roles', 'reports', 'tenants', 'masters', 'profile'],
 };

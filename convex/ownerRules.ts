@@ -51,14 +51,18 @@ export function normalizeOwners(owners: OwnerEntry[] | undefined): OwnerEntry[] 
     const t = s?.trim();
     return t ? t : undefined;
   };
-  const cleaned = owners
-    .map((o) => ({
+  const cleaned: OwnerEntry[] = [];
+  for (const o of owners) {
+    const entry = {
       name: trimOpt(o.name),
       fatherOrHusbandName: trimOpt(o.fatherOrHusbandName),
       mobileNo: trimOpt(o.mobileNo),
       altMobileNo: trimOpt(o.altMobileNo),
-    }))
-    .filter((o) => o.name || o.fatherOrHusbandName || o.mobileNo || o.altMobileNo);
+    };
+    if (entry.name || entry.fatherOrHusbandName || entry.mobileNo || entry.altMobileNo) {
+      cleaned.push(entry);
+    }
+  }
   return cleaned.length ? cleaned : undefined;
 }
 

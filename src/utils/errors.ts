@@ -27,14 +27,14 @@ export function toUserMessage(err: unknown): string {
   return "Something went wrong";
 }
 
-export function isCode(err: unknown, code: string): boolean {
+function isCode(err: unknown, code: string): boolean {
   if (!(err instanceof ConvexError)) return false;
   const data = err.data as ConvexErrPayload | string | undefined;
   return typeof data === "object" && data?.code === code;
 }
 
 /** Apply field-level details onto a react-hook-form setError. */
-export function applyFieldErrors<F extends { setError: (n: never, e: { message: string }) => void }>(
+function applyFieldErrors<F extends { setError: (n: never, e: { message: string }) => void }>(
   err: unknown,
   form: F,
 ): boolean {

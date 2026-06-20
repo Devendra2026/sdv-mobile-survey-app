@@ -55,7 +55,7 @@ export function uploadJpegBytesToConvexUrl(
 }
 
 /** POST image bytes from a local URI to a Convex storage upload URL. */
-export async function uploadImageFromUri(
+async function uploadImageFromUri(
   uploadUrl: string,
   uri: string,
 ): Promise<{ storageId: Id<'_storage'>; sizeKb: number }> {

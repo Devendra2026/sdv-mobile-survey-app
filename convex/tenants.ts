@@ -26,9 +26,11 @@ export const listForAdmin = query({
     const me = await requireUser(ctx);
     requireRole(me, "admin");
 
-    const districts = await ctx.db.query("districts").collect();
-    const municipalities = await ctx.db.query("municipalities").collect();
-    const wards = await ctx.db.query("wards").collect();
+    const [districts, municipalities, wards] = await Promise.all([
+      ctx.db.query("districts").collect(),
+      ctx.db.query("municipalities").collect(),
+      ctx.db.query("wards").collect(),
+    ]);
 
     return districts
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -286,15 +288,16 @@ export const upsertAssessmentYear = mutation({
     if (!value) clientError("BAD_REQUEST", "Assessment year value is required");
     if (!label) clientError("BAD_REQUEST", "Assessment year label is required");
 
-    const existing = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", "assessment_year").eq("value", value))
-      .unique();
-
-    const activeYears = await ctx.db
-      .query("masters")
-      .withIndex("by_category_position", (q) => q.eq("category", "assessment_year").eq("isActive", true))
-      .collect();
+    const [existing, activeYears] = await Promise.all([
+      ctx.db
+        .query("masters")
+        .withIndex("by_category_value", (q) => q.eq("category", "assessment_year").eq("value", value))
+        .unique(),
+      ctx.db
+        .query("masters")
+        .withIndex("by_category_position", (q) => q.eq("category", "assessment_year").eq("isActive", true))
+        .collect(),
+    ]);
     const position =
       args.position ?? (activeYears.length > 0 ? Math.max(...activeYears.map((r) => r.position)) + 1 : 1);
     const isActive = args.isActive ?? true;
@@ -333,23 +336,25 @@ export const seedReferenceData = mutation({
       { value: "2025-26", label: "2025-26", position: 1 },
       { value: "2026-27", label: "2026-27", position: 2 },
     ];
-    for (const y of assessmentYears) {
-      const row = await ctx.db
-        .query("masters")
-        .withIndex("by_category_value", (q) => q.eq("category", "assessment_year").eq("value", y.value))
-        .unique();
-      if (row) {
-        await ctx.db.patch(row._id, { label: y.label, position: y.position, isActive: true });
-      } else {
-        await ctx.db.insert("masters", {
-          category: "assessment_year",
-          value: y.value,
-          label: y.label,
-          position: y.position,
-          isActive: true,
-        });
-      }
-    }
+    await Promise.all(
+      assessmentYears.map(async (y) => {
+        const row = await ctx.db
+          .query("masters")
+          .withIndex("by_category_value", (q) => q.eq("category", "assessment_year").eq("value", y.value))
+          .unique();
+        if (row) {
+          await ctx.db.patch(row._id, { label: y.label, position: y.position, isActive: true });
+        } else {
+          await ctx.db.insert("masters", {
+            category: "assessment_year",
+            value: y.value,
+            label: y.label,
+            position: y.position,
+            isActive: true,
+          });
+        }
+      }),
+    );
 
     type UlbSeed = {
       code: string;
@@ -571,29 +576,28 @@ export const seedReferenceData = mutation({
           });
         }
 
-        for (const w of u.wards) {
-          const existingWard = await ctx.db
-            .query("wards")
-            .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muniId).eq("wardNo", w.wardNo))
-            .unique();
-          if (existingWard) {
-            await ctx.db.patch(existingWard._id, { name: w.name, wardCode: w.wardCode });
-          } else {
-            await ctx.db.insert("wards", {
-              municipalityId: muniId,
-              wardNo: w.wardNo,
-              wardCode: w.wardCode,
-              name: w.name,
-            });
-          }
-        }
+        await Promise.all(
+          u.wards.map(async (w) => {
+            const existingWard = await ctx.db
+              .query("wards")
+              .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muniId).eq("wardNo", w.wardNo))
+              .unique();
+            if (existingWard) {
+              await ctx.db.patch(existingWard._id, { name: w.name, wardCode: w.wardCode });
+            } else {
+              await ctx.db.insert("wards", {
+                municipalityId: muniId,
+                wardNo: w.wardNo,
+                wardCode: w.wardCode,
+                name: w.name,
+              });
+            }
+          }),
+        );
       }
     }
 
-    await seedSystemRbac(ctx);
-    await seedTaxationMasters(ctx);
-    await seedAreaMasters(ctx);
-    await seedServiceMasters(ctx);
+    await Promise.all([seedSystemRbac(ctx), seedTaxationMasters(ctx), seedAreaMasters(ctx), seedServiceMasters(ctx)]);
 
     await writeAudit(ctx, {
       actorId: me._id,

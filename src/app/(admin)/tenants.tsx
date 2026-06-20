@@ -1,22 +1,130 @@
 /**
  * Admin-only tenant setup — districts, ULBs, wards, and assessment years.
  */
-import { AppButton, AppCard, AppDropdown, AppInput, EmptyState, SectionLabel, Spinner, Tag, Toast } from '@/components';
+import { AppButton, Spinner, Toast } from '@/components';
 import { AdminHeader } from '@/components/admin/admin-header';
+import {
+  AddDistrictSection,
+  AddUlbSection,
+  AddWardSection,
+  AssessmentYearsSection,
+  DistrictTreeSection,
+} from '@/components/admin/tenant-sections';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { toUserMessage } from '@/utils/errors';
-import { humanizeUlbBodyType } from '@/utils/format';
-import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useMemo, useReducer } from 'react';
+import { Alert, ScrollView, View } from 'react-native';
 
-const BODY_TYPES = [
-  { value: 'municipal_council', label: 'Municipal Council' },
-  { value: 'town_panchayat', label: 'Town Panchayat' },
-] as const;
+type TenantsState = {
+  expandedDistrict: string | null;
+  toast: { title: string; tone: 'success' | 'danger' } | null;
+  busy: boolean;
+  districtName: string;
+  selectedDistrictId: string;
+  ulbCode: string;
+  ulbName: string;
+  ulbPostalCode: string;
+  ulbBodyType: string;
+  wardMunicipalityId: string;
+  wardNo: string;
+  wardCode: string;
+  wardName: string;
+  yearValue: string;
+  yearLabel: string;
+};
+
+type TenantsAction =
+  | { type: 'toggleDistrict'; districtId: string }
+  | { type: 'setBusy'; busy: boolean }
+  | { type: 'setToast'; toast: TenantsState['toast'] }
+  | { type: 'clearToast' }
+  | { type: 'setDistrictName'; value: string }
+  | { type: 'setSelectedDistrictId'; value: string }
+  | { type: 'setUlbCode'; value: string }
+  | { type: 'setUlbName'; value: string }
+  | { type: 'setUlbPostalCode'; value: string }
+  | { type: 'setUlbBodyType'; value: string }
+  | { type: 'setWardMunicipalityId'; value: string }
+  | { type: 'setWardNo'; value: string }
+  | { type: 'setWardCode'; value: string }
+  | { type: 'setWardName'; value: string }
+  | { type: 'setYearValue'; value: string }
+  | { type: 'setYearLabel'; value: string }
+  | { type: 'clearDistrictForm' }
+  | { type: 'clearUlbForm' }
+  | { type: 'clearWardForm' }
+  | { type: 'clearYearForm' };
+
+const initialTenantsState: TenantsState = {
+  expandedDistrict: null,
+  toast: null,
+  busy: false,
+  districtName: '',
+  selectedDistrictId: '',
+  ulbCode: '',
+  ulbName: '',
+  ulbPostalCode: '',
+  ulbBodyType: 'municipal_council',
+  wardMunicipalityId: '',
+  wardNo: '',
+  wardCode: '',
+  wardName: '',
+  yearValue: '',
+  yearLabel: '',
+};
+
+function tenantsReducer(state: TenantsState, action: TenantsAction): TenantsState {
+  switch (action.type) {
+    case 'toggleDistrict':
+      return {
+        ...state,
+        expandedDistrict: state.expandedDistrict === action.districtId ? null : action.districtId,
+      };
+    case 'setBusy':
+      return { ...state, busy: action.busy };
+    case 'setToast':
+      return { ...state, toast: action.toast };
+    case 'clearToast':
+      return { ...state, toast: null };
+    case 'setDistrictName':
+      return { ...state, districtName: action.value };
+    case 'setSelectedDistrictId':
+      return { ...state, selectedDistrictId: action.value };
+    case 'setUlbCode':
+      return { ...state, ulbCode: action.value };
+    case 'setUlbName':
+      return { ...state, ulbName: action.value };
+    case 'setUlbPostalCode':
+      return { ...state, ulbPostalCode: action.value };
+    case 'setUlbBodyType':
+      return { ...state, ulbBodyType: action.value };
+    case 'setWardMunicipalityId':
+      return { ...state, wardMunicipalityId: action.value };
+    case 'setWardNo':
+      return { ...state, wardNo: action.value };
+    case 'setWardCode':
+      return { ...state, wardCode: action.value };
+    case 'setWardName':
+      return { ...state, wardName: action.value };
+    case 'setYearValue':
+      return { ...state, yearValue: action.value };
+    case 'setYearLabel':
+      return { ...state, yearLabel: action.value };
+    case 'clearDistrictForm':
+      return { ...state, districtName: '' };
+    case 'clearUlbForm':
+      return { ...state, ulbCode: '', ulbName: '', ulbPostalCode: '' };
+    case 'clearWardForm':
+      return { ...state, wardNo: '', wardCode: '', wardName: '' };
+    case 'clearYearForm':
+      return { ...state, yearValue: '', yearLabel: '' };
+    default:
+      return state;
+  }
+}
 
 export default function AdminTenantsScreen() {
   const { convexReady } = useClerkConvexAuth();
@@ -29,24 +137,8 @@ export default function AdminTenantsScreen() {
   const upsertWard = useMutation(api.tenants.upsertWard);
   const upsertAssessmentYear = useMutation(api.tenants.upsertAssessmentYear);
 
-  const [expandedDistrict, setExpandedDistrict] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const [districtName, setDistrictName] = useState('');
-  const [selectedDistrictId, setSelectedDistrictId] = useState('');
-  const [ulbCode, setUlbCode] = useState('');
-  const [ulbName, setUlbName] = useState('');
-  const [ulbPostalCode, setUlbPostalCode] = useState('');
-  const [ulbBodyType, setUlbBodyType] = useState<string>('municipal_council');
-
-  const [wardMunicipalityId, setWardMunicipalityId] = useState('');
-  const [wardNo, setWardNo] = useState('');
-  const [wardCode, setWardCode] = useState('');
-  const [wardName, setWardName] = useState('');
-
-  const [yearValue, setYearValue] = useState('');
-  const [yearLabel, setYearLabel] = useState('');
+  const [state, dispatch] = useReducer(tenantsReducer, initialTenantsState);
+  const hideToast = useCallback(() => dispatch({ type: 'clearToast' }), []);
 
   const districtOptions = useMemo(() => tree?.map((d) => ({ value: d._id, label: d.name })) ?? [], [tree]);
 
@@ -87,17 +179,20 @@ export default function AdminTenantsScreen() {
         {
           text: hasData ? 'Refresh' : 'Seed',
           onPress: async () => {
-            setBusy(true);
+            dispatch({ type: 'setBusy', busy: true });
             try {
               await seed({});
-              setToast({
-                title: hasData ? 'Reference data refreshed' : 'Reference data seeded',
-                tone: 'success',
+              dispatch({
+                type: 'setToast',
+                toast: {
+                  title: hasData ? 'Reference data refreshed' : 'Reference data seeded',
+                  tone: 'success',
+                },
               });
             } catch (e) {
-              setToast({ title: toUserMessage(e), tone: 'danger' });
+              dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
             } finally {
-              setBusy(false);
+              dispatch({ type: 'setBusy', busy: false });
             }
           },
         },
@@ -106,11 +201,11 @@ export default function AdminTenantsScreen() {
   };
 
   const onAddDistrict = async () => {
-    setBusy(true);
+    dispatch({ type: 'setBusy', busy: true });
     try {
-      const name = districtName.trim();
+      const name = state.districtName.trim();
       if (!name) {
-        setToast({ title: 'District name is required', tone: 'danger' });
+        dispatch({ type: 'setToast', toast: { title: 'District name is required', tone: 'danger' } });
         return;
       }
       await upsertDistrict({
@@ -119,98 +214,96 @@ export default function AdminTenantsScreen() {
         stateName: 'Uttar Pradesh',
         isActive: true,
       });
-      setDistrictName('');
-      setToast({ title: 'District saved', tone: 'success' });
+      dispatch({ type: 'clearDistrictForm' });
+      dispatch({ type: 'setToast', toast: { title: 'District saved', tone: 'success' } });
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
     } finally {
-      setBusy(false);
+      dispatch({ type: 'setBusy', busy: false });
     }
   };
 
   const onAddUlb = async () => {
-    if (!selectedDistrictId) {
-      setToast({ title: 'Select a district first', tone: 'danger' });
+    if (!state.selectedDistrictId) {
+      dispatch({ type: 'setToast', toast: { title: 'Select a district first', tone: 'danger' } });
       return;
     }
-    const pin = ulbPostalCode.replace(/\D/g, '').slice(0, 6);
+    const pin = state.ulbPostalCode.replace(/\D/g, '').slice(0, 6);
     if (!/^[1-9]\d{5}$/.test(pin)) {
-      setToast({ title: 'Enter a valid 6-digit PIN for this ULB', tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: 'Enter a valid 6-digit PIN for this ULB', tone: 'danger' } });
       return;
     }
-    setBusy(true);
+    dispatch({ type: 'setBusy', busy: true });
     try {
       await upsertMunicipality({
-        districtId: selectedDistrictId as Id<'districts'>,
-        code: ulbCode,
-        name: ulbName,
-        bodyType: ulbBodyType as 'municipal_council',
+        districtId: state.selectedDistrictId as Id<'districts'>,
+        code: state.ulbCode,
+        name: state.ulbName,
+        bodyType: state.ulbBodyType as 'municipal_council',
         postalCode: pin,
         isActive: true,
       });
-      setUlbCode('');
-      setUlbName('');
-      setUlbPostalCode('');
-      setToast({ title: 'ULB saved', tone: 'success' });
+      dispatch({ type: 'clearUlbForm' });
+      dispatch({ type: 'setToast', toast: { title: 'ULB saved', tone: 'success' } });
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
     } finally {
-      setBusy(false);
+      dispatch({ type: 'setBusy', busy: false });
     }
   };
 
   const onAddWard = async () => {
-    if (!wardMunicipalityId) {
-      setToast({ title: 'Select a ULB for the ward', tone: 'danger' });
+    if (!state.wardMunicipalityId) {
+      dispatch({ type: 'setToast', toast: { title: 'Select a ULB for the ward', tone: 'danger' } });
       return;
     }
-    const trimmedNo = wardNo.trim();
-    const trimmedName = wardName.trim();
+    const trimmedNo = state.wardNo.trim();
+    const trimmedName = state.wardName.trim();
     if (!trimmedNo) {
-      setToast({ title: 'Ward number is required', tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: 'Ward number is required', tone: 'danger' } });
       return;
     }
     if (!trimmedName) {
-      setToast({ title: 'Ward name is required', tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: 'Ward name is required', tone: 'danger' } });
       return;
     }
-    setBusy(true);
+    dispatch({ type: 'setBusy', busy: true });
     try {
-      const trimmedCode = wardCode.trim();
+      const trimmedCode = state.wardCode.trim();
       await upsertWard({
-        municipalityId: wardMunicipalityId as Id<'municipalities'>,
+        municipalityId: state.wardMunicipalityId as Id<'municipalities'>,
         wardNo: trimmedNo,
         ...(trimmedCode ? { wardCode: trimmedCode } : {}),
         name: trimmedName,
       });
-      setWardNo('');
-      setWardCode('');
-      setWardName('');
-      setToast({ title: 'Ward saved', tone: 'success' });
+      dispatch({ type: 'clearWardForm' });
+      dispatch({ type: 'setToast', toast: { title: 'Ward saved', tone: 'success' } });
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
     } finally {
-      setBusy(false);
+      dispatch({ type: 'setBusy', busy: false });
     }
   };
 
   const onAddAssessmentYear = async () => {
-    const value = yearValue.trim();
-    const label = yearLabel.trim() || value;
+    const value = state.yearValue.trim();
+    const label = state.yearLabel.trim() || value;
     if (!value) {
-      setToast({ title: 'Assessment year value is required (e.g. 2027-28)', tone: 'danger' });
+      dispatch({
+        type: 'setToast',
+        toast: { title: 'Assessment year value is required (e.g. 2027-28)', tone: 'danger' },
+      });
       return;
     }
-    setBusy(true);
+    dispatch({ type: 'setBusy', busy: true });
     try {
       await upsertAssessmentYear({ value, label });
-      setYearValue('');
-      setYearLabel('');
-      setToast({ title: 'Assessment year saved', tone: 'success' });
+      dispatch({ type: 'clearYearForm' });
+      dispatch({ type: 'setToast', toast: { title: 'Assessment year saved', tone: 'success' } });
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      dispatch({ type: 'setToast', toast: { title: toUserMessage(e), tone: 'danger' } });
     } finally {
-      setBusy(false);
+      dispatch({ type: 'setBusy', busy: false });
     }
   };
 
@@ -230,9 +323,9 @@ export default function AdminTenantsScreen() {
         subtitle="Districts, ULBs, wards, assessment years — field users see scoped data only"
         footer={
           <AppButton
-            label={busy ? 'Working…' : 'Seed UP reference data'}
+            label={state.busy ? 'Working…' : 'Seed UP reference data'}
             onPress={onSeed}
-            loading={busy}
+            loading={state.busy}
             variant="outline"
             size="sm"
             className="mt-3"
@@ -242,183 +335,57 @@ export default function AdminTenantsScreen() {
       />
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32 }}>
-        <SectionLabel>Assessment years</SectionLabel>
-        <AppCard padded className="mb-4">
-          <View style={{ gap: 10 }}>
-            {assessmentYears.length > 0 ? (
-              <View className="flex-row flex-wrap gap-1.5 mb-1">
-                {assessmentYears.map((y) => (
-                  <View key={y._id} className="px-2.5 py-1 rounded-full bg-brand-soft border border-brand/10">
-                    <Text className="text-[11px] font-medium text-brand">{y.label}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text className="text-caption text-ink-tertiary-light">
-                No assessment years yet. Add one or seed reference data.
-              </Text>
-            )}
-            <AppInput
-              label="Year value"
-              value={yearValue}
-              onChangeText={setYearValue}
-              placeholder="e.g. 2027-28"
-              autoCapitalize="none"
-            />
-            <AppInput
-              label="Display label"
-              value={yearLabel}
-              onChangeText={setYearLabel}
-              placeholder="Same as value if empty"
-              autoCapitalize="none"
-            />
-            <AppButton
-              label="Add assessment year"
-              onPress={onAddAssessmentYear}
-              loading={busy}
-              size="sm"
-              iconLeft="add-outline"
-            />
-          </View>
-        </AppCard>
-
-        <SectionLabel>Add district</SectionLabel>
-        <AppCard padded className="mb-4">
-          <View style={{ gap: 10 }}>
-            <AppInput label="Name" value={districtName} onChangeText={setDistrictName} placeholder="e.g. Agra" />
-            <AppButton label="Save district" onPress={onAddDistrict} loading={busy} size="sm" />
-          </View>
-        </AppCard>
-
-        <SectionLabel>Add ULB</SectionLabel>
-        <AppCard padded className="mb-4">
-          <View style={{ gap: 10 }}>
-            <AppDropdown
-              placeholder="District"
-              value={selectedDistrictId}
-              options={districtOptions}
-              onChange={setSelectedDistrictId}
-            />
-            <AppInput
-              label="ULB code"
-              value={ulbCode}
-              onChangeText={setUlbCode}
-              placeholder="e.g. AGR-MC-001"
-              autoCapitalize="characters"
-            />
-            <AppInput label="ULB name" value={ulbName} onChangeText={setUlbName} placeholder="Municipal Council name" />
-            <AppInput
-              label="PIN code (fixed for this ULB)"
-              value={ulbPostalCode}
-              onChangeText={(v) => setUlbPostalCode(v.replace(/\D/g, '').slice(0, 6))}
-              placeholder="e.g. 282001"
-              keyboardType="number-pad"
-              maxLength={6}
-              helperText="Surveyors cannot change this PIN — it is tied to the ULB name"
-            />
-            <AppDropdown
-              placeholder="Body type"
-              value={ulbBodyType}
-              options={[...BODY_TYPES]}
-              onChange={setUlbBodyType}
-            />
-            <AppButton label="Save ULB" onPress={onAddUlb} loading={busy} size="sm" />
-          </View>
-        </AppCard>
-
-        <SectionLabel>Add ward</SectionLabel>
-        <AppCard padded className="mb-4">
-          <View style={{ gap: 10 }}>
-            <AppDropdown
-              placeholder="ULB"
-              value={wardMunicipalityId}
-              options={ulbOptions}
-              onChange={setWardMunicipalityId}
-            />
-            <AppInput label="Ward number" value={wardNo} onChangeText={setWardNo} placeholder="e.g. 12" />
-            <AppInput
-              label="Ward code (optional)"
-              value={wardCode}
-              onChangeText={setWardCode}
-              placeholder="Auto: ULB code + ward no (e.g. AGR-MC-001-W12)"
-              autoCapitalize="characters"
-            />
-            <AppInput label="Ward name" value={wardName} onChangeText={setWardName} placeholder="e.g. Tajganj" />
-            <AppButton label="Save ward" onPress={onAddWard} loading={busy} size="sm" iconLeft="add-outline" />
-          </View>
-        </AppCard>
-
-        <SectionLabel>Districts & ULBs</SectionLabel>
-        {tree.length === 0 ? (
-          <EmptyState icon="map-outline" title="No districts" message="Seed reference data or add a district above." />
-        ) : (
-          tree.map((d) => {
-            const open = expandedDistrict === d._id;
-            return (
-              <AppCard key={d._id} padded={false} className="mb-2.5 overflow-hidden">
-                <Pressable
-                  onPress={() => setExpandedDistrict(open ? null : d._id)}
-                  className="flex-row items-center px-3.5 py-3"
-                >
-                  <View className="w-9 h-9 rounded-full bg-brand-soft items-center justify-center">
-                    <Ionicons name="map-outline" size={18} color="#003B8E" />
-                  </View>
-                  <View className="flex-1 ml-3">
-                    <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
-                      {d.name}
-                    </Text>
-                    <Text className="text-caption text-ink-tertiary-light">
-                      {d.code} · {d.stateName}
-                    </Text>
-                  </View>
-                  <Tag label={`${d.ulbs.length} ULBs`} tone={d.isActive === false ? 'neutral' : 'brand'} />
-                  <Ionicons
-                    name={open ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color="#9AA3AF"
-                    style={{ marginLeft: 8 }}
-                  />
-                </Pressable>
-                {open ? (
-                  <View className="px-3.5 pb-3 border-t border-line-subtle">
-                    {d.ulbs.length === 0 ? (
-                      <Text className="text-caption text-ink-tertiary-light py-2">No ULBs in this district</Text>
-                    ) : (
-                      d.ulbs.map((u) => (
-                        <View key={u._id} className="py-2 border-b border-line-subtle last:border-b-0">
-                          <Text className="text-body text-ink-primary-light dark:text-ink-primary-dark">{u.name}</Text>
-                          <Text className="text-helper text-ink-tertiary-light mt-0.5">
-                            {u.code} · {humanizeUlbBodyType(u.bodyType)}
-                            {u.postalCode ? ` · PIN ${u.postalCode}` : ' · PIN not set'}
-                            {' · '}
-                            {u.wards.length} wards
-                          </Text>
-                          {u.wards.length > 0 ? (
-                            <View className="flex-row flex-wrap gap-1.5 mt-2">
-                              {u.wards.map((w) => (
-                                <View
-                                  key={w._id}
-                                  className="px-2 py-0.5 rounded-full bg-page-light dark:bg-page-dark border border-line-subtle"
-                                >
-                                  <Text className="text-[10px] text-ink-secondary-light">
-                                    {w.wardCode ?? w.wardNo} · {w.name}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          ) : null}
-                        </View>
-                      ))
-                    )}
-                  </View>
-                ) : null}
-              </AppCard>
-            );
-          })
-        )}
+        <AssessmentYearsSection
+          years={assessmentYears}
+          yearValue={state.yearValue}
+          yearLabel={state.yearLabel}
+          busy={state.busy}
+          onYearValueChange={(v) => dispatch({ type: 'setYearValue', value: v })}
+          onYearLabelChange={(v) => dispatch({ type: 'setYearLabel', value: v })}
+          onAdd={onAddAssessmentYear}
+        />
+        <AddDistrictSection
+          districtName={state.districtName}
+          busy={state.busy}
+          onDistrictNameChange={(v) => dispatch({ type: 'setDistrictName', value: v })}
+          onAdd={onAddDistrict}
+        />
+        <AddUlbSection
+          selectedDistrictId={state.selectedDistrictId}
+          ulbCode={state.ulbCode}
+          ulbName={state.ulbName}
+          ulbPostalCode={state.ulbPostalCode}
+          ulbBodyType={state.ulbBodyType}
+          districtOptions={districtOptions}
+          busy={state.busy}
+          onDistrictChange={(v) => dispatch({ type: 'setSelectedDistrictId', value: v })}
+          onUlbCodeChange={(v) => dispatch({ type: 'setUlbCode', value: v })}
+          onUlbNameChange={(v) => dispatch({ type: 'setUlbName', value: v })}
+          onUlbPostalCodeChange={(v) => dispatch({ type: 'setUlbPostalCode', value: v })}
+          onUlbBodyTypeChange={(v) => dispatch({ type: 'setUlbBodyType', value: v })}
+          onAdd={onAddUlb}
+        />
+        <AddWardSection
+          wardMunicipalityId={state.wardMunicipalityId}
+          wardNo={state.wardNo}
+          wardCode={state.wardCode}
+          wardName={state.wardName}
+          ulbOptions={ulbOptions}
+          busy={state.busy}
+          onMunicipalityChange={(v) => dispatch({ type: 'setWardMunicipalityId', value: v })}
+          onWardNoChange={(v) => dispatch({ type: 'setWardNo', value: v })}
+          onWardCodeChange={(v) => dispatch({ type: 'setWardCode', value: v })}
+          onWardNameChange={(v) => dispatch({ type: 'setWardName', value: v })}
+          onAdd={onAddWard}
+        />
+        <DistrictTreeSection
+          tree={tree}
+          expandedDistrict={state.expandedDistrict}
+          onToggleDistrict={(districtId) => dispatch({ type: 'toggleDistrict', districtId })}
+        />
       </ScrollView>
 
-      {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}
+      {state.toast ? <Toast visible title={state.toast.title} tone={state.toast.tone} onHide={hideToast} /> : null}
     </View>
   );
 }

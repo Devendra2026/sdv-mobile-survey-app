@@ -10,15 +10,64 @@
 import { AppButton, AppInput, RadioGroup } from '@/components';
 import { AuthHero } from '@/components/auth/auth-hero';
 import { clerkErrorMessage } from '@/components/auth/field-error';
+import { OAuthButtons } from '@/components/auth/oauth-buttons';
 import { retryConvexAuth } from '@/hooks/use-auth-for-convex';
 import { useSignUp } from '@clerk/expo';
 import { Link, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 type Stage = 'details' | 'verify';
 type RequestedRole = 'surveyor' | 'supervisor';
+
+type SignUpState = {
+  stage: Stage;
+  name: string;
+  email: string;
+  password: string;
+  showPassword: boolean;
+  requestedRole: RequestedRole;
+  code: string;
+  loading: boolean;
+  error: string | null;
+};
+
+type SignUpAction =
+  | { type: 'patch'; patch: Partial<SignUpState> }
+  | { type: 'request_start' }
+  | { type: 'request_end' }
+  | { type: 'set_error'; error: string }
+  | { type: 'toggle_show_password' };
+
+const initialSignUpState: SignUpState = {
+  stage: 'details',
+  name: '',
+  email: '',
+  password: '',
+  showPassword: false,
+  requestedRole: 'surveyor',
+  code: '',
+  loading: false,
+  error: null,
+};
+
+function signUpReducer(state: SignUpState, action: SignUpAction): SignUpState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.patch };
+    case 'request_start':
+      return { ...state, error: null, loading: true };
+    case 'request_end':
+      return { ...state, loading: false };
+    case 'set_error':
+      return { ...state, error: action.error, loading: false };
+    case 'toggle_show_password':
+      return { ...state, showPassword: !state.showPassword };
+    default:
+      return state;
+  }
+}
 
 function splitName(full: string): { firstName: string; lastName: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -31,22 +80,12 @@ function splitName(full: string): { firstName: string; lastName: string } {
 export default function SignUpScreen() {
   const { signUp, fetchStatus } = useSignUp();
   const router = useRouter();
-
-  const [stage, setStage] = useState<Stage>('details');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [requestedRole, setRequestedRole] = useState<RequestedRole>('surveyor');
-  const [code, setCode] = useState('');
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(signUpReducer, initialSignUpState);
+  const { stage, name, email, password, showPassword, requestedRole, code, loading, error } = state;
 
   const startSignUp = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request_start' });
     try {
       const { firstName, lastName } = splitName(name);
       const { error: passwordError } = await signUp.password({
@@ -57,19 +96,19 @@ export default function SignUpScreen() {
         unsafeMetadata: { requestedRole },
       });
       if (passwordError) {
-        setError(clerkErrorMessage(passwordError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(passwordError) });
         return;
       }
 
       if (signUp.isTransferable) {
-        setError('An account with this email already exists. Sign in instead.');
+        dispatch({ type: 'set_error', error: 'An account with this email already exists. Sign in instead.' });
         return;
       }
 
       if (signUp.status === 'complete') {
         const { error: finalizeError } = await signUp.finalize();
         if (finalizeError) {
-          setError(clerkErrorMessage(finalizeError));
+          dispatch({ type: 'set_error', error: clerkErrorMessage(finalizeError) });
         } else {
           retryConvexAuth({ resetPhase: true });
         }
@@ -78,48 +117,47 @@ export default function SignUpScreen() {
 
       const { error: sendError } = await signUp.verifications.sendEmailCode();
       if (sendError) {
-        setError(clerkErrorMessage(sendError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(sendError) });
         return;
       }
 
-      setStage('verify');
+      dispatch({ type: 'patch', patch: { stage: 'verify' } });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request_end' });
     }
   };
 
   const verify = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request_start' });
     try {
       const { error: verifyError } = await signUp.verifications.verifyEmailCode({ code });
       if (verifyError) {
-        setError(clerkErrorMessage(verifyError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(verifyError) });
         return;
       }
 
       if (signUp.status !== 'complete') {
-        setError('Verification incomplete. Try again.');
+        dispatch({ type: 'set_error', error: 'Verification incomplete. Try again.' });
         return;
       }
 
       const { error: finalizeError } = await signUp.finalize();
       if (finalizeError) {
-        setError(clerkErrorMessage(finalizeError));
+        dispatch({ type: 'set_error', error: clerkErrorMessage(finalizeError) });
       } else {
         retryConvexAuth({ resetPhase: true });
       }
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request_end' });
     }
   };
 
   const resendCode = async () => {
     if (fetchStatus === 'fetching') return;
-    setError(null);
+    dispatch({ type: 'patch', patch: { error: null } });
     const { error: sendError } = await signUp.verifications.sendEmailCode();
-    if (sendError) setError(clerkErrorMessage(sendError));
+    if (sendError) dispatch({ type: 'set_error', error: clerkErrorMessage(sendError) });
   };
 
   const canStart =
@@ -151,7 +189,7 @@ export default function SignUpScreen() {
                 label="Full name"
                 required
                 value={name}
-                onChangeText={setName}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { name: v } })}
                 placeholder="Rajesh Kumar"
                 iconLeft="person-outline"
                 containerClassName="mb-3.5"
@@ -161,7 +199,7 @@ export default function SignUpScreen() {
                 label="Work email"
                 required
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { email: v } })}
                 placeholder="surveyor@ulb.gov.in"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -174,12 +212,12 @@ export default function SignUpScreen() {
                 label="Password"
                 required
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { password: v } })}
                 secureTextEntry={!showPassword}
                 helperText="At least 8 characters"
                 iconLeft="lock-closed-outline"
                 iconRight={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                onPressRightIcon={() => setShowPassword((v) => !v)}
+                onPressRightIcon={() => dispatch({ type: 'toggle_show_password' })}
                 containerClassName="mb-5"
               />
 
@@ -193,7 +231,7 @@ export default function SignUpScreen() {
                     { value: 'supervisor', label: 'Supervisor', helper: 'Review and approve surveys (limited access)' },
                   ]}
                   value={requestedRole}
-                  onChange={setRequestedRole}
+                  onChange={(v) => dispatch({ type: 'patch', patch: { requestedRole: v } })}
                 />
               </View>
 
@@ -206,6 +244,8 @@ export default function SignUpScreen() {
                 disabled={!canStart}
                 fullWidth
               />
+
+              <OAuthButtons />
 
               <View className="flex-row justify-center items-center mt-6">
                 <Text className="text-caption text-ink-tertiary-light">Already have an account? </Text>
@@ -230,7 +270,7 @@ export default function SignUpScreen() {
                 label="Verification code"
                 required
                 value={code}
-                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+                onChangeText={(v) => dispatch({ type: 'patch', patch: { code: v.replace(/\D/g, '').slice(0, 6) } })}
                 placeholder="6-digit code"
                 keyboardType="number-pad"
                 iconLeft="key-outline"

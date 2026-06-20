@@ -1,8 +1,8 @@
 /** Client-side taxation step helpers (mirrors convex/taxationMasters rules). */
 
-export const RETIRED_PROPERTY_USE_VALUES = ['agricultural_land'] as const;
+const RETIRED_PROPERTY_USE_VALUES = ['agricultural_land'] as const;
 
-export const PROPERTY_USES_REQUIRING_SUBCATEGORY = [
+const PROPERTY_USES_REQUIRING_SUBCATEGORY = [
   'residential',
   'commercial',
   'open_land',

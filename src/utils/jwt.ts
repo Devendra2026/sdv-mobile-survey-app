@@ -5,7 +5,7 @@ export function audIncludesConvex(aud: unknown): boolean {
   return false;
 }
 
-export function sessionClaimsHaveConvexAud(claims: Record<string, unknown> | null | undefined): boolean {
+function sessionClaimsHaveConvexAud(claims: Record<string, unknown> | null | undefined): boolean {
   return audIncludesConvex(claims?.aud);
 }
 

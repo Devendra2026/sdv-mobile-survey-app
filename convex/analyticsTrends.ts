@@ -20,36 +20,13 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
-import { requireRole, requireUser } from "./helpers";
-import { resolveTenantScope, tenantMunicipalityIds } from "./tenancy";
+import { requireCapability } from "./capabilities";
+import { collectSurveysInFieldScope } from "./fieldAccess";
+import { requireUser } from "./helpers";
+import { resolveTenantScope } from "./tenancy";
 
-/** Load every survey row visible to the caller within tenant scope.
- *  Mirrors the private loader inside analytics.ts (kept local to avoid
- *  editing the source-of-truth file). */
 async function loadScopedSurveys(ctx: QueryCtx, me: Doc<"users">): Promise<Doc<"surveys">[]> {
-  const scope = await resolveTenantScope(ctx, me);
-  const muniIds = tenantMunicipalityIds(scope);
-
-  if (me.role === "admin") {
-    const rows = await ctx.db.query("surveys").collect();
-    return rows.filter((r) => muniIds.has(r.municipalityId));
-  }
-  if (me.role === "supervisor") {
-    if (scope.districts.length === 1) {
-      const rows = await ctx.db
-        .query("surveys")
-        .withIndex("by_district", (q) => q.eq("districtId", scope.districts[0]!._id))
-        .collect();
-      return rows.filter((r) => muniIds.has(r.municipalityId));
-    }
-    if (me.municipalityId) {
-      return await ctx.db
-        .query("surveys")
-        .withIndex("by_municipality_status", (q) => q.eq("municipalityId", me.municipalityId!))
-        .collect();
-    }
-  }
-  return [];
+  return collectSurveysInFieldScope(ctx, me);
 }
 
 function dayKey(ms: number): string {
@@ -68,6 +45,7 @@ export const dailyTrend = query({
     days: v.optional(v.number()),
     districtId: v.optional(v.id("districts")),
     municipalityId: v.optional(v.id("municipalities")),
+    nowMs: v.optional(v.number()),
   },
   returns: v.array(
     v.object({
@@ -80,14 +58,18 @@ export const dailyTrend = query({
   ),
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
-    requireRole(me, "admin", "supervisor");
+    await requireCapability(ctx, me, "analytics.view");
     const days = Math.min(Math.max(args.days ?? 30, 1), 180);
 
     let rows = await loadScopedSurveys(ctx, me);
     if (args.districtId) rows = rows.filter((r) => r.districtId === args.districtId);
     if (args.municipalityId) rows = rows.filter((r) => r.municipalityId === args.municipalityId);
 
-    const start = new Date();
+    if (args.nowMs === undefined) {
+      return [];
+    }
+
+    const start = new Date(args.nowMs);
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - (days - 1));
     const startMs = start.getTime();
@@ -134,7 +116,7 @@ export const wardCoverage = query({
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
-    requireRole(me, "admin", "supervisor");
+    await requireCapability(ctx, me, "analytics.view");
 
     let rows = await loadScopedSurveys(ctx, me);
     if (args.districtId) rows = rows.filter((r) => r.districtId === args.districtId);

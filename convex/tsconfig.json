@@ -8,8 +8,11 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ES2021"],
-    "types": ["node"]
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "paths": {
+      "@/*": ["../*"]
+    }
   },
   "include": ["./**/*"],
   "exclude": ["./_generated"]

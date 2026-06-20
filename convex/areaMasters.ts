@@ -161,82 +161,101 @@ export function validateAreaSection(input: {
   if (floorRows.length > 0 && builtUp <= 0 && openLand <= 0) {
     details.floors = ["Each floor must have area greater than 0"];
   }
-  if (floorRows.length > 0 && builtUp <= 0 && openLand > 0) {
-    details.floors = ["Add at least one built-up floor row (ground floor, first floor, etc.)"];
-  }
   return details;
+}
+
+/** When plot was not saved on the survey row, infer it from floor rows (open land / mobile sync). */
+export function derivePlotSqftForSubmit(
+  plotSqft: number | undefined,
+  floors: { floorName: string; areaSqft: number }[],
+): number {
+  if (typeof plotSqft === "number" && plotSqft > 0) return plotSqft;
+  const openLand = openLandSqftFromFloors(floors);
+  const builtUp = builtUpSqftFromFloors(floors);
+  if (openLand > 0 && builtUp <= 0) return openLand;
+  if (builtUp > 0) return Math.max(builtUp, openLand);
+  return 0;
 }
 
 type SeedRow = MasterOption & { position: number };
 
 async function upsertMasterCategory(ctx: MutationCtx, category: string, rows: SeedRow[]) {
-  for (const row of rows) {
-    const existing = await ctx.db
-      .query("masters")
-      .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
-    } else {
-      await ctx.db.insert("masters", {
-        category,
-        value: row.value,
-        label: row.label,
-        position: row.position,
-        isActive: true,
-      });
-    }
-  }
+  await Promise.all(
+    rows.map(async (row) => {
+      const existing = await ctx.db
+        .query("masters")
+        .withIndex("by_category_value", (q) => q.eq("category", category).eq("value", row.value))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, { label: row.label, position: row.position, isActive: true });
+      } else {
+        await ctx.db.insert("masters", {
+          category,
+          value: row.value,
+          label: row.label,
+          position: row.position,
+          isActive: true,
+        });
+      }
+    }),
+  );
 }
 
 /** Idempotent seed for area-detail dropdown masters. */
 export async function seedAreaMasters(ctx: MutationCtx) {
-  await upsertMasterCategory(
-    ctx,
-    "floor_name",
-    FLOOR_NAMES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "usage_factor",
-    FLOOR_USAGE_FACTORS.map((o, i) => ({ ...o, position: i + 1 })),
-  );
-  await upsertMasterCategory(
-    ctx,
-    "floor_usage_type",
-    FLOOR_USAGE_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
-  );
+  await Promise.all([
+    upsertMasterCategory(
+      ctx,
+      "floor_name",
+      FLOOR_NAMES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "usage_factor",
+      FLOOR_USAGE_FACTORS.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "floor_usage_type",
+      FLOOR_USAGE_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+    upsertMasterCategory(
+      ctx,
+      "construction_type",
+      CONSTRUCTION_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+    ),
+  ]);
   const legacyUsageTypeRows = (await ctx.db.query("masters").collect()).filter((m) => m.category === "usage_type");
-  for (const row of legacyUsageTypeRows) {
-    if (row.isActive) await ctx.db.patch(row._id, { isActive: false });
-  }
-  await upsertMasterCategory(
-    ctx,
-    "construction_type",
-    CONSTRUCTION_TYPES.map((o, i) => ({ ...o, position: i + 1 })),
+  await Promise.all(
+    legacyUsageTypeRows.map(async (row) => {
+      if (row.isActive) await ctx.db.patch(row._id, { isActive: false });
+    }),
   );
   await migrateFloorUsageFields(ctx);
 }
 
 /** Backfill `usageFactor` on floor rows created before the field existed. */
 export async function migrateFloorUsageFields(ctx: MutationCtx) {
-  for (const row of await ctx.db.query("floors").collect()) {
-    const normalized = normalizeFloorFields({
-      usageFactor: row.usageFactor,
-      usageType: row.usageType,
-    });
-    const nextOccupied = usageTypeToOccupied(normalized.usageType);
-    if (
-      row.usageFactor === normalized.usageFactor &&
-      row.usageType === normalized.usageType &&
-      row.isOccupied === nextOccupied
-    ) {
-      continue;
-    }
-    await ctx.db.patch(row._id, {
-      usageFactor: normalized.usageFactor || undefined,
-      usageType: normalized.usageType,
-      isOccupied: nextOccupied,
-    });
-  }
+  const rows = await ctx.db.query("floors").collect();
+  await Promise.all(
+    rows.map(async (row) => {
+      const normalized = normalizeFloorFields({
+        usageFactor: row.usageFactor,
+        usageType: row.usageType,
+      });
+      const nextOccupied = usageTypeToOccupied(normalized.usageType);
+      if (
+        row.usageFactor === normalized.usageFactor &&
+        row.usageType === normalized.usageType &&
+        row.isOccupied === nextOccupied
+      ) {
+        return;
+      }
+      await ctx.db.patch(row._id, {
+        usageFactor: normalized.usageFactor || undefined,
+        usageType: normalized.usageType,
+        isOccupied: nextOccupied,
+      });
+    }),
+  );
 }

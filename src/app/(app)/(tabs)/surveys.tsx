@@ -2,14 +2,15 @@
  * Surveys list with status filter and cursor pagination.
  * Reactive: any survey created or updated appears without refresh.
  */
-import { EmptyState, Spinner, SurveyCard } from '@/components';
+import { EmptyState, ListSkeleton, SurveyCard } from '@/components';
 import { api } from '@/convex/_generated/api';
 import { surveyOwnerListLabel } from '@/utils/format';
-import { flatListProps, useTabScreenPadding } from '@/utils/ui-layout';
+import { flatListProps } from '@/utils/scroll-props';
+import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { usePaginatedQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, type ListRenderItemInfo, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type StatusFilter = 'all' | 'draft' | 'submitted' | 'approved' | 'rejected';
@@ -24,9 +25,10 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
 
 const PAGE_SIZE = 20;
 
+const ListSeparator = () => <View className="h-2" />;
+
 export default function SurveysScreen() {
   const router = useRouter();
-  const tabPad = useTabScreenPadding();
   const [filter, setFilter] = useState<StatusFilter>('all');
 
   const queryArgs = useMemo(
@@ -43,6 +45,36 @@ export default function SurveysScreen() {
 
   const isLoading = status === 'LoadingFirstPage';
   const isLoadingMore = status === 'LoadingMore';
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<(typeof results)[number]>) => (
+      <SurveyCard
+        parcelNo={item.parcelNo}
+        unitNo={item.unitNo}
+        ownerName={surveyOwnerListLabel(item.owners, item.respondentName)}
+        wardNo={item.wardNo}
+        status={item.status}
+        qcStatus={item.qcStatus}
+        updatedAt={item._creationTime}
+        onPress={() => router.push({ pathname: '/(app)/survey/[id]', params: { id: item._id } })}
+      />
+    ),
+    [router],
+  );
+
+  const listFooter = useCallback(
+    () => (
+      <>
+        {isLoadingMore ? (
+          <View className="py-4 items-center">
+            <ActivityIndicator />
+          </View>
+        ) : null}
+        <TabScreenBottomSpacer />
+      </>
+    ),
+    [isLoadingMore],
+  );
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
@@ -72,7 +104,7 @@ export default function SurveysScreen() {
       </SafeAreaView>
 
       {isLoading ? (
-        <Spinner label="Loading…" />
+        <ListSkeleton count={6} />
       ) : results.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
@@ -83,32 +115,15 @@ export default function SurveysScreen() {
         <FlatList
           data={results}
           keyExtractor={(s) => s._id}
-          contentContainerStyle={{ padding: 14, paddingBottom: tabPad }}
+          contentContainerStyle={{ padding: 14 }}
           {...flatListProps}
-          ItemSeparatorComponent={() => <View className="h-2" />}
+          ItemSeparatorComponent={ListSeparator}
           onEndReached={() => {
             if (status === 'CanLoadMore') loadMore(PAGE_SIZE);
           }}
           onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View className="py-4 items-center">
-                <ActivityIndicator />
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <SurveyCard
-              parcelNo={item.parcelNo}
-              unitNo={item.unitNo}
-              ownerName={surveyOwnerListLabel(item.owners, item.respondentName)}
-              wardNo={item.wardNo}
-              status={item.status}
-              qcStatus={item.qcStatus}
-              updatedAt={item._creationTime}
-              onPress={() => router.push({ pathname: '/(app)/survey/[id]', params: { id: item._id } })}
-            />
-          )}
+          ListFooterComponent={listFooter}
+          renderItem={renderItem}
         />
       )}
     </View>

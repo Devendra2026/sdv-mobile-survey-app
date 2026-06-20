@@ -1,15 +1,15 @@
 import { AppButton, AppCard, Avatar, ListRow, SectionLabel, Spinner, Tag } from '@/components';
 import { api } from '@/convex/_generated/api';
+import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
 import { humanizeRole } from '@/utils/format';
-import { scrollViewProps, useTabScreenPadding } from '@/utils/ui-layout';
+import { scrollViewProps } from '@/utils/scroll-props';
+import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { useAuth } from '@clerk/expo';
-import { useQuery } from 'convex/react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
-  const tabPad = useTabScreenPadding();
-  const me = useQuery(api.users.currentUser, {});
+  const me = useConvexReadyQuery(api.users.currentUser);
   const { signOut } = useAuth();
 
   if (me === undefined) return <Spinner label="Loading…" />;
@@ -36,7 +36,7 @@ export default function ProfileScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: tabPad }} {...scrollViewProps}>
+      <ScrollView contentContainerStyle={{ padding: 14 }} {...scrollViewProps}>
         <SectionLabel>Assignment</SectionLabel>
         <AppCard padded={false} className="mb-4">
           <ListRow
@@ -78,6 +78,7 @@ export default function ProfileScreen() {
         </AppCard>
 
         <AppButton label="Sign out" variant="outline" iconLeft="log-out-outline" onPress={confirmSignOut} fullWidth />
+        <TabScreenBottomSpacer />
       </ScrollView>
     </View>
   );

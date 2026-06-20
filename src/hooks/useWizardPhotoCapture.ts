@@ -3,6 +3,7 @@
  */
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { useNetworkStatus } from '@/hooks/use-network-status';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import {
   clearPendingSurveyPhotoSlot,
@@ -13,6 +14,7 @@ import {
   uploadSurveyPhotoBytes,
 } from '@/utils/captureSurveyPhoto';
 import { toPhotoErrorMessage } from '@/utils/convex-storage';
+import { dequeuePhotoUpload, enqueuePhotoUpload, readPhotoUploadQueue } from '@/utils/photoUploadQueue';
 import {
   filterSurveyPhotos,
   REQUIRED_SURVEY_PHOTO_SLOTS,
@@ -21,7 +23,7 @@ import {
   type WizardPhotoEntry,
 } from '@/utils/surveyPhotos';
 import { useMutation } from 'convex/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
 type PickedPhoto = Extract<Awaited<ReturnType<typeof pickSurveyPhotoFromCamera>>, { canceled: false }>;
@@ -30,11 +32,14 @@ export function useWizardPhotoCapture({
   draft,
   update,
   serverSurveyId,
+  localId,
 }: {
   draft: WizardDraft;
   update: (patch: Partial<WizardDraft>) => Promise<void>;
   serverSurveyId?: Id<'surveys'>;
+  localId: string;
 }) {
+  const { isOnline } = useNetworkStatus();
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const releaseStorage = useMutation(api.photos.releaseStorage);
   const linkPhoto = useMutation(api.photos.linkPhoto);
@@ -46,7 +51,7 @@ export function useWizardPhotoCapture({
   const pendingRecoveryDone = useRef(false);
 
   const surveyPhotos = filterSurveyPhotos(draft.photos);
-  const photoBySlot = new Map(surveyPhotos.map((p) => [p.slot, p]));
+  const photoBySlot = useMemo(() => new Map(surveyPhotos.map((p) => [p.slot, p])), [surveyPhotos]);
 
   const syncPhotoToServer = useCallback(
     async (photo: WizardPhotoEntry & { slot: SurveyPhotoSlot }) => {
@@ -81,15 +86,18 @@ export function useWizardPhotoCapture({
       setUploadingSlot(slot);
 
       try {
-        const uploadUrl = await generateUploadUrl({});
+        if (!serverSurveyId) {
+          throw new Error('Save your draft to the cloud before capturing photos.');
+        }
+        const uploadUrl = await generateUploadUrl({ surveyId: serverSurveyId });
         const { storageId, sizeKb } = await uploadSurveyPhotoBytes(uploadUrl, picked.jpegBytes);
 
         const entry: WizardPhotoEntry & { slot: SurveyPhotoSlot } = {
           slot,
           storageId,
           sizeKb,
-          width: picked.width,
-          height: picked.height,
+          width: picked.width ?? 0,
+          height: picked.height ?? 0,
           capturedAt: Date.now(),
         };
 
@@ -100,7 +108,20 @@ export function useWizardPhotoCapture({
         const next = surveyPhotos.filter((p) => p.slot !== slot);
         next.push(entry);
         await update({ photos: next });
-        await syncPhotoToServer(entry);
+        if (isOnline) {
+          await syncPhotoToServer(entry);
+        } else {
+          await enqueuePhotoUpload({
+            localId,
+            slot,
+            storageId: entry.storageId,
+            sizeKb: entry.sizeKb,
+            width: entry.width ?? 0,
+            height: entry.height ?? 0,
+            capturedAt: entry.capturedAt,
+            previewUri: picked.uri,
+          });
+        }
 
         setPreviewBySlot((prev) => ({ ...prev, [slot]: picked.uri }));
         return { ok: true as const, label: SURVEY_PHOTO_SLOT_LABEL[slot] };
@@ -108,14 +129,59 @@ export function useWizardPhotoCapture({
         setUploadingSlot(null);
       }
     },
-    [generateUploadUrl, photoBySlot, releasePhoto, surveyPhotos, syncPhotoToServer, update],
+    [
+      generateUploadUrl,
+      isOnline,
+      localId,
+      photoBySlot,
+      releasePhoto,
+      serverSurveyId,
+      surveyPhotos,
+      syncPhotoToServer,
+      update,
+    ],
   );
+
+  useEffect(() => {
+    if (!isOnline || !serverSurveyId) return;
+    void (async () => {
+      const queue = await readPhotoUploadQueue();
+      const pending = queue.filter((e) => e.localId === localId);
+
+      const drain = async (index: number): Promise<void> => {
+        const item = pending[index];
+        if (!item) return;
+        try {
+          await linkPhoto({
+            surveyId: serverSurveyId,
+            slot: item.slot,
+            storageId: item.storageId as Id<'_storage'>,
+            sizeKb: item.sizeKb,
+            width: item.width,
+            height: item.height,
+            capturedAt: item.capturedAt,
+          });
+        } catch {
+          return;
+        }
+        try {
+          await dequeuePhotoUpload(localId, item.slot);
+        } catch {
+          return;
+        }
+        await drain(index + 1);
+      };
+
+      await drain(0);
+    })();
+  }, [isOnline, linkPhoto, localId, serverSurveyId]);
 
   const capture = useCallback(
     async (slot: SurveyPhotoSlot) => {
       if (captureInFlight.current) return;
       captureInFlight.current = true;
       try {
+        // react-doctor-disable-next-line react-doctor/async-parallel — camera flow must set pending slot before launch and clear after return
         await setPendingSurveyPhotoSlot(slot);
         const picked = await pickSurveyPhotoFromCamera();
         await clearPendingSurveyPhotoSlot();
@@ -146,10 +212,10 @@ export function useWizardPhotoCapture({
       const picked = await recoverPendingSurveyPhotoPick();
       if (cancelled || !picked || picked.canceled) return;
 
+      if (captureInFlight.current) return;
+
       pendingRecoveryDone.current = true;
       await clearPendingSurveyPhotoSlot();
-
-      if (captureInFlight.current) return;
       captureInFlight.current = true;
       try {
         await applyPickedPhoto(slot, picked);

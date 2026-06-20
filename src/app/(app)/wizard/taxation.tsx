@@ -2,15 +2,14 @@
  * Step 4 — Taxation parameters (ownership, property use, road & site).
  */
 import { AppCard, AppDropdown, SectionLabel, Spinner } from '@/components';
-import { api } from '@/convex/_generated/api';
+import { WizardStepFrame } from '@/components/wizard';
+import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
 import {
   filterActivePropertyUses,
   propertyUseRequiresSubcategory,
   taxationSubcategoryFieldLabel,
 } from '@/utils/taxation';
-import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 
@@ -18,7 +17,7 @@ const FIELD_GAP = 16;
 
 export default function StepTaxation() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const masters = useQuery(api.masters.bundle, {});
+  const masters = useMastersBundle();
   if (!masters || !localId) return <Spinner label="Loading…" />;
 
   return (

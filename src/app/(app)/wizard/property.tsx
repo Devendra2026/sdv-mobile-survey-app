@@ -4,33 +4,32 @@
  * District, ULB, and assessment year are set on the survey start step.
  */
 import { AppCard, AppDropdown, AppInput, ChipSelector, SectionLabel, Spinner } from '@/components';
+import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatPropertyId } from '@/convex/propertyId';
-import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
+import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
+import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
-import { normalizeMastersBundle } from '@/utils/mastersBundle';
-import { useQuery } from 'convex/react';
+import type { MastersBundle } from '@/utils/mastersBundle';
+import { useApplyDraftPatch, wardAutoPatch } from '@/utils/wizard-draft-patch';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
 const convexIdEq = (a?: string | null, b?: string | null) => a != null && b != null && String(a) === String(b);
 
-type WardRow = ReturnType<typeof normalizeMastersBundle>['wards'][number];
+type WardRow = MastersBundle['wards'][number];
 
-function wardsForUlb(wards: WardRow[], ulb: ReturnType<typeof normalizeMastersBundle>['ulbs'][number]) {
+function wardsForUlb(wards: WardRow[], ulb: MastersBundle['ulbs'][number]) {
   return wards.filter((w) => convexIdEq(w.municipalityId, ulb._id) || w.municipalityCode === ulb.code);
 }
 
 export default function StepProperty() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const masters = useQuery(api.masters.bundle, {});
+  const bundle = useMastersBundle();
 
-  if (!masters || !localId) return <Spinner label="Loading…" />;
-
-  const bundle = normalizeMastersBundle(masters);
+  if (!bundle || !localId) return <Spinner label="Loading…" />;
 
   return (
     <WizardStepFrame
@@ -52,12 +51,11 @@ function PropertyFields({
 }: {
   draft: WizardDraft;
   update: (patch: Partial<WizardDraft>) => Promise<void>;
-  masters: ReturnType<typeof normalizeMastersBundle>;
+  masters: MastersBundle;
 }) {
-  const { convexReady } = useClerkConvexAuth();
-  const liveWards = useQuery(
+  const liveWards = useConvexReadyQuery(
     api.masters.wardsForMunicipality,
-    convexReady && draft.municipalityId ? { municipalityId: draft.municipalityId as Id<'municipalities'> } : 'skip',
+    draft.municipalityId ? { municipalityId: draft.municipalityId as Id<'municipalities'> } : 'skip',
   );
 
   const selectedUlb = masters.ulbs.find((u) => convexIdEq(u._id, draft.municipalityId));
@@ -70,31 +68,24 @@ function PropertyFields({
 
   const wardOptions = useMemo(
     () =>
-      wardsForSelectedUlb.map((w) => ({
+      wardsForSelectedUlb.map((w: WardRow) => ({
         value: w.wardNo,
         label: `${w.wardCode} · Ward ${w.wardNo} · ${w.name}`,
       })),
     [wardsForSelectedUlb],
   );
 
-  const selectedWard = wardsForSelectedUlb.find((w) => w.wardNo === draft.wardNo);
+  const selectedWard = wardsForSelectedUlb.find((w: WardRow) => w.wardNo === draft.wardNo);
   const wardLocked = wardOptions.length === 1;
   const previewPropertyId = formatPropertyId({
     ulbCode: selectedUlb?.code ?? '',
     wardNo: draft.wardNo ?? '',
     parcelNo: draft.parcelNo ?? '',
+    unitNo: draft.unitNo ?? '',
     propertyUse: draft.propertyUse ?? '',
   });
 
-  useEffect(() => {
-    if (!draft.municipalityId || liveWards === undefined) return;
-
-    let wardNo = draft.wardNo;
-    if (!wardNo && liveWards.length === 1) wardNo = liveWards[0]!.wardNo;
-    if (wardNo && !liveWards.some((w) => w.wardNo === wardNo)) wardNo = undefined;
-
-    if (wardNo !== draft.wardNo) void update({ wardNo });
-  }, [draft.municipalityId, draft.wardNo, liveWards, update]);
+  useApplyDraftPatch(update, wardAutoPatch(draft.municipalityId, draft.wardNo, liveWards));
 
   if (!draft.municipalityId) {
     return (

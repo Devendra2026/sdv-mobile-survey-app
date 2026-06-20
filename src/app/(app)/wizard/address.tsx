@@ -2,14 +2,14 @@
  * Step 3 — Postal address. District/city from tenant; PIN fixed per ULB.
  */
 import { AppCard, AppInput, ListRow, SectionLabel, Spinner } from '@/components';
+import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
-import { stepCompletion } from '@/hooks/useWizardDraft';
-import { WizardStepFrame } from '@/hooks/WizardStepFrame';
+import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
+import { addressAutoPatch, useApplyDraftPatch } from '@/utils/wizard-draft-patch';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
 import { View } from 'react-native';
 
 const convexIdEq = (a?: string | null, b?: string | null) => a != null && b != null && String(a) === String(b);
@@ -44,7 +44,7 @@ function AddressFields({
     city?: string;
     pinCode?: string;
   };
-  update: (patch: Record<string, unknown>) => void;
+  update: (patch: Partial<WizardDraft>) => Promise<void>;
 }) {
   const masters = useMastersBundle();
   const addressCtx = useQuery(
@@ -61,19 +61,7 @@ function AddressFields({
   const cityName = addressCtx?.cityName ?? selectedUlb?.name ?? '—';
   const fixedPin = addressCtx?.configuredPostalCode ?? selectedUlb?.postalCode ?? null;
 
-  useEffect(() => {
-    if (!cityName || cityName === '—') return;
-    if (draft.city !== cityName) {
-      void update({ city: cityName });
-    }
-  }, [cityName, draft.city, update]);
-
-  useEffect(() => {
-    if (!fixedPin) return;
-    if (draft.pinCode !== fixedPin) {
-      void update({ pinCode: fixedPin });
-    }
-  }, [fixedPin, draft.pinCode, update]);
+  useApplyDraftPatch(update, addressAutoPatch(draft, cityName, fixedPin));
 
   if (draft.municipalityId && addressCtx === undefined) {
     return <Spinner label="Loading address…" />;
