@@ -6,7 +6,7 @@ import { Spinner, Toast } from '@/components';
 import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
-import { draftToSaveDraftPayload, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
+import { draftToSaveDraftPayload, stepCompletion, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
 import {
   indicatorSteps,
   nextStep,
@@ -98,10 +98,13 @@ export function WizardStepFrame({
 
   const onPickStep = async (key: string) => {
     const step = WIZARD_STEPS.find((s) => s.key === key);
-    if (step) {
-      await update({ lastActiveStepKey: step.key });
-      router.replace({ pathname: step.route as never, params: { localId } });
+    if (!step) return;
+    if (step.key !== 'start' && !stepCompletion(draft).start) {
+      router.replace({ pathname: '/(app)/wizard/start', params: { localId } });
+      return;
     }
+    await update({ lastActiveStepKey: step.key });
+    router.replace({ pathname: step.route as never, params: { localId } });
   };
 
   return (

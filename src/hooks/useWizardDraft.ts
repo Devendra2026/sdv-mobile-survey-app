@@ -28,7 +28,7 @@ import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@
 import { surveyPhotosComplete } from '@/utils/surveyPhotos';
 import { taxationSubcategoryComplete } from '@/utils/taxation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { Id } from '../../convex/_generated/dataModel';
 import type { StepConfig } from './wizardSteps';
 
@@ -420,24 +420,61 @@ export async function listDrafts(): Promise<WizardDraft[]> {
  * Reactive draft hook. Reads the row from AsyncStorage; `update` patches
  * any subset of fields and re-persists synchronously.
  */
+type DraftStore = {
+  drafts: Record<string, WizardDraft>;
+  /** localId currently being loaded from AsyncStorage, if not yet cached. */
+  pendingId: string | null;
+};
+
+type DraftStoreAction =
+  | { type: 'loadStarted'; localId: string }
+  | { type: 'loadFinished'; localId: string; draft: WizardDraft }
+  | { type: 'loadFailed'; localId: string }
+  | { type: 'patch'; localId: string; patch: Partial<WizardDraft> };
+
+function draftStoreReducer(state: DraftStore, action: DraftStoreAction): DraftStore {
+  switch (action.type) {
+    case 'loadStarted':
+      if (state.drafts[action.localId]) return state;
+      return { ...state, pendingId: action.localId };
+    case 'loadFinished':
+      return {
+        drafts: { ...state.drafts, [action.localId]: action.draft },
+        pendingId: state.pendingId === action.localId ? null : state.pendingId,
+      };
+    case 'loadFailed':
+      return {
+        ...state,
+        pendingId: state.pendingId === action.localId ? null : state.pendingId,
+      };
+    case 'patch': {
+      const current = state.drafts[action.localId];
+      if (!current) return state;
+      const next = { ...current, ...action.patch, updatedAt: Date.now() };
+      void AsyncStorage.setItem(KEY(action.localId), JSON.stringify(next));
+      return { drafts: { ...state.drafts, [action.localId]: next }, pendingId: state.pendingId };
+    }
+    default:
+      return state;
+  }
+}
+
 export function useWizardDraft(localId: string | undefined) {
-  const [draft, setDraft] = useState<WizardDraft | null>(null);
-  const [loading, setLoading] = useState(Boolean(localId));
+  const [store, dispatch] = useReducer(draftStoreReducer, { drafts: {}, pendingId: null });
+  const draftsRef = useRef(store.drafts);
+  draftsRef.current = store.drafts;
 
   useEffect(() => {
-    if (!localId) {
-      setDraft(null);
-      setLoading(false);
-      return;
-    }
+    if (!localId || draftsRef.current[localId]) return;
 
-    setLoading(true);
     let alive = true;
+    dispatch({ type: 'loadStarted', localId });
+
     AsyncStorage.getItem(KEY(localId))
       .then(async (raw) => {
         if (!alive) return;
         if (raw) {
-          setDraft(parseStoredDraft(raw));
+          dispatch({ type: 'loadFinished', localId, draft: parseStoredDraft(raw) });
           return;
         }
         const empty: WizardDraft = {
@@ -450,22 +487,27 @@ export function useWizardDraft(localId: string | undefined) {
           owners: [newOwnerRow()],
         };
         await AsyncStorage.setItem(KEY(localId), JSON.stringify(empty));
-        setDraft(empty);
+        dispatch({ type: 'loadFinished', localId, draft: empty });
       })
-      .finally(() => alive && setLoading(false));
+      .catch(() => {
+        if (alive) dispatch({ type: 'loadFailed', localId });
+      });
+
     return () => {
       alive = false;
     };
   }, [localId]);
 
-  const update = useCallback(async (patch: Partial<WizardDraft>) => {
-    setDraft((current) => {
-      if (!current) return current;
-      const next = { ...current, ...patch, updatedAt: Date.now() };
-      void AsyncStorage.setItem(KEY(next.localId), JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  const draft = localId ? (store.drafts[localId] ?? null) : null;
+  const loading = Boolean(localId && !store.drafts[localId] && store.pendingId === localId);
+
+  const update = useCallback(
+    async (patch: Partial<WizardDraft>) => {
+      if (!localId) return;
+      dispatch({ type: 'patch', localId, patch });
+    },
+    [localId],
+  );
 
   return { draft: localId ? draft : null, loading: localId ? loading : false, update };
 }
