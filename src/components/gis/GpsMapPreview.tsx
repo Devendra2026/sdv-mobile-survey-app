@@ -1,47 +1,13 @@
 import { Banner } from '@/components';
+import { canRenderNativeMap, mapsPreviewUnavailableMessage } from '@/config/mapsEnv';
 import type { GpsCaptureInput } from '@/convex/lib/gpsValidation';
 import { formatGpsDisplay } from '@/utils/formatGps';
 import { isExpoGo } from '@/utils/gpsPolicy';
-import Constants from 'expo-constants';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { Linking, Platform, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 const REGION_DELTA = 0.0005;
-
-type MapsExtra = {
-  googleMapsApiKey?: string;
-  googleMapsAndroidKey?: string;
-  googleMapsIosKey?: string;
-};
-
-function resolveGoogleMapsKey(platform: 'android' | 'ios' | 'web'): string | undefined {
-  const extra = Constants.expoConfig?.extra as MapsExtra | undefined;
-  if (platform === 'android') {
-    return (
-      process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY ??
-      extra?.googleMapsAndroidKey ??
-      process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
-      extra?.googleMapsApiKey
-    );
-  }
-  if (platform === 'ios') {
-    return (
-      process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY ??
-      extra?.googleMapsIosKey ??
-      process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
-      extra?.googleMapsApiKey
-    );
-  }
-  return process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? extra?.googleMapsApiKey;
-}
-
-function canRenderNativeMap(): boolean {
-  if (isExpoGo()) return true;
-  const androidMapsKey = resolveGoogleMapsKey('android');
-  const iosMapsKey = resolveGoogleMapsKey('ios');
-  return Platform.OS === 'android' ? Boolean(androidMapsKey) : Boolean(iosMapsKey);
-}
 
 type GpsMapPreviewProps = {
   coordinate: Pick<GpsCaptureInput, 'latitude' | 'longitude' | 'accuracyMeters' | 'capturedAt'>;
@@ -81,7 +47,7 @@ function GpsMapPreviewInner({ coordinate, interactive = true, height = 220 }: Gp
           tone="info"
           icon="map-outline"
           title="Map preview unavailable"
-          message="Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY (or platform-specific keys) in .env.local, then restart Expo. Coordinates below match the saved pin."
+          message={mapsPreviewUnavailableMessage()}
         />
         <Text className="text-body font-mono text-ink-primary-light text-center">{formatGpsDisplay(coordinate)}</Text>
         <Text className="text-caption text-brand text-center" onPress={openExternal}>

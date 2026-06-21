@@ -4,11 +4,12 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
 
 ## Shared backend (Clerk + Convex)
 
-| Setting               | Mobile (EAS / `.env.local`)         | Web (`sdv-front-new-app/.env.local`) | Convex deployment                            |
-| --------------------- | ----------------------------------- | ------------------------------------ | -------------------------------------------- |
-| Convex URL            | `EXPO_PUBLIC_CONVEX_URL`            | `NEXT_PUBLIC_CONVEX_URL`             | same `*.convex.cloud`                        |
-| Clerk publishable key | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`  | **must be the same Clerk app**               |
-| Clerk JWT issuer      | (from key)                          | `CLERK_JWT_ISSUER_DOMAIN`            | `npx convex env get CLERK_JWT_ISSUER_DOMAIN` |
+| Setting               | Mobile (EAS / `.env.local`)           | Web (`sdv-front-new-app/.env.local`) | Convex deployment                            |
+| --------------------- | ------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| Convex URL            | `EXPO_PUBLIC_CONVEX_URL`              | `NEXT_PUBLIC_CONVEX_URL`             | same `*.convex.cloud`                        |
+| Clerk publishable key | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`  | **must be the same Clerk app**               |
+| Clerk JWT issuer      | (from key)                            | `CLERK_JWT_ISSUER_DOMAIN`            | `npx convex env get CLERK_JWT_ISSUER_DOMAIN` |
+| Google Maps (Android) | `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY` | —                                    | Maps SDK for Android enabled in GCP          |
 
 Development Clerk: `pk_test_…` → `https://organic-halibut-21.clerk.accounts.dev`. Web and mobile must use the **same** Clerk app and issuer (check with `npm run verify:clerk-convex`).
 
@@ -49,7 +50,10 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
    ```bash
    npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_test_…"
    npx eas env:update preview --variable-name EXPO_PUBLIC_CONVEX_URL --value "https://basic-shark-848.convex.cloud"
+   npx eas env:update preview --variable-name EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY --value "AIza…"
    ```
+
+   Use the same Maps key as `.env.local`. In Google Cloud Console enable **Maps SDK for Android** and restrict the key to package `com.surveyapp.app`.
 
 2. Align Convex issuer with that Clerk app:
 

@@ -8,6 +8,7 @@ import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
 import { WizardStepFrame } from '@/components/wizard';
 import {
   GPS_ACCEPT_MAX_ACCURACY_METERS,
+  GPS_RETAKE_SAMPLE_DURATION_MS,
   GPS_SAMPLE_DURATION_MS,
   GPS_TARGET_ACCURACY_METERS,
 } from '@/convex/gpsAccuracy';
@@ -165,14 +166,18 @@ function GpsStepContent({
 
   const capture = async () => {
     if (captureInFlight.current || state === 'locating') return;
+    const isRetake = Boolean(draft.gps);
     captureInFlight.current = true;
     progressRef.current = null;
     dispatch({ type: 'start_capture' });
     try {
-      const gps = await captureGpsWithTargetAccuracy((p) => {
-        progressRef.current = p;
-        dispatch({ type: 'capture_progress', sampling: p });
-      });
+      const gps = await captureGpsWithTargetAccuracy(
+        (p) => {
+          progressRef.current = p;
+          dispatch({ type: 'capture_progress', sampling: p });
+        },
+        { retake: isRetake },
+      );
       await update({ gps });
       dispatch({ type: 'capture_success' });
     } catch (e) {
@@ -333,7 +338,7 @@ function GpsStepContent({
       <Banner
         tone="info"
         title={`Pinpoint required · ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m max`}
-        message={`Government survey standard. Stand at the property boundary in open sky — hold still. Sampling takes up to ${Math.round(GPS_SAMPLE_DURATION_MS / 1000)} s plus one retry. Readings above ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m are rejected.`}
+        message={`Government survey standard. Stand at the property boundary in open sky and hold still. Good signal usually finishes in a few seconds; retakes use a shorter window (up to ${Math.round(GPS_RETAKE_SAMPLE_DURATION_MS / 1000)} s). First capture allows up to ${Math.round(GPS_SAMPLE_DURATION_MS / 1000)} s. Readings above ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m are rejected.`}
         icon="information-circle-outline"
         className="mt-3"
       />

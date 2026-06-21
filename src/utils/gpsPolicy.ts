@@ -6,8 +6,12 @@ import {
   GPS_EXCELLENT_ACCURACY_METERS,
   GPS_MAX_AGE_MS,
   GPS_MAX_FIX_SPREAD_METERS,
+  GPS_MIN_ELAPSED_ACCEPT_MS,
   GPS_MIN_SAMPLES_ACCEPT,
   GPS_MIN_SAMPLES_TARGET,
+  GPS_RETAKE_ABSOLUTE_TIMEOUT_MS,
+  GPS_RETAKE_RETRY_DURATION_MS,
+  GPS_RETAKE_SAMPLE_DURATION_MS,
   GPS_RETRY_DURATION_MS,
   GPS_SAMPLE_DURATION_MS,
   GPS_TARGET_ACCURACY_METERS,
@@ -23,6 +27,7 @@ export type GpsCapturePolicy = {
   maxFixSpreadMeters: number;
   minSamplesAccept: number;
   minSamplesTarget: number;
+  minElapsedAcceptMs: number;
   sampleDurationMs: number;
   retryDurationMs: number;
   absoluteTimeoutMs: number;
@@ -38,12 +43,21 @@ const STRICT_POLICY: GpsCapturePolicy = {
   maxFixSpreadMeters: GPS_MAX_FIX_SPREAD_METERS,
   minSamplesAccept: GPS_MIN_SAMPLES_ACCEPT,
   minSamplesTarget: GPS_MIN_SAMPLES_TARGET,
+  minElapsedAcceptMs: GPS_MIN_ELAPSED_ACCEPT_MS,
   sampleDurationMs: GPS_SAMPLE_DURATION_MS,
   retryDurationMs: GPS_RETRY_DURATION_MS,
   absoluteTimeoutMs: GPS_ABSOLUTE_TIMEOUT_MS,
   maxAgeMs: GPS_MAX_AGE_MS,
   devPreview: false,
   providerTag: 'device',
+};
+
+const RETAKE_POLICY: GpsCapturePolicy = {
+  ...STRICT_POLICY,
+  minElapsedAcceptMs: 500,
+  sampleDurationMs: GPS_RETAKE_SAMPLE_DURATION_MS,
+  retryDurationMs: GPS_RETAKE_RETRY_DURATION_MS,
+  absoluteTimeoutMs: GPS_RETAKE_ABSOLUTE_TIMEOUT_MS,
 };
 
 const DEV_PREVIEW_POLICY: GpsCapturePolicy = {
@@ -53,6 +67,7 @@ const DEV_PREVIEW_POLICY: GpsCapturePolicy = {
   maxFixSpreadMeters: 5,
   minSamplesAccept: 2,
   minSamplesTarget: 2,
+  minElapsedAcceptMs: GPS_MIN_ELAPSED_ACCEPT_MS,
   sampleDurationMs: GPS_SAMPLE_DURATION_MS,
   retryDurationMs: GPS_RETRY_DURATION_MS,
   absoluteTimeoutMs: GPS_ABSOLUTE_TIMEOUT_MS,
@@ -69,6 +84,8 @@ function isExpoGoDevPreview(): boolean {
   return __DEV__ && isExpoGo();
 }
 
-export function getGpsCapturePolicy(): GpsCapturePolicy {
-  return isExpoGoDevPreview() ? DEV_PREVIEW_POLICY : STRICT_POLICY;
+export function getGpsCapturePolicy(options?: { retake?: boolean }): GpsCapturePolicy {
+  if (isExpoGoDevPreview()) return DEV_PREVIEW_POLICY;
+  if (options?.retake) return RETAKE_POLICY;
+  return STRICT_POLICY;
 }

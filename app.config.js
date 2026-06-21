@@ -6,13 +6,31 @@
  * `extra` mirrors EXPO_PUBLIC_* so release APKs can read keys via expo-constants if Metro
  * inlining ever misses them (same values as EAS environment variables at build time).
  */
+const path = require('path');
+const { load } = require('@expo/env');
+
+// Local `.env.local` (EAS uploads exclude it — cloud builds use EAS Environment variables).
+load(path.resolve(__dirname));
+
 const app = require('./app.json');
 
-const googleMapsApiKey =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY ??
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY ??
-  '';
+function pickEnv(...keys) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+const googleMapsApiKey = pickEnv(
+  'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY',
+  'EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY',
+  'EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY',
+);
+const googleMapsAndroidKey =
+  pickEnv('EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY', 'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY') || googleMapsApiKey;
+const googleMapsIosKey =
+  pickEnv('EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY', 'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY') || googleMapsApiKey;
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
@@ -25,7 +43,7 @@ module.exports = {
       ...app.expo.ios,
       config: {
         ...app.expo.ios?.config,
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY ?? googleMapsApiKey,
+        googleMapsApiKey: googleMapsIosKey,
       },
     },
     android: {
@@ -33,7 +51,7 @@ module.exports = {
       config: {
         ...app.expo.android?.config,
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY ?? googleMapsApiKey,
+          apiKey: googleMapsAndroidKey,
         },
       },
     },
@@ -42,8 +60,8 @@ module.exports = {
       convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL,
       clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
       googleMapsApiKey,
-      googleMapsAndroidKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY ?? googleMapsApiKey,
-      googleMapsIosKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY ?? googleMapsApiKey,
+      googleMapsAndroidKey,
+      googleMapsIosKey,
     },
   },
 };

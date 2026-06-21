@@ -4,7 +4,8 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 
 ## Environment setup
 
-- Set `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY` and `EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY` in EAS / `.env.local`
+- Set `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY` and `EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY` in EAS preview/production **and** `.env.local`
+- `npm run verify:eas-preview` fails if the EAS Maps key is missing or does not match `.env.local`
 - Enable Maps SDK for Android and iOS in Google Cloud Console
 - Use a **development build** or **preview/production APK** for ±1 m field validation — embedded Google Maps keys apply to native builds
 - **Expo Go** runs in dev-preview mode: accepts up to ±10 m for wizard flow testing only; dev-preview GPS **cannot be submitted**

@@ -1,4 +1,4 @@
-import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_MAX_AGE_MS } from '@/convex/gpsAccuracy';
+import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_MAX_AGE_MS, GPS_SAMPLE_POLL_MS } from '@/convex/gpsAccuracy';
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { getGpsCapturePolicy, GPS_DEV_PREVIEW_PROVIDER, type GpsCapturePolicy } from '@/utils/gpsPolicy';
@@ -124,7 +124,11 @@ function shouldStopSampling(
   if (bestAcc == null) return false;
   if (bestAcc <= policy.excellentAccuracyMeters && sampleCount >= policy.minSamplesAccept) return true;
   if (bestAcc <= policy.targetAccuracyMeters && sampleCount >= policy.minSamplesTarget) return true;
-  if (bestAcc <= policy.acceptMaxAccuracyMeters && sampleCount >= policy.minSamplesAccept && elapsedMs >= 1_500) {
+  if (
+    bestAcc <= policy.acceptMaxAccuracyMeters &&
+    sampleCount >= policy.minSamplesAccept &&
+    elapsedMs >= policy.minElapsedAcceptMs
+  ) {
     return true;
   }
   return false;
@@ -145,13 +149,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   });
 }
 
+export type GpsCaptureOptions = {
+  /** Shorter sampling when replacing an existing fix (GNSS usually warm). */
+  retake?: boolean;
+};
+
 /**
  * Samples GNSS fixes, fuses acceptable readings, and enforces the active capture policy.
  */
 export async function captureGpsWithTargetAccuracy(
   onProgress?: (progress: GpsCaptureProgress) => void,
+  options?: GpsCaptureOptions,
 ): Promise<GpsCapture> {
-  const policy = getGpsCapturePolicy();
+  const policy = getGpsCapturePolicy(options);
   try {
     return await withTimeout(
       captureGpsWithRetry(policy, onProgress),
@@ -208,7 +218,7 @@ async function sampleGpsFix(
   };
   const watchOptions = {
     accuracy: Location.Accuracy.BestForNavigation,
-    timeInterval: 500,
+    timeInterval: GPS_SAMPLE_POLL_MS,
     distanceInterval: 0,
   };
 
@@ -259,7 +269,7 @@ async function sampleGpsFix(
       if (Date.now() >= deadline || shouldStopSampling(policy, best.coords?.accuracy, samples.length, elapsedMs)) {
         return;
       }
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, GPS_SAMPLE_POLL_MS));
       return pollUntilDeadline();
     };
     await pollUntilDeadline();

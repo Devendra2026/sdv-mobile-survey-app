@@ -13,23 +13,33 @@ export const GPS_MAX_ACCURACY_METERS = GPS_ACCEPT_MAX_ACCURACY_METERS;
 /** Max spread (m) between fused fixes — rejects jittery readings even when accuracy reports ≤1 m. */
 export const GPS_MAX_FIX_SPREAD_METERS = 1.5;
 
-/** Max time to refine a fix on the first pass (ms). */
-export const GPS_SAMPLE_DURATION_MS = 45_000;
-
-/** Extra sampling window on automatic retry (ms). */
-export const GPS_RETRY_DURATION_MS = 30_000;
-
-/** Absolute ceiling for an entire capture attempt including retry and warm-up (ms). */
-export const GPS_ABSOLUTE_TIMEOUT_MS = GPS_SAMPLE_DURATION_MS + GPS_RETRY_DURATION_MS + 30_000;
-
 /** Minimum fixes at ≤1 m before accepting a pinpoint reading. */
-export const GPS_MIN_SAMPLES_ACCEPT = 4;
+export const GPS_MIN_SAMPLES_ACCEPT = 2;
 
 /** Minimum fixes at target tier before early stop. */
-export const GPS_MIN_SAMPLES_TARGET = 4;
+export const GPS_MIN_SAMPLES_TARGET = 2;
+
+/** Minimum sampling time (ms) before accepting a ≤1 m fix — avoids single-spike acceptance. */
+export const GPS_MIN_ELAPSED_ACCEPT_MS = 800;
+
+/** Max time to refine a fix on the first pass (ms). */
+export const GPS_SAMPLE_DURATION_MS = 12_000;
+
+/** Extra sampling window on automatic retry (ms). */
+export const GPS_RETRY_DURATION_MS = 6_000;
+
+/** Retake — GNSS is usually warm; shorter windows (few seconds when signal is good). */
+export const GPS_RETAKE_SAMPLE_DURATION_MS = 5_000;
+
+export const GPS_RETAKE_RETRY_DURATION_MS = 3_000;
+
+/** Absolute ceiling for an entire capture attempt including retry and warm-up (ms). */
+export const GPS_ABSOLUTE_TIMEOUT_MS = GPS_SAMPLE_DURATION_MS + GPS_RETRY_DURATION_MS + 10_000;
+
+export const GPS_RETAKE_ABSOLUTE_TIMEOUT_MS = GPS_RETAKE_SAMPLE_DURATION_MS + GPS_RETAKE_RETRY_DURATION_MS + 5_000;
 
 /** Poll interval while waiting for a good fix (ms). */
-export const GPS_SAMPLE_POLL_MS = 200;
+export const GPS_SAMPLE_POLL_MS = 150;
 
 /** Reject individual fixes older than this relative to capture time (ms). */
 export const GPS_MAX_AGE_MS = 15_000;

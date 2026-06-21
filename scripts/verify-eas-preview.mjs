@@ -28,6 +28,30 @@ function clerkIssuerFromPublishableKey(pk) {
   }
 }
 
+function readEnvVarFromFile(content, name) {
+  const line = content.split('\n').find((l) => l.startsWith(`${name}=`));
+  if (!line) return null;
+  return line.slice(name.length + 1).trim();
+}
+
+function resolveMapsKeyFromEnvContent(content) {
+  return (
+    readEnvVarFromFile(content, 'EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY') ??
+    readEnvVarFromFile(content, 'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY')
+  );
+}
+
+function resolveMapsKeyFromEasOutput(output) {
+  for (const name of ['EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY', 'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY']) {
+    const line = output.split('\n').find((l) => l.startsWith(`${name}=`));
+    if (line) {
+      const value = line.slice(name.length + 1).trim();
+      if (value) return { name, value };
+    }
+  }
+  return null;
+}
+
 const envLocalPath = '.env.local';
 if (existsSync(envLocalPath)) {
   const envLocal = readFileSync(envLocalPath, 'utf8');
@@ -63,6 +87,36 @@ if (existsSync(envLocalPath)) {
     } catch (err) {
       fail(`Could not read EAS preview env: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  const localMapsKey = resolveMapsKeyFromEnvContent(envLocal);
+  if (localMapsKey) {
+    try {
+      const easOut = execSync('npx eas env:list --environment preview', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const easMaps = resolveMapsKeyFromEasOutput(easOut);
+      if (!easMaps?.value) {
+        fail(
+          'EAS preview missing EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY). ' +
+          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY --value "<from .env.local>"',
+        );
+      } else if (easMaps.value !== localMapsKey) {
+        fail(
+          `EAS preview Google Maps key does not match .env.local (${easMaps.name}). ` +
+          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY --value "<from .env.local>"',
+        );
+      } else {
+        ok('EAS preview Google Maps key matches .env.local');
+      }
+    } catch (err) {
+      fail(`Could not verify EAS preview Google Maps key: ${err instanceof Error ? err.message : err}`);
+    }
+  } else {
+    fail(
+      '.env.local missing EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) — required for GPS map preview in field APKs',
+    );
   }
 }
 
