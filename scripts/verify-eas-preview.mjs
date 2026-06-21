@@ -4,9 +4,13 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import {
+  missingLinuxOptionalMarkers,
+  readRootOptionalDependencies,
+} from './eas-lockfile-optional.mjs';
 
 const REQUIRED_REACT = '19.1.0';
-const LINUX_OPTIONAL = ['utf-8-validate-5.0.10', 'yaml-2.9.0'];
+const EAS_ENV_LIST = 'npx eas-cli env:list --environment preview';
 let failed = false;
 
 function fail(msg) {
@@ -52,50 +56,70 @@ function resolveMapsKeyFromEasOutput(output) {
   return null;
 }
 
+function execErrorMessage(err) {
+  if (!(err instanceof Error)) return String(err);
+  const stderr = 'stderr' in err && typeof err.stderr === 'string' ? err.stderr.trim() : '';
+  const stdout = 'stdout' in err && typeof err.stdout === 'string' ? err.stdout.trim() : '';
+  const detail = stderr || stdout;
+  return detail ? `${err.message}\n${detail}` : err.message;
+}
+
+function readEasPreviewEnv() {
+  return execSync(EAS_ENV_LIST, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+}
+
 const envLocalPath = '.env.local';
 if (existsSync(envLocalPath)) {
   const envLocal = readFileSync(envLocalPath, 'utf8');
   const localPk = envLocal.match(/^EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$/m)?.[1]?.trim();
-  if (localPk) {
+  const localMapsKey = resolveMapsKeyFromEnvContent(envLocal);
+
+  let easOut = '';
+  if (localPk || localMapsKey) {
     try {
-      const easOut = execSync('npx eas env:list --environment preview', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const easLine = easOut
-        .split('\n')
-        .find((line) => line.startsWith('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='));
-      const easPk = easLine?.slice('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='.length).trim();
-      if (!easPk) {
-        fail('EAS preview missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
-      } else if (easPk !== localPk) {
-        const localHost = clerkIssuerFromPublishableKey(localPk);
-        const easHost = clerkIssuerFromPublishableKey(easPk);
+      easOut = readEasPreviewEnv();
+    } catch (err) {
+      const detail = execErrorMessage(err);
+      if (detail.includes("Cannot find module '@expo/env'")) {
         fail(
-          `EAS preview Clerk key does not match .env.local (${easHost ?? 'invalid'} vs ${localHost ?? 'invalid'}). ` +
-          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "<from .env.local>"',
+          "Could not read EAS preview env: app.config.js requires @expo/env. Run: npm install",
         );
       } else {
-        const host = clerkIssuerFromPublishableKey(localPk);
-        ok(`EAS preview Clerk key matches .env.local (${host})`);
-        if (easPk.startsWith('pk_test_')) {
-          console.warn(
-            '[verify-eas-preview] Using Clerk development key (pk_test_…) — 100 emails/month limit on field APKs.',
-          );
-        }
+        fail(`Could not read EAS preview env: ${detail}`);
       }
-    } catch (err) {
-      fail(`Could not read EAS preview env: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  const localMapsKey = resolveMapsKeyFromEnvContent(envLocal);
+  if (localPk && easOut) {
+    const easLine = easOut
+      .split('\n')
+      .find((line) => line.startsWith('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='));
+    const easPk = easLine?.slice('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY='.length).trim();
+    if (!easPk) {
+      fail('EAS preview missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
+    } else if (easPk !== localPk) {
+      const localHost = clerkIssuerFromPublishableKey(localPk);
+      const easHost = clerkIssuerFromPublishableKey(easPk);
+      fail(
+        `EAS preview Clerk key does not match .env.local (${easHost ?? 'invalid'} vs ${localHost ?? 'invalid'}). ` +
+        'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "<from .env.local>"',
+      );
+    } else {
+      const host = clerkIssuerFromPublishableKey(localPk);
+      ok(`EAS preview Clerk key matches .env.local (${host})`);
+      if (easPk.startsWith('pk_test_')) {
+        console.warn(
+          '[verify-eas-preview] Using Clerk development key (pk_test_…) — 100 emails/month limit on field APKs.',
+        );
+      }
+    }
+  }
+
   if (localMapsKey) {
-    try {
-      const easOut = execSync('npx eas env:list --environment preview', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+    if (easOut) {
       const easMaps = resolveMapsKeyFromEasOutput(easOut);
       if (!easMaps?.value) {
         fail(
@@ -110,8 +134,6 @@ if (existsSync(envLocalPath)) {
       } else {
         ok('EAS preview Google Maps key matches .env.local');
       }
-    } catch (err) {
-      fail(`Could not verify EAS preview Google Maps key: ${err instanceof Error ? err.message : err}`);
     }
   } else {
     fail(
@@ -142,12 +164,14 @@ if (lockReact !== REQUIRED_REACT) {
   ok('package-lock.json react version matches');
 }
 
-for (const id of LINUX_OPTIONAL) {
-  if (!lockRaw.includes(id)) {
-    fail(`lockfile missing Linux optional dep marker "${id}" — run npm run lockfile:eas`);
-  }
+const optionalDeps = readRootOptionalDependencies();
+const missingOptional = missingLinuxOptionalMarkers(lockRaw, optionalDeps);
+for (const id of missingOptional) {
+  fail(`lockfile missing Linux optional dep "${id}" — run npm run lockfile:eas`);
 }
-if (!failed) ok('Linux EAS optional deps present in lockfile');
+if (Object.keys(optionalDeps).length > 0 && missingOptional.length === 0) {
+  ok('Linux EAS optional deps present in lockfile');
+}
 
 try {
   execSync('npm ci', { stdio: 'pipe', encoding: 'utf8' });

@@ -45,7 +45,7 @@ const webIssuer = readEnvFile(path.join(webRoot, '.env.local'), 'CLERK_JWT_ISSUE
 
 let easPk = null;
 try {
-  const easOut = execSync('npx eas env:list --environment preview', {
+  const easOut = execSync('npx eas-cli env:list --environment preview', {
     encoding: 'utf8',
     cwd: surveyRoot,
     stdio: ['pipe', 'pipe', 'pipe'],
