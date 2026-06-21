@@ -161,7 +161,7 @@ export interface WizardDraft {
   plinthSqft?: number;
 
   // Step 5 — Floors (client-side IDs; server canonicalises on submit)
-  floors?: Array<{
+  floors?: {
     clientFloorId: string;
     floorName: string;
     usageFactor: string;
@@ -169,7 +169,7 @@ export interface WizardDraft {
     constructionType: string;
     isOccupied: boolean;
     areaSqft: number;
-  }>;
+  }[];
 
   // Step 6 — Services
   municipalWaterConnection?: boolean;
@@ -193,7 +193,7 @@ export interface WizardDraft {
   // online); we keep just the metadata + storageId here so the review
   // screen can show thumbnails and the submit call can link them to
   // the new survey.
-  photos?: Array<{
+  photos?: {
     slot: 'front' | 'inside' | 'side' | 'document';
     storageId: Id<'_storage'>;
     url?: string;
@@ -201,7 +201,7 @@ export interface WizardDraft {
     width?: number;
     height?: number;
     capturedAt: number;
-  }>;
+  }[];
 }
 
 function newLocalId(): string {
@@ -265,12 +265,12 @@ export function surveyToDraft(survey: {
   isSlum: boolean;
   respondentName?: string;
   relationship?: string;
-  owners?: Array<{
+  owners?: {
     name?: string;
     fatherOrHusbandName?: string;
     mobileNo?: string;
     altMobileNo?: string;
-  }>;
+  }[];
   familySize?: number;
   mobileNo: string;
   altMobileNo?: string;
@@ -294,7 +294,7 @@ export function surveyToDraft(survey: {
   municipalWasteCollection: boolean;
   electricityNo?: string;
   gps?: WizardDraft['gps'];
-  floors: Array<{
+  floors: {
     clientFloorId: string;
     floorName: string;
     usageFactor?: string;
@@ -302,8 +302,8 @@ export function surveyToDraft(survey: {
     constructionType: string;
     isOccupied: boolean;
     areaSqft: number;
-  }>;
-  photos: Array<{
+  }[];
+  photos: {
     slot: 'front' | 'inside' | 'side' | 'document';
     storageId: Id<'_storage'>;
     url?: string | null;
@@ -311,7 +311,7 @@ export function surveyToDraft(survey: {
     width?: number;
     height?: number;
     capturedAt: number;
-  }>;
+  }[];
 }): WizardDraft {
   const now = Date.now();
   return {

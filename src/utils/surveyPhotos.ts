@@ -15,7 +15,7 @@ export const SURVEY_PHOTO_SLOT_LABEL: Record<SurveyPhotoSlot, string> = {
 
 export type WizardPhotoEntry = NonNullable<WizardDraft['photos']>[number];
 
-export function filterSurveyPhotos(photos: WizardDraft['photos']): Array<WizardPhotoEntry & { slot: SurveyPhotoSlot }> {
+export function filterSurveyPhotos(photos: WizardDraft['photos']): (WizardPhotoEntry & { slot: SurveyPhotoSlot })[] {
   return (photos ?? []).filter(
     (p): p is WizardPhotoEntry & { slot: SurveyPhotoSlot } => p.slot === 'front' || p.slot === 'side',
   );
