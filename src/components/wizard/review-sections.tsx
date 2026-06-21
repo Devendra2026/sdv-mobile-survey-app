@@ -1,9 +1,11 @@
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, StepIndicator, Tag } from '@/components';
+import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
 import type { WizardDraft, WizardOwnerRow } from '@/hooks/useWizardDraft';
 import { indicatorSteps, STEP_BEFORE_REVIEW_ROUTE, WIZARD_STEPS } from '@/hooks/wizardSteps';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { gpsAccuracyTagLabel, gpsAccuracyTagTone } from '@/utils/captureGps';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
+import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import type { MastersBundle } from '@/utils/mastersBundle';
 import { optionLabel, yesNoLabel } from '@/utils/services';
 import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
@@ -406,9 +408,20 @@ export function ReviewGpsSection({ draft }: { draft: WizardDraft }) {
       <AppCard padded className="mb-3">
         {draft.gps ? (
           <>
-            <Text className="text-body font-mono text-ink-primary-light dark:text-ink-primary-dark">
-              {draft.gps.latitude.toFixed(6)}, {draft.gps.longitude.toFixed(6)}
+            {draft.gps.isMockLocation ? (
+              <Banner
+                tone="danger"
+                title="Mock location detected"
+                message="Retake GPS using a real device location before submitting."
+                icon="warning-outline"
+                className="mb-3"
+              />
+            ) : null}
+            <GpsMapPreview coordinate={draft.gps} interactive={false} />
+            <Text className="text-body font-mono text-ink-primary-light dark:text-ink-primary-dark mt-3">
+              {formatGpsFull(draft.gps)}
             </Text>
+            <Text className="text-caption text-ink-tertiary-light mt-1">{formatGpsDisplay(draft.gps)}</Text>
             <View className="flex-row gap-1.5 mt-2">
               <Tag
                 label={gpsAccuracyTagLabel(draft.gps.accuracyMeters)}
@@ -416,6 +429,7 @@ export function ReviewGpsSection({ draft }: { draft: WizardDraft }) {
                 icon="locate-outline"
               />
             </View>
+            <GpsDebugPanel gps={draft.gps} />
           </>
         ) : (
           <Text className="text-helper text-ink-tertiary-light">No GPS captured</Text>

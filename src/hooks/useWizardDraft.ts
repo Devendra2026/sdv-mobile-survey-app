@@ -22,6 +22,7 @@
  */
 import { isRespondentOwner, primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
 import { plinthSqftFromFloors } from '@/utils/area';
+import { isGpsStepComplete } from '@/utils/captureGps';
 import { normalizeFloorFields, usageTypeToOccupied } from '@/utils/floorRow';
 import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
@@ -701,7 +702,7 @@ export function stepCompletion(d: WizardDraft) {
       d.floors.every((f) => !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType))
     ),
     services: servicesStepComplete(d),
-    gps: !!d.gps,
+    gps: isGpsStepComplete(d.gps),
     photos: surveyPhotosComplete(d.photos),
   };
 }

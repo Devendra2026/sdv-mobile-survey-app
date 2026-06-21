@@ -1,29 +1,27 @@
-import {
-  GPS_ACCEPT_MAX_ACCURACY_METERS,
-  GPS_EXCELLENT_ACCURACY_METERS,
-  GPS_MIN_SAMPLES_ACCEPT,
-  GPS_MIN_SAMPLES_TARGET,
-  GPS_SAMPLE_DURATION_MS,
-  GPS_SAMPLE_POLL_MS,
-  GPS_TARGET_ACCURACY_METERS,
-} from '@/convex/gpsAccuracy';
+import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_MAX_AGE_MS } from '@/convex/gpsAccuracy';
+import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { getGpsCapturePolicy, GPS_DEV_PREVIEW_PROVIDER, type GpsCapturePolicy } from '@/utils/gpsPolicy';
 import * as Location from 'expo-location';
 
 export type GpsCapture = NonNullable<WizardDraft['gps']>;
 
 export type GpsCaptureProgress = {
   bestAccuracyMeters: number | null;
+  bestLatitude: number | null;
+  bestLongitude: number | null;
   sampleCount: number;
   elapsedMs: number;
+  waitingForBetterSignal: boolean;
 };
 
 export class GpsAccuracyError extends Error {
   readonly accuracyMeters: number;
 
-  constructor(accuracyMeters: number) {
+  constructor(accuracyMeters: number, acceptMaxMeters: number, detail?: string) {
     super(
-      `Could not reach ±${GPS_TARGET_ACCURACY_METERS} m (best was ±${Math.round(accuracyMeters)} m). Stand in open sky, wait for the reading to improve, then retry.`,
+      detail ??
+        `Could not reach ±${acceptMaxMeters} m (best was ±${Math.round(accuracyMeters)} m). Stand at the property boundary in open sky, hold still, then retry.`,
     );
     this.name = 'GpsAccuracyError';
     this.accuracyMeters = accuracyMeters;
@@ -49,38 +47,44 @@ function isMockLocation(loc: { mocked?: boolean }): boolean {
 type LocationCoords = {
   latitude: number;
   longitude: number;
-  accuracy: number | null;
+  accuracy: number;
 };
 
 type LocationSample = {
   coords: LocationCoords;
   mocked?: boolean;
+  capturedAt: number;
 };
 
-function toCapture(coords: LocationCoords, mocked?: boolean): GpsCapture {
+function toCapture(coords: LocationCoords, policy: GpsCapturePolicy, mocked?: boolean): GpsCapture {
   return {
     latitude: coords.latitude,
     longitude: coords.longitude,
-    accuracyMeters: coords.accuracy ?? GPS_ACCEPT_MAX_ACCURACY_METERS + 1,
+    accuracyMeters: coords.accuracy,
     capturedAt: Date.now(),
-    provider: mocked ? 'mock' : 'device',
+    provider: mocked ? 'mock' : policy.providerTag,
     isMockLocation: Boolean(mocked),
   };
 }
 
 function isBetter(candidate: LocationCoords, current: LocationCoords | null): boolean {
-  const cAcc = candidate.accuracy;
-  if (cAcc == null) return false;
   const curAcc = current?.accuracy;
   if (curAcc == null) return true;
-  return cAcc < curAcc;
+  return candidate.accuracy < curAcc;
+}
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 /** Weighted centroid of fixes with known accuracy (better fixes weigh more). */
-function fuseSamples(samples: LocationSample[]): LocationCoords | null {
-  const usable = samples.filter(
-    (s) => s.coords.accuracy != null && s.coords.accuracy <= GPS_ACCEPT_MAX_ACCURACY_METERS,
-  );
+function fuseSamples(samples: LocationSample[], acceptMaxMeters: number): LocationCoords | null {
+  const usable = samples.filter((s) => Number.isFinite(s.coords.accuracy) && s.coords.accuracy <= acceptMaxMeters);
   if (usable.length === 0) return null;
 
   let wSum = 0;
@@ -89,7 +93,7 @@ function fuseSamples(samples: LocationSample[]): LocationCoords | null {
   let bestAcc = Infinity;
 
   for (const s of usable) {
-    const acc = s.coords.accuracy!;
+    const acc = s.coords.accuracy;
     bestAcc = Math.min(bestAcc, acc);
     const w = 1 / (acc * acc);
     wSum += w;
@@ -97,39 +101,85 @@ function fuseSamples(samples: LocationSample[]): LocationCoords | null {
     lng += s.coords.longitude * w;
   }
 
+  const fusedLat = lat / wSum;
+  const fusedLng = lng / wSum;
+  let fusedSpread = 0;
+  for (const s of usable) {
+    fusedSpread = Math.max(fusedSpread, haversineMeters(fusedLat, fusedLng, s.coords.latitude, s.coords.longitude));
+  }
+
   return {
-    latitude: lat / wSum,
-    longitude: lng / wSum,
-    accuracy: bestAcc,
+    latitude: fusedLat,
+    longitude: fusedLng,
+    accuracy: Math.max(bestAcc, fusedSpread),
   };
 }
 
+function shouldStopSampling(
+  policy: GpsCapturePolicy,
+  bestAcc: number | null | undefined,
+  sampleCount: number,
+  elapsedMs: number,
+): boolean {
+  if (bestAcc == null) return false;
+  if (bestAcc <= policy.excellentAccuracyMeters && sampleCount >= policy.minSamplesAccept) return true;
+  if (bestAcc <= policy.targetAccuracyMeters && sampleCount >= policy.minSamplesTarget) return true;
+  if (bestAcc <= policy.acceptMaxAccuracyMeters && sampleCount >= policy.minSamplesAccept && elapsedMs >= 1_500) {
+    return true;
+  }
+  return false;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+  });
+}
+
 /**
- * Samples GNSS fixes, fuses acceptable readings, and requires ≤ {@link GPS_ACCEPT_MAX_ACCURACY_METERS} m.
- * Aim for ≤ {@link GPS_TARGET_ACCURACY_METERS} m outdoors.
+ * Samples GNSS fixes, fuses acceptable readings, and enforces the active capture policy.
  */
 export async function captureGpsWithTargetAccuracy(
   onProgress?: (progress: GpsCaptureProgress) => void,
 ): Promise<GpsCapture> {
+  const policy = getGpsCapturePolicy();
   try {
-    return await captureGpsWithTargetAccuracyInner(onProgress);
+    return await withTimeout(
+      captureGpsWithRetry(policy, onProgress),
+      policy.absoluteTimeoutMs,
+      'GPS capture timed out — move to open sky and try again',
+    );
   } catch (e) {
     throw toCaptureError(e);
   }
 }
 
-function shouldStopSampling(bestAcc: number | null | undefined, sampleCount: number, elapsedMs: number): boolean {
-  if (bestAcc == null) return false;
-  if (bestAcc <= GPS_EXCELLENT_ACCURACY_METERS) return true;
-  if (bestAcc <= GPS_TARGET_ACCURACY_METERS && sampleCount >= GPS_MIN_SAMPLES_TARGET) return true;
-  if (bestAcc <= GPS_ACCEPT_MAX_ACCURACY_METERS && sampleCount >= GPS_MIN_SAMPLES_ACCEPT && elapsedMs >= 1_500) {
-    return true;
+async function captureGpsWithRetry(
+  policy: GpsCapturePolicy,
+  onProgress?: (progress: GpsCaptureProgress) => void,
+): Promise<GpsCapture> {
+  try {
+    return await sampleGpsFix(policy, policy.sampleDurationMs, onProgress);
+  } catch (e) {
+    if (e instanceof GpsAccuracyError) {
+      return await sampleGpsFix(policy, policy.retryDurationMs, onProgress);
+    }
+    throw e;
   }
-  if (bestAcc <= GPS_ACCEPT_MAX_ACCURACY_METERS && elapsedMs >= 5_000) return true;
-  return false;
 }
 
-async function captureGpsWithTargetAccuracyInner(
+async function sampleGpsFix(
+  policy: GpsCapturePolicy,
+  durationMs: number,
   onProgress?: (progress: GpsCaptureProgress) => void,
 ): Promise<GpsCapture> {
   const { status } = await Location.requestForegroundPermissionsAsync();
@@ -151,60 +201,74 @@ async function captureGpsWithTargetAccuracyInner(
   const samples: LocationSample[] = [];
   const best = { coords: null as LocationCoords | null };
   const started = Date.now();
+  let mockDetected = false;
+  const positionOptions = {
+    accuracy: Location.Accuracy.BestForNavigation,
+    mayShowUserSettingsDialog: true,
+  };
+  const watchOptions = {
+    accuracy: Location.Accuracy.BestForNavigation,
+    timeInterval: 500,
+    distanceInterval: 0,
+  };
+
+  const reportProgress = () => {
+    const bestAcc = best.coords?.accuracy ?? null;
+    onProgress?.({
+      bestAccuracyMeters: bestAcc,
+      bestLatitude: best.coords?.latitude ?? null,
+      bestLongitude: best.coords?.longitude ?? null,
+      sampleCount: samples.length,
+      elapsedMs: Date.now() - started,
+      waitingForBetterSignal: bestAcc != null && bestAcc > policy.targetAccuracyMeters,
+    });
+  };
 
   const ingest = (loc: Location.LocationObject) => {
-    if (isMockLocation(loc)) return;
+    if (isMockLocation(loc)) {
+      mockDetected = true;
+      return;
+    }
+    if (loc.coords.accuracy == null || !Number.isFinite(loc.coords.accuracy)) return;
+    if (!Number.isFinite(loc.coords.latitude) || !Number.isFinite(loc.coords.longitude)) return;
+
+    const sampleAge = Date.now() - loc.timestamp;
+    if (sampleAge > policy.maxAgeMs) return;
+
     const coords: LocationCoords = {
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
       accuracy: loc.coords.accuracy,
     };
-    samples.push({ coords, mocked: loc.mocked });
+    samples.push({ coords, mocked: loc.mocked, capturedAt: loc.timestamp });
     if (isBetter(coords, best.coords)) best.coords = coords;
-    onProgress?.({
-      bestAccuracyMeters: best.coords?.accuracy ?? null,
-      sampleCount: samples.length,
-      elapsedMs: Date.now() - started,
-    });
+    reportProgress();
   };
 
-  const quickFix = Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-    mayShowUserSettingsDialog: true,
-  })
-    .then(ingest)
-    .catch(() => undefined);
+  const warmUpPromise = Location.getCurrentPositionAsync(positionOptions).catch(() => null);
 
-  const subscription = await Location.watchPositionAsync(
-    {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 300,
-      distanceInterval: 1,
-    },
-    ingest,
-  );
+  const subscription = await Location.watchPositionAsync(watchOptions, ingest);
+  void warmUpPromise.then((loc) => {
+    if (loc) ingest(loc);
+  });
 
   try {
-    const deadline = started + GPS_SAMPLE_DURATION_MS;
+    const deadline = started + durationMs;
     const pollUntilDeadline = async (): Promise<void> => {
       const elapsedMs = Date.now() - started;
-      if (Date.now() >= deadline || shouldStopSampling(best.coords?.accuracy, samples.length, elapsedMs)) {
+      if (Date.now() >= deadline || shouldStopSampling(policy, best.coords?.accuracy, samples.length, elapsedMs)) {
         return;
       }
-      await new Promise((r) => setTimeout(r, GPS_SAMPLE_POLL_MS));
+      await new Promise((r) => setTimeout(r, 200));
       return pollUntilDeadline();
     };
     await pollUntilDeadline();
-    await quickFix;
   } finally {
     subscription.remove();
   }
 
   if (!best.coords) {
-    const single = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-      mayShowUserSettingsDialog: true,
-    });
+    const single = (await warmUpPromise) ?? (await Location.getCurrentPositionAsync(positionOptions));
     if (isMockLocation(single)) {
       throw new Error('Mock location detected — disable fake GPS and use the device antenna');
     }
@@ -215,38 +279,89 @@ async function captureGpsWithTargetAccuracyInner(
     throw new Error('Could not get a GPS fix — move to open sky and try again');
   }
 
-  const fused = fuseSamples(samples) ?? best.coords;
-  const accuracy = fused.accuracy;
-
-  if (accuracy == null || accuracy > GPS_ACCEPT_MAX_ACCURACY_METERS) {
-    throw new GpsAccuracyError(accuracy ?? GPS_ACCEPT_MAX_ACCURACY_METERS + 1);
+  if (mockDetected) {
+    throw new Error('Mock location detected — disable fake GPS and use the device antenna');
   }
 
-  return toCapture(
+  const acceptMax = policy.acceptMaxAccuracyMeters;
+  const pinpointSamples = samples.filter((s) => Number.isFinite(s.coords.accuracy) && s.coords.accuracy <= acceptMax);
+  if (pinpointSamples.length < policy.minSamplesAccept) {
+    throw new GpsAccuracyError(
+      best.coords.accuracy,
+      acceptMax,
+      `Only ${pinpointSamples.length} reading(s) at ≤ ±${acceptMax} m (need ${policy.minSamplesAccept}). Hold still at the boundary in open sky.`,
+    );
+  }
+
+  const fused = fuseSamples(samples, acceptMax);
+  if (!fused) {
+    throw new GpsAccuracyError(best.coords.accuracy, acceptMax);
+  }
+
+  const accuracy = fused.accuracy;
+  if (accuracy > acceptMax) {
+    throw new GpsAccuracyError(accuracy, acceptMax);
+  }
+
+  let fixSpread = 0;
+  for (const s of pinpointSamples) {
+    fixSpread = Math.max(
+      fixSpread,
+      haversineMeters(fused.latitude, fused.longitude, s.coords.latitude, s.coords.longitude),
+    );
+  }
+  if (fixSpread > policy.maxFixSpreadMeters) {
+    throw new GpsAccuracyError(
+      accuracy,
+      acceptMax,
+      `Readings disagree by ${fixSpread.toFixed(1)} m — hold still at the property boundary in open sky, then retry.`,
+    );
+  }
+
+  const capture = toCapture(
     fused,
+    policy,
     samples.some((s) => s.mocked),
   );
+  const validationErrors = validateGpsCapture(capture, {
+    strict: !policy.devPreview,
+    maxAgeMs: policy.maxAgeMs,
+  });
+  if (validationErrors.length > 0) {
+    throw new Error(validationErrors[0]!);
+  }
+
+  return capture;
 }
 
 export function gpsAccuracyTier(meters: number): 'excellent' | 'target' | 'fair' | 'poor' {
-  if (meters <= GPS_EXCELLENT_ACCURACY_METERS) return 'excellent';
-  if (meters <= GPS_TARGET_ACCURACY_METERS) return 'target';
-  if (meters <= GPS_ACCEPT_MAX_ACCURACY_METERS) return 'fair';
+  const policy = getGpsCapturePolicy();
+  if (meters <= policy.excellentAccuracyMeters) return 'excellent';
+  if (meters <= policy.targetAccuracyMeters) return 'target';
+  if (meters <= policy.acceptMaxAccuracyMeters) return 'fair';
   return 'poor';
 }
 
 export function gpsAccuracyTagLabel(meters: number): string {
-  const tier = gpsAccuracyTier(meters);
-  const rounded = Math.round(meters);
-  if (tier === 'excellent') return `Excellent · ±${rounded} m`;
-  if (tier === 'target') return `Good · ±${rounded} m`;
-  if (tier === 'fair') return `±${rounded} m · aim for ±${GPS_TARGET_ACCURACY_METERS} m`;
-  return `±${rounded} m`;
+  const policy = getGpsCapturePolicy();
+  const rounded = Math.round(meters * 10) / 10;
+  if (meters <= GPS_ACCEPT_MAX_ACCURACY_METERS) {
+    return `Pinpoint · ±${rounded} m`;
+  }
+  if (meters <= policy.acceptMaxAccuracyMeters) return `±${rounded} m`;
+  return `±${rounded} m · need ≤ ±${policy.acceptMaxAccuracyMeters} m`;
 }
 
 export function gpsAccuracyTagTone(meters: number): 'success' | 'warning' | 'danger' {
-  const tier = gpsAccuracyTier(meters);
-  if (tier === 'excellent' || tier === 'target') return 'success';
-  if (tier === 'fair') return 'warning';
+  const policy = getGpsCapturePolicy();
+  if (meters <= policy.acceptMaxAccuracyMeters) return 'success';
   return 'danger';
+}
+
+export function isGpsStepComplete(gps: GpsCapture | undefined): boolean {
+  if (!gps) return false;
+  if (gps.provider === GPS_DEV_PREVIEW_PROVIDER) {
+    return validateGpsCapture(gps, { strict: false, maxAgeMs: GPS_MAX_AGE_MS }).length === 0;
+  }
+  return validateGpsCapture(gps, { strict: true, maxAgeMs: GPS_MAX_AGE_MS }).length === 0;
 }

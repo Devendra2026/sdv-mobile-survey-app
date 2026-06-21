@@ -1,10 +1,12 @@
 import { AppButton, AppCard, Banner, ListRow, SectionLabel, StatusBadge, Tag } from '@/components';
+import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
 import { SurveyPhotoGrid } from '@/components/survey/survey-photo-grid';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
 import { gpsAccuracyTagLabel, gpsAccuracyTier } from '@/utils/captureGps';
 import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/utils/format';
+import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import type { MastersBundle } from '@/utils/mastersBundle';
 import { optionLabel, yesNoLabel } from '@/utils/services';
 import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
@@ -297,11 +299,22 @@ export function SurveyGpsSection({ survey }: { survey: SurveyDetail }) {
       <AppCard padded={false} className="mb-3">
         {survey.gps ? (
           <>
+            <View className="p-4 pb-0">
+              <GpsMapPreview coordinate={survey.gps} interactive={false} />
+            </View>
             <ListRow
               icon="location-outline"
               iconTone="brand"
               title="Coordinates"
-              subtitle={`${survey.gps.latitude.toFixed(6)}, ${survey.gps.longitude.toFixed(6)}`}
+              subtitle={formatGpsFull(survey.gps)}
+              showChevron={false}
+            />
+            <RowDivider />
+            <ListRow
+              icon="map-outline"
+              iconTone="neutral"
+              title="Display"
+              subtitle={formatGpsDisplay(survey.gps)}
               showChevron={false}
             />
             <RowDivider />
@@ -324,6 +337,9 @@ export function SurveyGpsSection({ survey }: { survey: SurveyDetail }) {
                 />
               </>
             ) : null}
+            <View className="px-4 pb-4">
+              <GpsDebugPanel gps={survey.gps} />
+            </View>
           </>
         ) : (
           <View className="p-4 items-center">

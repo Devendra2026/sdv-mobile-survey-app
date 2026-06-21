@@ -6,7 +6,7 @@
  * to audit. Components are pure (no hooks beyond local state) so they
  * can render anywhere in the tree.
  */
-import { GPS_TARGET_ACCURACY_METERS } from '@/convex/gpsAccuracy';
+import { GPS_ACCEPT_MAX_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
 import { formatSurveyParcelLabel } from '@/utils/format';
 import { androidRipple, horizontalScrollProps } from '@/utils/scroll-props';
@@ -930,13 +930,16 @@ export function ChipSelector({ value, options, onChange, scroll = true }: ChipSe
 interface GPSStatusProps {
   state: 'idle' | 'locating' | 'captured' | 'error';
   accuracy?: number;
+  /** Policy accept ceiling — fixes at or below this show success when captured. */
+  acceptMaxMeters?: number;
 }
-export function GPSStatus({ state, accuracy }: GPSStatusProps) {
+export function GPSStatus({ state, accuracy, acceptMaxMeters = GPS_ACCEPT_MAX_ACCURACY_METERS }: GPSStatusProps) {
+  const withinAccept = accuracy != null && accuracy <= acceptMaxMeters;
   const tone: Tone =
     state === 'captured'
-      ? accuracy != null && accuracy > GPS_TARGET_ACCURACY_METERS
-        ? 'warning'
-        : 'success'
+      ? withinAccept
+        ? 'success'
+        : 'warning'
       : state === 'error'
         ? accuracy != null
           ? 'warning'
