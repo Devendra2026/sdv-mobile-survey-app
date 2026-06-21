@@ -65,7 +65,7 @@ export function isExpoGo(): boolean {
   return Constants.executionEnvironment === 'storeClient';
 }
 
-export function isExpoGoDevPreview(): boolean {
+function isExpoGoDevPreview(): boolean {
   return __DEV__ && isExpoGo();
 }
 

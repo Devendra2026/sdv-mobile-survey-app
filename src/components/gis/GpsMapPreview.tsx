@@ -60,16 +60,17 @@ function regionForCoordinate(coordinate: Pick<GpsCaptureInput, 'latitude' | 'lon
 
 function GpsMapPreviewInner({ coordinate, interactive = true, height = 220 }: GpsMapPreviewProps) {
   const mapRef = useRef<MapView>(null);
-  const region = useMemo(() => regionForCoordinate(coordinate), [coordinate.latitude, coordinate.longitude]);
+  const { latitude, longitude, accuracyMeters, capturedAt } = coordinate;
+  const region = useMemo(() => regionForCoordinate({ latitude, longitude }), [latitude, longitude]);
   const showMap = canRenderNativeMap();
   const useGoogleProvider = !isExpoGo() && Platform.OS === 'android';
 
   useEffect(() => {
     mapRef.current?.animateToRegion(region, 300);
-  }, [region, coordinate.capturedAt]);
+  }, [region, capturedAt]);
 
   const openExternal = () => {
-    const url = `https://www.google.com/maps?q=${coordinate.latitude},${coordinate.longitude}`;
+    const url = `https://www.google.com/maps?q=${latitude},${longitude}`;
     void Linking.openURL(url);
   };
 
@@ -109,11 +110,11 @@ function GpsMapPreviewInner({ coordinate, interactive = true, height = 220 }: Gp
       >
         <Marker
           coordinate={{
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
+            latitude,
+            longitude,
           }}
           title="Survey GPS"
-          description={`±${Math.round(coordinate.accuracyMeters)} m`}
+          description={`±${Math.round(accuracyMeters)} m`}
         />
       </MapView>
     </View>

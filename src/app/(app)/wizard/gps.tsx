@@ -26,7 +26,7 @@ import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import { getGpsCapturePolicy } from '@/utils/gpsPolicy';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useReducer, useRef } from 'react';
 import { Text, View } from 'react-native';
 
 type State = 'idle' | 'locating' | 'captured' | 'error';
@@ -89,6 +89,64 @@ function currentCaptureCoordinate(
   return null;
 }
 
+type GpsCaptureUiState = {
+  state: State;
+  error: string | null;
+  sampling: GpsCaptureProgress | null;
+  lastAttemptMeters: number | null;
+  lastAttemptCoordinate: GpsCoordinateView | null;
+};
+
+type GpsCaptureAction =
+  | { type: 'start_capture' }
+  | { type: 'capture_progress'; sampling: GpsCaptureProgress }
+  | { type: 'capture_success' }
+  | {
+      type: 'capture_error';
+      error: string;
+      lastAttemptMeters: number | null;
+      lastAttemptCoordinate: GpsCoordinateView | null;
+    }
+  | { type: 'capture_finally' };
+
+const initialGpsCaptureUiState: GpsCaptureUiState = {
+  state: 'idle',
+  error: null,
+  sampling: null,
+  lastAttemptMeters: null,
+  lastAttemptCoordinate: null,
+};
+
+function gpsCaptureReducer(state: GpsCaptureUiState, action: GpsCaptureAction): GpsCaptureUiState {
+  switch (action.type) {
+    case 'start_capture':
+      return {
+        ...state,
+        state: 'locating',
+        error: null,
+        sampling: null,
+        lastAttemptMeters: null,
+        lastAttemptCoordinate: null,
+      };
+    case 'capture_progress':
+      return { ...state, sampling: action.sampling };
+    case 'capture_success':
+      return { ...state, state: 'captured' };
+    case 'capture_error':
+      return {
+        ...state,
+        state: 'error',
+        error: action.error,
+        lastAttemptMeters: action.lastAttemptMeters,
+        lastAttemptCoordinate: action.lastAttemptCoordinate,
+      };
+    case 'capture_finally':
+      return { ...state, sampling: null };
+    default:
+      return state;
+  }
+}
+
 function GpsStepContent({
   draft,
   update,
@@ -100,41 +158,36 @@ function GpsStepContent({
   const { isOnline } = useNetworkStatus();
   const policy = useMemo(() => getGpsCapturePolicy(), []);
   const devPreview = policy.devPreview;
-  const [state, setState] = useState<State>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [sampling, setSampling] = useState<GpsCaptureProgress | null>(null);
-  const [lastAttemptMeters, setLastAttemptMeters] = useState<number | null>(null);
-  const [lastAttemptCoordinate, setLastAttemptCoordinate] = useState<GpsCoordinateView | null>(null);
+  const [captureUi, dispatch] = useReducer(gpsCaptureReducer, initialGpsCaptureUiState);
+  const { state, error, sampling, lastAttemptMeters, lastAttemptCoordinate } = captureUi;
   const captureInFlight = useRef(false);
   const progressRef = useRef<GpsCaptureProgress | null>(null);
 
   const capture = async () => {
     if (captureInFlight.current || state === 'locating') return;
     captureInFlight.current = true;
-    setError(null);
-    setLastAttemptMeters(null);
-    setLastAttemptCoordinate(null);
-    setSampling(null);
     progressRef.current = null;
-    setState('locating');
+    dispatch({ type: 'start_capture' });
     try {
       const gps = await captureGpsWithTargetAccuracy((p) => {
         progressRef.current = p;
-        setSampling(p);
+        dispatch({ type: 'capture_progress', sampling: p });
       });
       await update({ gps });
-      setState('captured');
+      dispatch({ type: 'capture_success' });
     } catch (e) {
       const lastProgress = progressRef.current as GpsCaptureProgress | null;
       const attemptCoord = coordinateFromSampling(lastProgress);
-      if (attemptCoord) setLastAttemptCoordinate(attemptCoord);
       const bestFromProgress = lastProgress?.bestAccuracyMeters ?? null;
       const attemptMeters = e instanceof GpsAccuracyError ? e.accuracyMeters : bestFromProgress;
-      if (attemptMeters != null) setLastAttemptMeters(attemptMeters);
-      setError(locationErrorMessage(e, isOnline, devPreview));
-      setState('error');
+      dispatch({
+        type: 'capture_error',
+        error: locationErrorMessage(e, isOnline, devPreview),
+        lastAttemptMeters: attemptMeters,
+        lastAttemptCoordinate: attemptCoord,
+      });
     } finally {
-      setSampling(null);
+      dispatch({ type: 'capture_finally' });
       captureInFlight.current = false;
     }
   };
