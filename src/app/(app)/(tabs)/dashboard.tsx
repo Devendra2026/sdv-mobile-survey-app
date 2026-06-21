@@ -122,9 +122,7 @@ export default function DashboardScreen() {
                   status="draft"
                   qcStatus="pending"
                   updatedAt={d.updatedAt ?? 0}
-                  onPress={() =>
-                    router.push({ pathname: '/(app)/wizard/flow', params: { localId: d.localId, q: '0' } })
-                  }
+                  onPress={() => router.push({ pathname: '/(app)/wizard', params: { resume: d.localId } })}
                 />
               ))}
             </View>

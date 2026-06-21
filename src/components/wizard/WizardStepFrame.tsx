@@ -7,7 +7,14 @@ import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import { draftToSaveDraftPayload, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
-import { indicatorSteps, nextStep, prevStep, WIZARD_STEPS, type StepConfig } from '@/hooks/wizardSteps';
+import {
+  indicatorSteps,
+  nextStep,
+  prevStep,
+  stepKeyFromRoute,
+  WIZARD_STEPS,
+  type StepConfig,
+} from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { backOrReplace } from '@/utils/navigation';
 import { keyboardAvoidingProps, scrollViewProps } from '@/utils/scroll-props';
@@ -53,16 +60,21 @@ export function WizardStepFrame({
 
   const nextBlocked = typeof nextDisabled === 'function' ? nextDisabled(draft) : Boolean(nextDisabled);
 
-  const goBack = () => {
+  const goBack = async () => {
     const prev = prevStep(activeKey);
-    if (prev) router.replace({ pathname: prev as never, params: { localId } });
-    else backOrReplace(router);
+    if (prev) {
+      const prevKey = stepKeyFromRoute(prev);
+      if (prevKey) await update({ lastActiveStepKey: prevKey });
+      router.replace({ pathname: prev as never, params: { localId } });
+    } else backOrReplace(router);
   };
 
   const goNext = async () => {
     const ok = onNext ? await onNext(draft) : true;
     if (ok === false) return;
     const next = nextStep(activeKey);
+    const nextKey = stepKeyFromRoute(next);
+    if (nextKey) await update({ lastActiveStepKey: nextKey });
     router.replace({ pathname: next as never, params: { localId } });
   };
 
@@ -84,9 +96,12 @@ export function WizardStepFrame({
     }
   };
 
-  const onPickStep = (key: string) => {
+  const onPickStep = async (key: string) => {
     const step = WIZARD_STEPS.find((s) => s.key === key);
-    if (step) router.replace({ pathname: step.route as never, params: { localId } });
+    if (step) {
+      await update({ lastActiveStepKey: step.key });
+      router.replace({ pathname: step.route as never, params: { localId } });
+    }
   };
 
   return (

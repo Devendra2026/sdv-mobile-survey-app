@@ -67,6 +67,13 @@ export default function ReviewScreen() {
     [],
   );
 
+  useEffect(() => {
+    if (loading || !draft) return;
+    if (draft.lastActiveStepKey !== 'review') {
+      void update({ lastActiveStepKey: 'review' });
+    }
+  }, [loading, draft, update]);
+
   const hideToast = useCallback(() => setToast(null), []);
 
   if (loading || !draft || !bundle) return <Spinner label="Loading…" />;

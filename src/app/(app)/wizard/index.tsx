@@ -1,14 +1,14 @@
 /**
  * Wizard entry. Three behaviours:
- *  - `?resume=ls_…` or `?localId=ls_…` → resume an in-progress local draft
+ *  - `?resume=ls_…` or `?localId=ls_…` → resume an in-progress local draft at saved step
  *  - `?surveyId=<id>` → load a server survey into a local draft and edit
- *  - no params → create a fresh draft and route to step 1
+ *  - no params → create a fresh draft and route to Survey Start (step 0)
  */
 import { Spinner } from '@/components';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { createNewDraft, persistDraft, surveyToDraft } from '@/hooks/useWizardDraft';
-import { FIRST_WIZARD_ROUTE } from '@/hooks/wizardSteps';
+import { createNewDraft, getDraft, persistDraft, surveyToDraft } from '@/hooks/useWizardDraft';
+import { FIRST_WIZARD_ROUTE, routeForDraftResume } from '@/hooks/wizardSteps';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -42,9 +42,12 @@ export default function WizardEntry() {
         localId = fresh.localId;
       }
 
+      const draft = await getDraft(localId!);
+      const route = draft ? routeForDraftResume(draft) : FIRST_WIZARD_ROUTE;
+
       router.replace({
-        pathname: (surveyId ? FIRST_WIZARD_ROUTE : '/(app)/wizard/flow') as never,
-        params: surveyId ? { localId } : { localId, q: '0' },
+        pathname: route as never,
+        params: { localId: localId! },
       });
     })().catch(() => undefined);
   }, [params.resume, params.localId, surveyId, survey, router]);

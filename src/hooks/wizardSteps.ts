@@ -30,8 +30,26 @@ export const WIZARD_STEPS: StepConfig[] = [
 
 const REVIEW_ROUTE = '/(app)/wizard/review';
 
+export { REVIEW_ROUTE };
+
+/** Resolve the wizard route to open when resuming a local draft. */
+export function routeForDraftResume(draft: WizardDraft): string {
+  const key = draft.lastActiveStepKey ?? 'start';
+  if (key !== 'start' && !stepCompletion(draft).start) {
+    return FIRST_WIZARD_ROUTE;
+  }
+  if (key === 'review') return REVIEW_ROUTE;
+  return WIZARD_STEPS.find((s) => s.key === key)?.route ?? FIRST_WIZARD_ROUTE;
+}
+
 /** Last wizard step before review (photos). */
 export const STEP_BEFORE_REVIEW_ROUTE = WIZARD_STEPS[WIZARD_STEPS.length - 1]!.route;
+
+/** Map a wizard route to its step key (or review). */
+export function stepKeyFromRoute(route: string): StepConfig['key'] | 'review' | null {
+  if (route === REVIEW_ROUTE) return 'review';
+  return WIZARD_STEPS.find((s) => s.route === route)?.key ?? null;
+}
 
 export function indicatorSteps(draft: WizardDraft, activeKey: string) {
   const c = stepCompletion(draft);

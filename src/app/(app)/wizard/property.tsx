@@ -13,8 +13,8 @@ import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
 import type { MastersBundle } from '@/utils/mastersBundle';
 import { useApplyDraftPatch, wardAutoPatch } from '@/utils/wizard-draft-patch';
-import { useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo } from 'react';
 import { Text, View } from 'react-native';
 
 const convexIdEq = (a?: string | null, b?: string | null) => a != null && b != null && String(a) === String(b);
@@ -39,7 +39,7 @@ export default function StepProperty() {
       subtitle="Ward, parcel, and unit identification"
       nextDisabled={(d) => !stepCompletion(d).property}
     >
-      {({ draft, update }) => <PropertyFields draft={draft} update={update} masters={bundle} />}
+      {({ draft, update }) => <PropertyFields draft={draft} update={update} masters={bundle} localId={localId} />}
     </WizardStepFrame>
   );
 }
@@ -48,11 +48,21 @@ function PropertyFields({
   draft,
   update,
   masters,
+  localId,
 }: {
   draft: WizardDraft;
   update: (patch: Partial<WizardDraft>) => Promise<void>;
   masters: MastersBundle;
+  localId: string;
 }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!stepCompletion(draft).start) {
+      router.replace({ pathname: '/(app)/wizard/start', params: { localId } });
+    }
+  }, [draft, localId, router]);
+
   const liveWards = useConvexReadyQuery(
     api.masters.wardsForMunicipality,
     draft.municipalityId ? { municipalityId: draft.municipalityId as Id<'municipalities'> } : 'skip',

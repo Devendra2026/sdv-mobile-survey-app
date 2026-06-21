@@ -1,6 +1,6 @@
 import type { Id } from '@/convex/_generated/dataModel';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 function patchKey(patch: Partial<WizardDraft>): string {
   return Object.entries(patch)
@@ -9,20 +9,20 @@ function patchKey(patch: Partial<WizardDraft>): string {
     .join('|');
 }
 
-/**
- * Applies a derived draft patch during render (React "adjust when props change" pattern).
- * Avoids useEffect + update() sync flagged by React Doctor.
- */
+/** Applies a derived draft patch after render (React 19-safe). */
 export function useApplyDraftPatch(
   update: (patch: Partial<WizardDraft>) => Promise<void>,
   patch: Partial<WizardDraft> | null | undefined,
 ) {
   const appliedKey = useRef<string | null>(null);
-  if (!patch || Object.keys(patch).length === 0) return;
-  const key = patchKey(patch);
-  if (appliedKey.current === key) return;
-  appliedKey.current = key;
-  void update(patch);
+  const serializedKey = patch && Object.keys(patch).length > 0 ? patchKey(patch) : null;
+
+  useEffect(() => {
+    if (!serializedKey || !patch) return;
+    if (appliedKey.current === serializedKey) return;
+    appliedKey.current = serializedKey;
+    void update(patch);
+  }, [update, serializedKey, patch]);
 }
 
 type WardRow = { wardNo: string };

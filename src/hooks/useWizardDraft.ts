@@ -30,6 +30,7 @@ import { taxationSubcategoryComplete } from '@/utils/taxation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 import type { Id } from '../../convex/_generated/dataModel';
+import type { StepConfig } from './wizardSteps';
 
 const KEY = (localId: string) => `wizard_draft:${localId}`;
 
@@ -110,6 +111,8 @@ export interface WizardDraft {
   serverSurveyId?: Id<'surveys'>;
   createdAt: number;
   updatedAt: number;
+  /** Last wizard screen visited — used to resume in-progress drafts. */
+  lastActiveStepKey?: StepConfig['key'] | 'review';
 
   // Step 0 — Survey start
   districtId?: Id<'districts'>;
@@ -218,6 +221,24 @@ export async function clearDraft(localId: string): Promise<void> {
 export async function persistDraft(draft: WizardDraft): Promise<void> {
   const next = { ...draft, updatedAt: Date.now() };
   await AsyncStorage.setItem(KEY(next.localId), JSON.stringify(next));
+}
+
+type RawWizardDraft = WizardDraft & {
+  propertyNo?: string;
+  ownerName?: string;
+  fatherOrHusbandName?: string;
+  mobileNo?: string;
+  altMobileNo?: string;
+};
+
+function parseStoredDraft(raw: string): WizardDraft {
+  return migrateWizardDraft(JSON.parse(raw) as RawWizardDraft);
+}
+
+/** Load a single draft from AsyncStorage (returns null if missing). */
+export async function getDraft(localId: string): Promise<WizardDraft | null> {
+  const raw = await AsyncStorage.getItem(KEY(localId));
+  return raw ? parseStoredDraft(raw) : null;
 }
 
 /** Hydrate a server survey into a local wizard draft (resume / edit). */
@@ -402,37 +423,21 @@ export async function listDrafts(): Promise<WizardDraft[]> {
 export function useWizardDraft(localId: string | undefined) {
   const [draft, setDraft] = useState<WizardDraft | null>(null);
   const [loading, setLoading] = useState(Boolean(localId));
-  const [prevLocalId, setPrevLocalId] = useState(localId);
 
-  if (localId !== prevLocalId) {
-    setPrevLocalId(localId);
+  useEffect(() => {
     if (!localId) {
       setDraft(null);
       setLoading(false);
-    } else {
-      setLoading(true);
+      return;
     }
-  }
 
-  useEffect(() => {
-    if (!localId) return;
-
+    setLoading(true);
     let alive = true;
     AsyncStorage.getItem(KEY(localId))
       .then(async (raw) => {
         if (!alive) return;
         if (raw) {
-          setDraft(
-            migrateWizardDraft(
-              JSON.parse(raw) as WizardDraft & {
-                propertyNo?: string;
-                ownerName?: string;
-                fatherOrHusbandName?: string;
-                mobileNo?: string;
-                altMobileNo?: string;
-              },
-            ),
-          );
+          setDraft(parseStoredDraft(raw));
           return;
         }
         const empty: WizardDraft = {
