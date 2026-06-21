@@ -39,12 +39,8 @@ export function googleMapsIosKey(): string {
   );
 }
 
-export function resolveGoogleMapsKey(platform: 'android' | 'ios'): string {
-  return platform === 'android' ? googleMapsAndroidKey() : googleMapsIosKey();
-}
-
 /** EAS / release APK — Maps key is embedded in AndroidManifest or Info.plist at prebuild. */
-export function isEmbeddedNativeMapsBuild(): boolean {
+function isEmbeddedNativeMapsBuild(): boolean {
   const env = Constants.executionEnvironment;
   return env === 'standalone' || env === 'bare';
 }
