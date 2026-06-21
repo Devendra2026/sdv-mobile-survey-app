@@ -21,13 +21,15 @@ import {
   gpsAccuracyTagLabel,
   gpsAccuracyTagTone,
   isGpsStepComplete,
+  startGnssWarmup,
+  stopGnssWarmup,
   type GpsCaptureProgress,
 } from '@/utils/captureGps';
 import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import { getGpsCapturePolicy } from '@/utils/gpsPolicy';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { Text, View } from 'react-native';
 
 type State = 'idle' | 'locating' | 'captured' | 'error';
@@ -40,10 +42,10 @@ type GpsCoordinateView = Pick<
 function locationErrorMessage(e: unknown, isOnline: boolean, devPreview: boolean): string {
   if (e instanceof GpsAccuracyError) {
     const base = e.message;
-    if (!devPreview) {
-      return `${base} Move outdoors to the property boundary. Expo Go cannot guarantee ±1 m — use a fleet APK for production surveys.`;
+    if (devPreview) {
+      return `${base} Expo Go dev preview accepts up to ±10 m for flow testing only — use a fleet APK for production surveys at ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m.`;
     }
-    return base;
+    return `${base} Move outdoors to the property boundary in open sky. Hold still until two readings reach ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m. Enable Android High accuracy location and disable mock location apps.`;
   }
   if (e instanceof Error) {
     if (!isOnline && /network|offline|internet/i.test(e.message)) {
@@ -164,10 +166,16 @@ function GpsStepContent({
   const captureInFlight = useRef(false);
   const progressRef = useRef<GpsCaptureProgress | null>(null);
 
+  useEffect(() => {
+    void startGnssWarmup();
+    return () => stopGnssWarmup();
+  }, []);
+
   const capture = async () => {
     if (captureInFlight.current || state === 'locating') return;
     const isRetake = Boolean(draft.gps);
     captureInFlight.current = true;
+    stopGnssWarmup();
     progressRef.current = null;
     dispatch({ type: 'start_capture' });
     try {
@@ -194,6 +202,7 @@ function GpsStepContent({
     } finally {
       dispatch({ type: 'capture_finally' });
       captureInFlight.current = false;
+      void startGnssWarmup();
     }
   };
 
@@ -298,9 +307,18 @@ function GpsStepContent({
             </View>
           ) : null}
           {ui === 'locating' && sampling ? (
-            <Text className="text-caption text-ink-tertiary-light text-center mt-2">
-              {sampling.sampleCount} samples · {Math.round(sampling.elapsedMs / 1000)}s
-            </Text>
+            <View className="mt-2 items-center gap-1">
+              <Text className="text-caption text-ink-primary-light dark:text-ink-primary-dark text-center">
+                Pinpoint readings: {sampling.pinpointSampleCount}/{sampling.minSamplesAccept} at ≤ ±
+                {policy.acceptMaxAccuracyMeters} m
+                {sampling.bestAccuracyMeters != null
+                  ? ` · best ±${Math.round(sampling.bestAccuracyMeters * 10) / 10} m`
+                  : ''}
+              </Text>
+              <Text className="text-caption text-ink-tertiary-light text-center">
+                {sampling.sampleCount} samples · {Math.round(sampling.elapsedMs / 1000)}s
+              </Text>
+            </View>
           ) : null}
           {gps && ui === 'captured' ? (
             <View className="mt-3 items-center">

@@ -13,6 +13,9 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 
 ## Capture accuracy
 
+- GNSS pre-warm starts when the GPS wizard step opens (before tapping Capture) to improve time-to-±1 m
+- During capture, live progress shows `Pinpoint readings: N/2 at ≤ ±1 m` plus best accuracy
+- Production APK accuracy failures show field guidance (outdoor, hold still, High accuracy mode) — not Expo Go messaging
 - [ ] Outdoor open sky: capture completes at ≤ ±1 m or shows retry guidance
 - [ ] Indoor / weak GNSS: "Waiting for better GPS signal…" appears; capture rejects above ±1 m
 - [ ] Mock location app enabled: capture blocked with explicit error

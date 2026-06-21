@@ -11,9 +11,22 @@ export type GpsCaptureProgress = {
   bestLatitude: number | null;
   bestLongitude: number | null;
   sampleCount: number;
+  pinpointSampleCount: number;
+  minSamplesAccept: number;
   elapsedMs: number;
   waitingForBetterSignal: boolean;
 };
+
+/** Extend sampling when GNSS is close but not yet at accept threshold (m). */
+const CLOSE_ACCURACY_EXTEND_THRESHOLD_METERS = 3;
+
+/** Extra sampling window when close to target (ms). */
+const CLOSE_ACCURACY_EXTEND_MS = 5_000;
+
+/** Max adaptive extensions per sampleGpsFix pass. */
+const MAX_CLOSE_ACCURACY_EXTENSIONS = 2;
+
+let gnssWarmupSubscription: Location.LocationSubscription | null = null;
 
 export class GpsAccuracyError extends Error {
   readonly accuracyMeters: number;
@@ -154,6 +167,38 @@ export type GpsCaptureOptions = {
   retake?: boolean;
 };
 
+/** Keeps the GNSS chip locking before the user taps Capture GPS. Call stopGnssWarmup on unmount or when capture starts. */
+export async function startGnssWarmup(): Promise<void> {
+  stopGnssWarmup();
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') return;
+  if (!(await Location.hasServicesEnabledAsync())) return;
+
+  if (Location.enableNetworkProviderAsync) {
+    try {
+      await Location.enableNetworkProviderAsync();
+    } catch {
+      // optional on iOS
+    }
+  }
+
+  gnssWarmupSubscription = await Location.watchPositionAsync(
+    {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: GPS_SAMPLE_POLL_MS,
+      distanceInterval: 0,
+    },
+    () => {
+      // Discard fixes — goal is to warm the antenna, not store readings.
+    },
+  );
+}
+
+export function stopGnssWarmup(): void {
+  gnssWarmupSubscription?.remove();
+  gnssWarmupSubscription = null;
+}
+
 /**
  * Samples GNSS fixes, fuses acceptable readings, and enforces the active capture policy.
  */
@@ -222,6 +267,11 @@ async function sampleGpsFix(
     distanceInterval: 0,
   };
 
+  const acceptMax = policy.acceptMaxAccuracyMeters;
+
+  const pinpointSampleCount = () =>
+    samples.filter((s) => Number.isFinite(s.coords.accuracy) && s.coords.accuracy <= acceptMax).length;
+
   const reportProgress = () => {
     const bestAcc = best.coords?.accuracy ?? null;
     onProgress?.({
@@ -229,6 +279,8 @@ async function sampleGpsFix(
       bestLatitude: best.coords?.latitude ?? null,
       bestLongitude: best.coords?.longitude ?? null,
       sampleCount: samples.length,
+      pinpointSampleCount: pinpointSampleCount(),
+      minSamplesAccept: policy.minSamplesAccept,
       elapsedMs: Date.now() - started,
       waitingForBetterSignal: bestAcc != null && bestAcc > policy.targetAccuracyMeters,
     });
@@ -263,11 +315,29 @@ async function sampleGpsFix(
   });
 
   try {
-    const deadline = started + durationMs;
+    let deadline = started + durationMs;
+    let closeAccuracyExtensions = 0;
     const pollUntilDeadline = async (): Promise<void> => {
       const elapsedMs = Date.now() - started;
-      if (Date.now() >= deadline || shouldStopSampling(policy, best.coords?.accuracy, samples.length, elapsedMs)) {
+      if (shouldStopSampling(policy, best.coords?.accuracy, samples.length, elapsedMs)) {
         return;
+      }
+      if (Date.now() >= deadline) {
+        const bestAcc = best.coords?.accuracy;
+        const pinpoints = pinpointSampleCount();
+        if (
+          bestAcc != null &&
+          bestAcc <= CLOSE_ACCURACY_EXTEND_THRESHOLD_METERS &&
+          bestAcc > acceptMax &&
+          pinpoints < policy.minSamplesAccept &&
+          closeAccuracyExtensions < MAX_CLOSE_ACCURACY_EXTENSIONS
+        ) {
+          deadline += CLOSE_ACCURACY_EXTEND_MS;
+          closeAccuracyExtensions += 1;
+          reportProgress();
+        } else {
+          return;
+        }
       }
       await new Promise((r) => setTimeout(r, GPS_SAMPLE_POLL_MS));
       return pollUntilDeadline();
@@ -293,7 +363,6 @@ async function sampleGpsFix(
     throw new Error('Mock location detected — disable fake GPS and use the device antenna');
   }
 
-  const acceptMax = policy.acceptMaxAccuracyMeters;
   const pinpointSamples = samples.filter((s) => Number.isFinite(s.coords.accuracy) && s.coords.accuracy <= acceptMax);
   if (pinpointSamples.length < policy.minSamplesAccept) {
     throw new GpsAccuracyError(
