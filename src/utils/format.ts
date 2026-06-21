@@ -45,17 +45,6 @@ export function formatSurveyParcelLabel(parcelNo: string, unitNo: string): strin
   return parcel || unit || '—';
 }
 
-/** Indian mobile: 10 digits, first digit 6–9. */
-const INDIAN_MOBILE_RE = /^[6-9]\d{9}$/;
-
-export function isValidIndianMobile(value: string): boolean {
-  return INDIAN_MOBILE_RE.test(value);
-}
-
-export function sanitizeMobileDigits(raw: string, maxLen = 10): string {
-  return raw.replace(/\D/g, '').slice(0, maxLen);
-}
-
 export type SurveyOwnerRow = { name?: string; fatherOrHusbandName?: string };
 
 /** Primary line for survey cards (first owner name, else respondent). */

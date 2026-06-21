@@ -6,35 +6,21 @@
 import { AppButton, AppCard, AppDropdown, AppInput, NumberStepper, SectionLabel, Spinner } from '@/components';
 import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
-import { isRespondentOwner, isValidIndianOwnerMobile } from '@/convex/ownerMobile';
+import { altMobileError, primaryMobileError, sanitizeFixedDigits } from '@/convex/surveyFieldValidation';
 import { newOwnerRow, stepCompletion, type WizardDraft, type WizardOwnerRow } from '@/hooks/useWizardDraft';
-import { isValidIndianMobile, sanitizeMobileDigits } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, Text, View } from 'react-native';
 
-const MOBILE_HELPER = '10 digits, starting with 6, 7, 8 or 9';
+const MOBILE_HELPER = '10 digits (e.g. 9876543210)';
 
-function ownerMobileError(row: WizardOwnerRow, requirePrimary: boolean, relationship?: string): string | undefined {
-  const value = row.mobileNo?.trim();
-  if (!value) {
-    return requirePrimary && isRespondentOwner(relationship) ? 'Mobile number is required' : undefined;
-  }
-  if (value.length < 10) return 'Enter all 10 digits';
-  if (isValidIndianOwnerMobile(value)) return undefined;
-  return MOBILE_HELPER;
+function ownerMobileError(row: WizardOwnerRow): string | undefined {
+  return primaryMobileError(row.mobileNo);
 }
 
 function ownerAltMobileError(row: WizardOwnerRow): string | undefined {
-  const alt = row.altMobileNo?.trim();
-  if (!alt) return undefined;
-  if (alt.length < 10) return 'Enter all 10 digits';
-  if (!isValidIndianMobile(alt)) return MOBILE_HELPER;
-  if (row.mobileNo && isValidIndianMobile(row.mobileNo) && alt === row.mobileNo) {
-    return 'Must differ from primary mobile';
-  }
-  return undefined;
+  return altMobileError(row.altMobileNo, row.mobileNo);
 }
 
 function OwnerStepBody({
@@ -102,9 +88,8 @@ function OwnerStepBody({
       <SectionLabel>Owners</SectionLabel>
       <View style={{ gap: 8 }} className="mb-3">
         {owners.map((row, index) => {
-          const mobileError = ownerMobileError(row, index === 0, draft.relationship);
+          const mobileError = index === 0 ? ownerMobileError(row) : undefined;
           const altError = ownerAltMobileError(row);
-          const mobileHelper = mobileError ?? MOBILE_HELPER;
           return (
             <AppCard key={row.clientOwnerId} padded>
               <View className="flex-row items-center justify-between mb-2">
@@ -135,16 +120,18 @@ function OwnerStepBody({
                   keyboardType="number-pad"
                   maxLength={10}
                   value={row.mobileNo ?? ''}
-                  onChangeText={(v) => updateOwner(row.clientOwnerId, { mobileNo: sanitizeMobileDigits(v) })}
-                  helperText={mobileHelper}
+                  onChangeText={(v) => updateOwner(row.clientOwnerId, { mobileNo: sanitizeFixedDigits(v, 10) })}
+                  helperText={mobileError ? undefined : MOBILE_HELPER}
+                  errorText={mobileError}
                 />
                 <AppInput
                   label="Alternative mobile number"
                   keyboardType="number-pad"
                   maxLength={10}
                   value={row.altMobileNo ?? ''}
-                  onChangeText={(v) => updateOwner(row.clientOwnerId, { altMobileNo: sanitizeMobileDigits(v) })}
-                  helperText={altError ?? MOBILE_HELPER}
+                  onChangeText={(v) => updateOwner(row.clientOwnerId, { altMobileNo: sanitizeFixedDigits(v, 10) })}
+                  helperText={altError ? undefined : MOBILE_HELPER}
+                  errorText={altError}
                   placeholder="Optional"
                 />
               </View>

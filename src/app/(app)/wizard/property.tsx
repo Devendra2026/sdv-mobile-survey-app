@@ -8,6 +8,7 @@ import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatPropertyId } from '@/convex/propertyId';
+import { constructedYearError, parcelNoError, sanitizeFixedDigits, unitNoError } from '@/convex/surveyFieldValidation';
 import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
@@ -154,22 +155,47 @@ function PropertyFields({
             <AppInput
               label="Parcel number"
               required
+              keyboardType="number-pad"
+              maxLength={5}
               value={draft.parcelNo ?? ''}
-              onChangeText={(v) => update({ parcelNo: v })}
-              placeholder="P-1042"
-              helperText="Plot / parcel ID"
+              onChangeText={(v) => update({ parcelNo: sanitizeFixedDigits(v, 5) })}
+              placeholder="00001"
+              helperText={parcelNoError(draft.parcelNo) ? undefined : 'Exactly 5 digits (leading zeros allowed)'}
+              errorText={draft.parcelNo ? parcelNoError(draft.parcelNo) : undefined}
             />
           </View>
           <View style={{ flex: 1 }}>
             <AppInput
               label="Unit no"
               required
+              keyboardType="number-pad"
+              maxLength={3}
               value={draft.unitNo ?? ''}
-              onChangeText={(v) => update({ unitNo: v })}
-              placeholder="4A"
+              onChangeText={(v) => update({ unitNo: sanitizeFixedDigits(v, 3) })}
+              placeholder="001"
+              helperText={unitNoError(draft.unitNo) ? undefined : 'Exactly 3 digits (leading zeros allowed)'}
+              errorText={draft.unitNo ? unitNoError(draft.unitNo) : undefined}
             />
           </View>
         </View>
+
+        <AppInput
+          label="Constructed year"
+          required
+          value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
+          onChangeText={(v) => {
+            const digits = v.replace(/\D/g, '').slice(0, 4);
+            update({ constructedYear: digits ? Number(digits) : undefined });
+          }}
+          placeholder="e.g. 1998"
+          keyboardType="number-pad"
+          maxLength={4}
+          iconLeft="calendar-outline"
+          helperText={
+            constructedYearError(draft.constructedYear) ? undefined : 'Year the structure was built (1800–present)'
+          }
+          errorText={draft.constructedYear != null ? constructedYearError(draft.constructedYear) : undefined}
+        />
 
         <View style={{ gap: 12 }}>
           <Text className="text-caption font-medium text-ink-tertiary-light dark:text-ink-tertiary-dark">
@@ -192,18 +218,6 @@ function PropertyFields({
             helperText="Format: 800828-001-00001-P (ULB–Ward–Parcel–Use)"
             editable={false}
           />
-          <AppInput
-            label="Constructed year"
-            value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
-            onChangeText={(v) => {
-              const digits = v.replace(/\D/g, '').slice(0, 4);
-              update({ constructedYear: digits ? Number(digits) : undefined });
-            }}
-            placeholder="e.g. 1998"
-            keyboardType="number-pad"
-            iconLeft="calendar-outline"
-            helperText="Year the structure was built"
-          />
         </View>
       </AppCard>
 
@@ -223,9 +237,9 @@ function PropertyFields({
         />
       </AppCard>
 
-      {!draft.wardNo || !draft.parcelNo?.trim() || !draft.unitNo?.trim() ? (
+      {!stepCompletion(draft).property ? (
         <Text className="text-caption text-ink-tertiary-light px-1 mt-3">
-          Select a ward and enter parcel number and unit no to continue.
+          Select a ward, enter valid parcel and unit numbers, and provide the constructed year to continue.
         </Text>
       ) : null}
     </>

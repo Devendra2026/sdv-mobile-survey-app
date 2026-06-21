@@ -1,5 +1,5 @@
 /**
- * Step 4 — Taxation parameters (ownership, property use, road & site).
+ * Step 4 — Taxation parameters (ownership use, property type, road & site).
  */
 import { AppCard, AppDropdown, SectionLabel, Spinner } from '@/components';
 import { WizardStepFrame } from '@/components/wizard';
@@ -25,7 +25,7 @@ export default function StepTaxation() {
       localId={localId}
       activeKey="taxation"
       title="Taxation"
-      subtitle="Ownership, use & road details"
+      subtitle="Ownership use, property type & road details"
       nextDisabled={(d) => !stepCompletion(d).taxation}
     >
       {({ draft, update }) => {
@@ -47,27 +47,27 @@ export default function StepTaxation() {
 
         return (
           <>
-            <SectionLabel>Ownership</SectionLabel>
+            <SectionLabel>Ownership use</SectionLabel>
             <AppCard padded className="mb-4">
               <AppDropdown
-                label="Ownership type"
+                label="Ownership use"
                 required
-                placeholder="Select ownership type"
-                modalTitle="Ownership type"
+                placeholder="Select ownership use"
+                modalTitle="Ownership use"
                 value={draft.ownershipType ?? ''}
                 options={masters.ownershipTypes}
                 onChange={(v) => update({ ownershipType: v })}
               />
             </AppCard>
 
-            <SectionLabel>Property use</SectionLabel>
+            <SectionLabel>Property type</SectionLabel>
             <AppCard padded className="mb-4">
               <View style={{ gap: FIELD_GAP }}>
                 <AppDropdown
-                  label="Property use"
+                  label="Property type"
                   required
-                  placeholder="Select property use"
-                  modalTitle="Property use"
+                  placeholder="Select property type"
+                  modalTitle="Property type"
                   value={use}
                   options={propertyUseOptions}
                   onChange={onPropertyUseChange}

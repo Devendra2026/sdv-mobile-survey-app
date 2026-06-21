@@ -3,6 +3,7 @@ import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import {
   isQuestionComplete,
+  questionFieldError,
   questionProgress,
   readQuestionValue,
   type SurveyQuestion,
@@ -58,7 +59,7 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
       return;
     }
     if (!isQuestionComplete(draft, q)) {
-      setError('This field is required');
+      setError(questionFieldError(draft, q) ?? 'This field is required');
       return;
     }
     setError(null);
@@ -98,7 +99,17 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
           label={q.label}
           value={value}
           onChangeText={(text) => void update(writeQuestionValue(draft, q.field, text))}
-          keyboardType={q.keyboard ?? (q.kind === 'number' ? 'number-pad' : 'default')}
+          keyboardType={
+            q.keyboard ??
+            (q.field === 'parcelNo' || q.field === 'unitNo' || q.field === 'owners.0.mobileNo'
+              ? 'number-pad'
+              : q.kind === 'number'
+                ? 'number-pad'
+                : 'default')
+          }
+          maxLength={
+            q.field === 'parcelNo' ? 5 : q.field === 'unitNo' ? 3 : q.field === 'owners.0.mobileNo' ? 10 : undefined
+          }
           containerClassName="mt-6"
           errorText={error ?? undefined}
           autoFocus

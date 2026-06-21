@@ -20,11 +20,18 @@
  *   - useWizardDraft(id) → loads the draft for `localId`, exposes update + reset
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
-import { isRespondentOwner, primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
+import { primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
+import {
+  altMobileError,
+  isValidConstructedYear,
+  isValidParcelNo,
+  isValidTenDigitMobile,
+  isValidUnitNo,
+  primaryMobileError,
+} from '@/convex/surveyFieldValidation';
 import { plinthSqftFromFloors } from '@/utils/area';
 import { isGpsStepComplete } from '@/utils/captureGps';
 import { normalizeFloorFields, usageTypeToOccupied } from '@/utils/floorRow';
-import { isValidIndianMobile } from '@/utils/format';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
 import { surveyPhotosComplete } from '@/utils/surveyPhotos';
 import { taxationSubcategoryComplete } from '@/utils/taxation';
@@ -590,6 +597,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     !d.wardNo ||
     !d.parcelNo?.trim() ||
     !d.unitNo?.trim() ||
+    !isValidConstructedYear(d.constructedYear) ||
     !ownerStepComplete(d) ||
     !d.locality?.trim() ||
     !d.colonyName?.trim() ||
@@ -653,25 +661,15 @@ function primaryOwnerMobileFromDraft(d: WizardDraft): string | undefined {
   return primaryOwnerMobileFromOwners(d.owners, d.relationship);
 }
 
-/** Owner step: respondent is owner → valid primary mobile required; else mobile optional but must be valid if set. */
+/** Owner step: valid primary mobile required; optional rows must be valid if set. */
 function ownerStepComplete(d: WizardDraft): boolean {
   const owners = d.owners ?? [];
   if (!owners.length) return false;
-  const relationship = d.relationship?.trim();
-  const primary = owners[0]?.mobileNo?.trim() ?? '';
-  if (isRespondentOwner(relationship)) {
-    if (!primary || !isValidIndianMobile(primary)) return false;
-  } else if (primary && !isValidIndianMobile(primary)) {
-    return false;
-  }
+  if (primaryMobileError(owners[0]?.mobileNo)) return false;
   for (const o of owners) {
     const mobile = o.mobileNo?.trim();
-    if (mobile && !isValidIndianMobile(mobile)) return false;
-    const alt = o.altMobileNo?.trim();
-    if (alt) {
-      if (!isValidIndianMobile(alt)) return false;
-      if (alt === mobile) return false;
-    }
+    if (mobile && !isValidTenDigitMobile(mobile)) return false;
+    if (altMobileError(o.altMobileNo, o.mobileNo)) return false;
   }
   if (d.familySize != null && (!Number.isInteger(d.familySize) || d.familySize < 1)) return false;
   return true;
@@ -684,7 +682,12 @@ function ownerStepComplete(d: WizardDraft): boolean {
 export function stepCompletion(d: WizardDraft) {
   return {
     start: !!(d.assessmentYear && d.districtId && d.municipalityId),
-    property: !!(d.wardNo && d.parcelNo?.trim() && d.unitNo?.trim()),
+    property: !!(
+      d.wardNo &&
+      isValidParcelNo(d.parcelNo ?? '') &&
+      isValidUnitNo(d.unitNo ?? '') &&
+      isValidConstructedYear(d.constructedYear)
+    ),
     owner: ownerStepComplete(d),
     address: !!(d.locality?.trim() && d.colonyName?.trim() && d.pinCode),
     taxation: !!(

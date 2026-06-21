@@ -203,7 +203,18 @@ export function ReviewPropertySection({ draft }: { draft: WizardDraft }) {
               showChevron={false}
             />
           </>
-        ) : null}
+        ) : (
+          <>
+            <ReviewDivider />
+            <ListRow
+              icon="calendar-outline"
+              iconTone="neutral"
+              title="Constructed year"
+              subtitle="—"
+              showChevron={false}
+            />
+          </>
+        )}
       </AppCard>
     </>
   );
@@ -288,9 +299,9 @@ export function ReviewTaxationSection({ draft, bundle }: { draft: WizardDraft; b
       <AppCard padded={false} className="mb-3">
         <ListRow title="Assessment year" subtitle={draft.assessmentYear ?? '—'} showChevron={false} />
         <ReviewDivider />
-        <ListRow title="Ownership" subtitle={humanizeRole(draft.ownershipType)} showChevron={false} />
+        <ListRow title="Ownership use" subtitle={humanizeRole(draft.ownershipType)} showChevron={false} />
         <ReviewDivider />
-        <ListRow title="Property use" subtitle={humanizeRole(draft.propertyUse)} showChevron={false} />
+        <ListRow title="Property type" subtitle={humanizeRole(draft.propertyUse)} showChevron={false} />
         {draft.propertyType ? (
           <>
             <ReviewDivider />

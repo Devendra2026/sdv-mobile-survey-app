@@ -179,9 +179,9 @@ export function SurveyTaxationSection({ survey, bundle }: { survey: SurveyDetail
       <AppCard padded={false} className="mb-3">
         <ListRow title="Assessment year" subtitle={survey.assessmentYear} showChevron={false} />
         <RowDivider />
-        <ListRow title="Ownership" subtitle={humanizeRole(survey.ownershipType)} showChevron={false} />
+        <ListRow title="Ownership use" subtitle={humanizeRole(survey.ownershipType)} showChevron={false} />
         <RowDivider />
-        <ListRow title="Property use" subtitle={humanizeRole(survey.propertyUse)} showChevron={false} />
+        <ListRow title="Property type" subtitle={humanizeRole(survey.propertyUse)} showChevron={false} />
         {survey.propertyType ? (
           <>
             <RowDivider />

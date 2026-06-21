@@ -26,7 +26,7 @@ import { refreshSurveyCompletionPct } from './lib/surveyProgress';
 import { filterSurveysBySearch } from './lib/surveySearch';
 import { assertUniqueSurveySlot, surveyIdentifyingSlotChanged } from './lib/surveyUniqueness';
 import { computeSurveyWardAggregates } from './lib/surveyWardStats';
-import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
+import { normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
 import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from './propertyId';
 import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from './schema';
 import { validateServicesSection } from './serviceMasters';
@@ -37,6 +37,15 @@ import {
   resolveExistingSurveyForSave,
   resolvePostSaveStatuses,
 } from './surveyEditRules';
+import {
+  constructedYearError,
+  isValidConstructedYear,
+  isValidParcelNo,
+  isValidTenDigitMobile,
+  isValidUnitNo,
+  parcelNoError,
+  unitNoError,
+} from './surveyFieldValidation';
 import { validateTaxationSection } from './taxationMasters';
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
@@ -133,7 +142,7 @@ const surveyInput = {
   propertyId: v.optional(v.string()),
   parcelNo: v.string(),
   unitNo: v.string(),
-  constructedYear: v.optional(v.number()),
+  constructedYear: v.number(),
   isSlum: v.boolean(),
 
   respondentName: v.optional(v.string()),
@@ -1516,8 +1525,8 @@ function validateBusinessRules(
     ),
   );
   const denormalizedMobile = String(in_.mobileNo ?? '').trim();
-  if (denormalizedMobile && !isValidIndianOwnerMobile(denormalizedMobile)) {
-    details.mobileNo = ['Enter a valid 10-digit mobile (starts 6-9)'];
+  if (denormalizedMobile && !isValidTenDigitMobile(denormalizedMobile)) {
+    details.mobileNo = ['Enter a valid 10-digit mobile number'];
   }
   Object.assign(
     details,
@@ -1544,12 +1553,18 @@ function validateBusinessRules(
   }
 
   const parcelNo = String(in_.parcelNo ?? '').trim();
-  if (strict && !parcelNo) {
-    details.parcelNo = ['Parcel number is required'];
+  if (strict) {
+    const err = parcelNoError(parcelNo || undefined);
+    if (err) details.parcelNo = [err];
+  } else if (parcelNo && !isValidParcelNo(parcelNo)) {
+    details.parcelNo = ['Enter exactly 5 digits (e.g. 00001)'];
   }
   const unitNo = String(in_.unitNo ?? '').trim();
-  if (strict && !unitNo) {
-    details.unitNo = ['Unit number is required'];
+  if (strict) {
+    const err = unitNoError(unitNo || undefined);
+    if (err) details.unitNo = [err];
+  } else if (unitNo && !isValidUnitNo(unitNo)) {
+    details.unitNo = ['Enter exactly 3 digits (e.g. 001)'];
   }
   if (strict && !String(in_.assessmentYear ?? '').trim()) {
     details.assessmentYear = ['Assessment year is required'];
@@ -1581,11 +1596,12 @@ function validateBusinessRules(
     ),
   );
   const constructedYear = in_.constructedYear as unknown as number | undefined;
-  if (constructedYear != null) {
-    const currentYear = new Date().getFullYear();
-    if (!Number.isInteger(constructedYear) || constructedYear < 1800 || constructedYear > currentYear) {
-      details.constructedYear = [`Enter a year between 1800 and ${currentYear}`];
-    }
+  const currentYear = new Date().getFullYear();
+  if (strict) {
+    const err = constructedYearError(constructedYear, currentYear);
+    if (err) details.constructedYear = [err];
+  } else if (constructedYear != null && !isValidConstructedYear(constructedYear, currentYear)) {
+    details.constructedYear = [`Enter a year between 1800 and ${currentYear}`];
   }
   if (in_.gps) {
     Object.assign(

@@ -2,6 +2,14 @@
  * Flat question catalog for one-question-at-a-time wizard flow.
  * Complex steps (floors, photos, GPS) remain on dedicated wizard screens.
  */
+import {
+  isValidParcelNo,
+  isValidUnitNo,
+  parcelNoError,
+  primaryMobileError,
+  sanitizeFixedDigits,
+  unitNoError,
+} from '@/convex/surveyFieldValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 
 export type QuestionKind = 'text' | 'number' | 'redirect';
@@ -113,14 +121,33 @@ export function writeQuestionValue(
   if (!field) return {};
   if (field === 'owners.0.mobileNo') {
     const owners = draft.owners?.length ? [...draft.owners] : [{ clientOwnerId: `ow_${Date.now()}` }];
-    owners[0] = { ...owners[0]!, mobileNo: value };
+    owners[0] = { ...owners[0]!, mobileNo: sanitizeFixedDigits(value, 10) };
     return { owners };
   }
+  if (field === 'parcelNo') {
+    return { parcelNo: sanitizeFixedDigits(value, 5) };
+  }
+  if (field === 'unitNo') {
+    return { unitNo: sanitizeFixedDigits(value, 3) };
+  }
   return { [field]: field === 'constructedYear' ? Number(value) || undefined : value } as Partial<WizardDraft>;
+}
+
+export function questionFieldError(draft: WizardDraft, q: SurveyQuestion): string | undefined {
+  if (q.kind === 'redirect' || !q.field) return undefined;
+  const value = readQuestionValue(draft, q.field);
+  if (q.field === 'parcelNo') return parcelNoError(value || undefined);
+  if (q.field === 'unitNo') return unitNoError(value || undefined);
+  if (q.field === 'owners.0.mobileNo') return primaryMobileError(value || undefined);
+  if (q.required && !value.trim()) return 'This field is required';
+  return undefined;
 }
 
 export function isQuestionComplete(draft: WizardDraft, q: SurveyQuestion): boolean {
   if (q.kind === 'redirect') return true;
   if (!q.required) return true;
+  if (q.field === 'parcelNo') return isValidParcelNo(readQuestionValue(draft, q.field));
+  if (q.field === 'unitNo') return isValidUnitNo(readQuestionValue(draft, q.field));
+  if (q.field === 'owners.0.mobileNo') return !primaryMobileError(readQuestionValue(draft, q.field));
   return readQuestionValue(draft, q.field).trim().length > 0;
 }
