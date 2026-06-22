@@ -241,6 +241,14 @@ try {
 
 if (!failed) {
   try {
+    execSync('npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-error-messages.ts', { stdio: 'inherit', cwd: process.cwd() });
+  } catch {
+    failed = true;
+  }
+}
+
+if (!failed) {
+  try {
     execSync('node ./scripts/verify-clerk-convex.mjs', { stdio: 'inherit', cwd: process.cwd() });
   } catch {
     failed = true;

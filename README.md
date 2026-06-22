@@ -13,6 +13,29 @@ Field survey capture for Android/iOS. Writes to the **same Convex deployment** a
 
 Development Clerk: `pk_test_…` → `https://organic-halibut-21.clerk.accounts.dev`. Web and mobile must use the **same** Clerk app and issuer (check with `npm run verify:clerk-convex`).
 
+### Clerk dev email limit (sign-in on fleet APK)
+
+Development instances cap Clerk-delivered emails at **100/month**. Fleet APK installs are **new clients**; with **Client Trust** enabled, password sign-in sends an email verification code and can fail with:
+
+> Clerk development instance email limit reached (100/month)
+
+**Unblock field testers today:**
+
+1. **Dashboard (all users):** [Clerk Dashboard](https://dashboard.clerk.com) → development instance → **Configure → Attack protection → Client Trust → Disable**.
+2. **Per user (script):** from `survey-app`, with `CLERK_SECRET_KEY` in `../sdv-front-new-app/.env.local`:
+
+   ```bash
+   npm run clerk:unblock-field-user
+   npm run clerk:unblock-field-user -- --email tarundkt1984@gmail.com
+   npm run clerk:unblock-field-user -- --all-fleet
+   ```
+
+   Sets `bypass_client_trust` so password sign-in on a new device skips email codes.
+
+3. **Retry sign-in** on the installed APK (no rebuild needed).
+
+**Long-term (production rollout):** switch fleet APKs to `pk_live_…`, update EAS preview env, Convex `CLERK_JWT_ISSUER_DOMAIN`, web `.env.local`, activate Clerk → Convex on production, then `npm run verify:clerk-convex` and rebuild.
+
 Before every field APK build:
 
 ```bash
@@ -71,5 +94,15 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
    cd ../survey-app
    npm run eas:build:android:preview
    ```
+
+5. **After GPS or auth fixes:** uninstall the old APK from fleet devices, install the new build, and confirm the GPS step footer shows `Build … · fleet APK · ±1 m max`. Accuracy errors must **not** mention Expo Go; they should mention **High accuracy location**. If you still see Expo Go text, the device has an outdated APK (built before the `9ecee25` message fix).
+
+### Fleet GPS accuracy (±1 m government standard)
+
+- Fleet APKs use strict ±1 m capture (not Expo Go’s ±10 m dev preview).
+- Wait for the **8 s GNSS warmup** countdown on the GPS step before tapping Capture.
+- First capture samples up to **20 s** + **10 s** retry; hold still at the property boundary in open sky.
+- Enable Android **High accuracy** location; disable mock-location apps.
+- `npm run verify:gps-error-messages` guards against inverted Expo Go error text on fleet builds.
 
 `npm run verify:eas-preview` fails if web/mobile/Convex Clerk settings disagree.

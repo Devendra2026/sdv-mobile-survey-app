@@ -22,11 +22,11 @@ export const GPS_MIN_SAMPLES_TARGET = 2;
 /** Minimum sampling time (ms) before accepting a ≤1 m fix — avoids single-spike acceptance. */
 export const GPS_MIN_ELAPSED_ACCEPT_MS = 800;
 
-/** Max time to refine a fix on the first pass (ms). */
-export const GPS_SAMPLE_DURATION_MS = 12_000;
+/** Max time to refine a fix on the first pass (ms). Extended for urban / partial-sky fleet captures. */
+export const GPS_SAMPLE_DURATION_MS = 20_000;
 
 /** Extra sampling window on automatic retry (ms). */
-export const GPS_RETRY_DURATION_MS = 6_000;
+export const GPS_RETRY_DURATION_MS = 10_000;
 
 /** Retake — GNSS is usually warm; shorter windows (few seconds when signal is good). */
 export const GPS_RETAKE_SAMPLE_DURATION_MS = 5_000;
@@ -37,6 +37,9 @@ export const GPS_RETAKE_RETRY_DURATION_MS = 3_000;
 export const GPS_ABSOLUTE_TIMEOUT_MS = GPS_SAMPLE_DURATION_MS + GPS_RETRY_DURATION_MS + 10_000;
 
 export const GPS_RETAKE_ABSOLUTE_TIMEOUT_MS = GPS_RETAKE_SAMPLE_DURATION_MS + GPS_RETAKE_RETRY_DURATION_MS + 5_000;
+
+/** Minimum GNSS warmup on the GPS wizard step before Capture is enabled (ms). */
+export const GPS_WARMUP_GATE_MS = 8_000;
 
 /** Poll interval while waiting for a good fix (ms). */
 export const GPS_SAMPLE_POLL_MS = 150;

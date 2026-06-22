@@ -1,8 +1,11 @@
 import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_MAX_AGE_MS, GPS_SAMPLE_POLL_MS } from '@/convex/gpsAccuracy';
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { GpsAccuracyError } from '@/utils/gpsAccuracyError';
 import { getGpsCapturePolicy, GPS_DEV_PREVIEW_PROVIDER, type GpsCapturePolicy } from '@/utils/gpsPolicy';
 import * as Location from 'expo-location';
+
+export { GpsAccuracyError } from '@/utils/gpsAccuracyError';
 
 export type GpsCapture = NonNullable<WizardDraft['gps']>;
 
@@ -24,22 +27,9 @@ const CLOSE_ACCURACY_EXTEND_THRESHOLD_METERS = 3;
 const CLOSE_ACCURACY_EXTEND_MS = 5_000;
 
 /** Max adaptive extensions per sampleGpsFix pass. */
-const MAX_CLOSE_ACCURACY_EXTENSIONS = 2;
+const MAX_CLOSE_ACCURACY_EXTENSIONS = 3;
 
 let gnssWarmupSubscription: Location.LocationSubscription | null = null;
-
-export class GpsAccuracyError extends Error {
-  readonly accuracyMeters: number;
-
-  constructor(accuracyMeters: number, acceptMaxMeters: number, detail?: string) {
-    super(
-      detail ??
-        `Could not reach ±${acceptMaxMeters} m (best was ±${Math.round(accuracyMeters)} m). Stand at the property boundary in open sky, hold still, then retry.`,
-    );
-    this.name = 'GpsAccuracyError';
-    this.accuracyMeters = accuracyMeters;
-  }
-}
 
 function toCaptureError(e: unknown): Error {
   if (e instanceof GpsAccuracyError) return e;

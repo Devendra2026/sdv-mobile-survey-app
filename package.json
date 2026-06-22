@@ -20,6 +20,8 @@
     "lockfile:eas": "node ./scripts/lockfile-eas.mjs",
     "verify:preview-native": "node ./scripts/verify-no-dev-client.mjs preview",
     "verify:clerk-convex": "node ./scripts/verify-clerk-convex.mjs",
+    "verify:gps-error-messages": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-error-messages.ts",
+    "clerk:unblock-field-user": "node ./scripts/clerk-dev-field-unblock.mjs",
     "verify:eas-preview": "node ./scripts/verify-eas-preview.mjs",
     "eas:build:android": "npx eas-cli build --platform android",
     "eas:build:android:preview": "npm run verify:eas-preview && npx eas-cli build --platform android --profile preview --non-interactive",

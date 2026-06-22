@@ -11,6 +11,7 @@ import {
   GPS_RETAKE_SAMPLE_DURATION_MS,
   GPS_SAMPLE_DURATION_MS,
   GPS_TARGET_ACCURACY_METERS,
+  GPS_WARMUP_GATE_MS,
 } from '@/convex/gpsAccuracy';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
@@ -26,10 +27,12 @@ import {
   type GpsCaptureProgress,
 } from '@/utils/captureGps';
 import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
+import { formatGpsBuildFingerprintLine } from '@/utils/gpsBuildInfo';
+import { formatGpsAccuracyErrorDetail, locationErrorMessage } from '@/utils/gpsLocationErrors';
 import { getGpsCapturePolicy } from '@/utils/gpsPolicy';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
 type State = 'idle' | 'locating' | 'captured' | 'error';
@@ -38,35 +41,6 @@ type GpsCoordinateView = Pick<
   NonNullable<WizardDraft['gps']>,
   'latitude' | 'longitude' | 'accuracyMeters' | 'capturedAt'
 >;
-
-function locationErrorMessage(e: unknown, isOnline: boolean, devPreview: boolean): string {
-  if (e instanceof GpsAccuracyError) {
-    const base = e.message;
-    if (devPreview) {
-      return `${base} Expo Go dev preview accepts up to ±10 m for flow testing only — use a fleet APK for production surveys at ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m.`;
-    }
-    return `${base} Move outdoors to the property boundary in open sky. Hold still until two readings reach ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m. Enable Android High accuracy location and disable mock location apps.`;
-  }
-  if (e instanceof Error) {
-    if (!isOnline && /network|offline|internet/i.test(e.message)) {
-      return 'No network connection. GPS still works offline — ensure location services are enabled.';
-    }
-    if (/permission/i.test(e.message)) {
-      return 'Location permission denied. Open Settings → Apps → Survey App → Permissions → Location → Allow.';
-    }
-    if (/location services/i.test(e.message)) {
-      return 'Turn on device location (GPS) in system settings, then retry.';
-    }
-    if (/mock/i.test(e.message)) {
-      return e.message;
-    }
-    if (/timed out/i.test(e.message)) {
-      return `${e.message} Hold still in open sky and retry.`;
-    }
-    return e.message;
-  }
-  return 'Could not get location';
-}
 
 function coordinateFromSampling(sampling: GpsCaptureProgress | null): GpsCoordinateView | null {
   if (sampling?.bestLatitude == null || sampling.bestLongitude == null || sampling.bestAccuracyMeters == null) {
@@ -97,6 +71,7 @@ type GpsCaptureUiState = {
   error: string | null;
   sampling: GpsCaptureProgress | null;
   lastAttemptMeters: number | null;
+  lastAttemptPinpointCount: number | null;
   lastAttemptCoordinate: GpsCoordinateView | null;
 };
 
@@ -108,6 +83,7 @@ type GpsCaptureAction =
       type: 'capture_error';
       error: string;
       lastAttemptMeters: number | null;
+      lastAttemptPinpointCount: number | null;
       lastAttemptCoordinate: GpsCoordinateView | null;
     }
   | { type: 'capture_finally' };
@@ -117,6 +93,7 @@ const initialGpsCaptureUiState: GpsCaptureUiState = {
   error: null,
   sampling: null,
   lastAttemptMeters: null,
+  lastAttemptPinpointCount: null,
   lastAttemptCoordinate: null,
 };
 
@@ -129,6 +106,7 @@ function gpsCaptureReducer(state: GpsCaptureUiState, action: GpsCaptureAction): 
         error: null,
         sampling: null,
         lastAttemptMeters: null,
+        lastAttemptPinpointCount: null,
         lastAttemptCoordinate: null,
       };
     case 'capture_progress':
@@ -141,6 +119,7 @@ function gpsCaptureReducer(state: GpsCaptureUiState, action: GpsCaptureAction): 
         state: 'error',
         error: action.error,
         lastAttemptMeters: action.lastAttemptMeters,
+        lastAttemptPinpointCount: action.lastAttemptPinpointCount,
         lastAttemptCoordinate: action.lastAttemptCoordinate,
       };
     case 'capture_finally':
@@ -161,15 +140,44 @@ function GpsStepContent({
   const { isOnline } = useNetworkStatus();
   const policy = useMemo(() => getGpsCapturePolicy(), []);
   const devPreview = policy.devPreview;
+  const buildFingerprint = useMemo(() => formatGpsBuildFingerprintLine(), []);
   const [captureUi, dispatch] = useReducer(gpsCaptureReducer, initialGpsCaptureUiState);
-  const { state, error, sampling, lastAttemptMeters, lastAttemptCoordinate } = captureUi;
+  const { state, error, sampling, lastAttemptMeters, lastAttemptPinpointCount, lastAttemptCoordinate } = captureUi;
   const captureInFlight = useRef(false);
   const progressRef = useRef<GpsCaptureProgress | null>(null);
+  const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warmupDeadlineRef = useRef(Date.now() + GPS_WARMUP_GATE_MS);
+  const [captureAllowed, setCaptureAllowed] = useState(false);
+  const [warmupSecondsLeft, setWarmupSecondsLeft] = useState(Math.ceil(GPS_WARMUP_GATE_MS / 1000));
+
+  const scheduleWarmupGate = useCallback(() => {
+    if (warmupTimerRef.current) clearTimeout(warmupTimerRef.current);
+    warmupDeadlineRef.current = Date.now() + GPS_WARMUP_GATE_MS;
+    setCaptureAllowed(false);
+    setWarmupSecondsLeft(Math.ceil(GPS_WARMUP_GATE_MS / 1000));
+    warmupTimerRef.current = setTimeout(() => {
+      setCaptureAllowed(true);
+      setWarmupSecondsLeft(0);
+    }, GPS_WARMUP_GATE_MS);
+  }, []);
 
   useEffect(() => {
     void startGnssWarmup();
-    return () => stopGnssWarmup();
-  }, []);
+    scheduleWarmupGate();
+    const countdown = setInterval(() => {
+      const leftMs = warmupDeadlineRef.current - Date.now();
+      if (leftMs <= 0) {
+        setWarmupSecondsLeft(0);
+        return;
+      }
+      setWarmupSecondsLeft(Math.ceil(leftMs / 1000));
+    }, 500);
+    return () => {
+      clearInterval(countdown);
+      if (warmupTimerRef.current) clearTimeout(warmupTimerRef.current);
+      stopGnssWarmup();
+    };
+  }, [scheduleWarmupGate]);
 
   const capture = async () => {
     if (captureInFlight.current || state === 'locating') return;
@@ -197,12 +205,14 @@ function GpsStepContent({
         type: 'capture_error',
         error: locationErrorMessage(e, isOnline, devPreview),
         lastAttemptMeters: attemptMeters,
+        lastAttemptPinpointCount: lastProgress?.pinpointSampleCount ?? null,
         lastAttemptCoordinate: attemptCoord,
       });
     } finally {
       dispatch({ type: 'capture_finally' });
       captureInFlight.current = false;
       void startGnssWarmup();
+      scheduleWarmupGate();
     }
   };
 
@@ -221,9 +231,44 @@ function GpsStepContent({
     lastAttemptCoordinate,
   );
   const showMapDetails = ui === 'captured' && gps;
+  const accuracyErrorDetail = formatGpsAccuracyErrorDetail(
+    lastAttemptMeters,
+    lastAttemptPinpointCount,
+    policy.minSamplesAccept,
+    policy.acceptMaxAccuracyMeters,
+  );
 
   return (
     <>
+      {ui === 'idle' && !gps ? (
+        <Banner
+          tone="info"
+          title="Before you capture"
+          message={
+            captureAllowed
+              ? 'GNSS is warm. Stand at the property boundary in open sky, enable Android High accuracy location, then tap Capture GPS and hold still.'
+              : `GNSS warming up… wait ${warmupSecondsLeft} s before capture. Stand at the property boundary in open sky and enable Android High accuracy location.`
+          }
+          icon="sunny-outline"
+          className="mb-3"
+        />
+      ) : null}
+
+      {ui === 'idle' && !gps && !captureAllowed ? (
+        <Text className="text-caption text-ink-tertiary-light text-center mb-3">
+          GNSS warmup: {warmupSecondsLeft}s remaining
+        </Text>
+      ) : null}
+
+      {ui === 'error' ? (
+        <Banner
+          tone="warning"
+          title="Field tips"
+          message="Move to the property boundary with a clear view of the sky. Disable mock location apps, turn off battery saver for this app, wait for GNSS warmup, then retake and hold still until sampling finishes."
+          icon="footsteps-outline"
+          className="mb-3"
+        />
+      ) : null}
       {ui === 'locating' && sampling?.waitingForBetterSignal ? (
         <Banner
           tone="info"
@@ -338,7 +383,7 @@ function GpsStepContent({
         <Banner
           tone="danger"
           title={lastAttemptMeters != null ? 'Accuracy not met' : 'Capture failed'}
-          message={error}
+          message={[accuracyErrorDetail, error].filter(Boolean).join('\n\n')}
           icon="alert-circle-outline"
           className="mb-3"
         />
@@ -347,6 +392,7 @@ function GpsStepContent({
       <AppButton
         label={state === 'locating' ? 'Sampling GPS…' : gps ? 'Retake location' : 'Capture GPS'}
         loading={state === 'locating'}
+        disabled={state !== 'locating' && !captureAllowed}
         iconLeft={gps ? 'refresh' : 'locate'}
         size="lg"
         onPress={capture}
@@ -360,6 +406,8 @@ function GpsStepContent({
         icon="information-circle-outline"
         className="mt-3"
       />
+
+      <Text className="text-caption text-ink-tertiary-light text-center mt-2">{buildFingerprint}</Text>
     </>
   );
 }
