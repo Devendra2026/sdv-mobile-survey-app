@@ -1,4 +1,4 @@
-import { GPS_ACCEPT_MAX_ACCURACY_METERS, GPS_MAX_AGE_MS, GPS_SAMPLE_POLL_MS } from '@/convex/gpsAccuracy';
+import { GPS_MAX_AGE_MS, GPS_SAMPLE_POLL_MS } from '@/convex/gpsAccuracy';
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { GpsAccuracyError } from '@/utils/gpsAccuracyError';
@@ -212,14 +212,7 @@ async function captureGpsWithRetry(
   policy: GpsCapturePolicy,
   onProgress?: (progress: GpsCaptureProgress) => void,
 ): Promise<GpsCapture> {
-  try {
-    return await sampleGpsFix(policy, policy.sampleDurationMs, onProgress);
-  } catch (e) {
-    if (e instanceof GpsAccuracyError) {
-      return await sampleGpsFix(policy, policy.retryDurationMs, onProgress);
-    }
-    throw e;
-  }
+  return await sampleGpsFix(policy, policy.sampleDurationMs, onProgress);
 }
 
 async function sampleGpsFix(
@@ -354,41 +347,46 @@ async function sampleGpsFix(
   }
 
   const pinpointSamples = samples.filter((s) => Number.isFinite(s.coords.accuracy) && s.coords.accuracy <= acceptMax);
-  if (pinpointSamples.length < policy.minSamplesAccept) {
+
+  if (best.coords.accuracy > acceptMax) {
     throw new GpsAccuracyError(
       best.coords.accuracy,
       acceptMax,
-      `Only ${pinpointSamples.length} reading(s) at ≤ ±${acceptMax} m (need ${policy.minSamplesAccept}). Hold still at the boundary in open sky.`,
+      `Best reading ±${Math.round(best.coords.accuracy * 10) / 10} m exceeds ±${acceptMax} m. Hold still at the boundary in open sky.`,
     );
   }
 
-  const fused = fuseSamples(samples, acceptMax);
-  if (!fused) {
-    throw new GpsAccuracyError(best.coords.accuracy, acceptMax);
-  }
-
-  const accuracy = fused.accuracy;
-  if (accuracy > acceptMax) {
-    throw new GpsAccuracyError(accuracy, acceptMax);
-  }
-
-  let fixSpread = 0;
-  for (const s of pinpointSamples) {
-    fixSpread = Math.max(
-      fixSpread,
-      haversineMeters(fused.latitude, fused.longitude, s.coords.latitude, s.coords.longitude),
-    );
-  }
-  if (fixSpread > policy.maxFixSpreadMeters) {
-    throw new GpsAccuracyError(
-      accuracy,
-      acceptMax,
-      `Readings disagree by ${fixSpread.toFixed(1)} m — hold still at the property boundary in open sky, then retry.`,
-    );
+  let finalCoords: LocationCoords;
+  if (pinpointSamples.length <= 1) {
+    finalCoords = best.coords;
+  } else {
+    const fused = fuseSamples(samples, acceptMax);
+    if (!fused) {
+      finalCoords = best.coords;
+    } else {
+      finalCoords = fused;
+      if (finalCoords.accuracy > acceptMax) {
+        throw new GpsAccuracyError(finalCoords.accuracy, acceptMax);
+      }
+      let fixSpread = 0;
+      for (const s of pinpointSamples) {
+        fixSpread = Math.max(
+          fixSpread,
+          haversineMeters(finalCoords.latitude, finalCoords.longitude, s.coords.latitude, s.coords.longitude),
+        );
+      }
+      if (fixSpread > policy.maxFixSpreadMeters) {
+        throw new GpsAccuracyError(
+          finalCoords.accuracy,
+          acceptMax,
+          `Readings disagree by ${fixSpread.toFixed(1)} m — hold still at the property boundary in open sky, then retry.`,
+        );
+      }
+    }
   }
 
   const capture = toCapture(
-    fused,
+    finalCoords,
     policy,
     samples.some((s) => s.mocked),
   );
@@ -414,7 +412,7 @@ export function gpsAccuracyTier(meters: number): 'excellent' | 'target' | 'fair'
 export function gpsAccuracyTagLabel(meters: number): string {
   const policy = getGpsCapturePolicy();
   const rounded = Math.round(meters * 10) / 10;
-  if (meters <= GPS_ACCEPT_MAX_ACCURACY_METERS) {
+  if (meters <= policy.excellentAccuracyMeters) {
     return `Pinpoint · ±${rounded} m`;
   }
   if (meters <= policy.acceptMaxAccuracyMeters) return `±${rounded} m`;

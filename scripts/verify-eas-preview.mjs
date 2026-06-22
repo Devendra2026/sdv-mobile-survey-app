@@ -10,7 +10,7 @@ import {
 } from './eas-lockfile-optional.mjs';
 
 const REQUIRED_REACT = '19.1.0';
-const EAS_ENV_LIST = 'npx eas-cli env:list --environment preview';
+const EAS_ENV_LIST = 'eas env:list --environment preview';
 let failed = false;
 
 function fail(msg) {

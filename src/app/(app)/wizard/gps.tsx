@@ -1,7 +1,7 @@
 'use no memo';
 
 /**
- * Step 7 — GPS capture. Government survey standard: ≤ ±1 m pinpoint fix required.
+ * Step 7 — GPS capture. Target ±1 m pinpoint; accept best reading up to ±5 m.
  */
 import { AppButton, AppCard, Banner, GPSStatus, SectionLabel, Spinner, Tag } from '@/components';
 import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
@@ -145,25 +145,36 @@ function GpsStepContent({
   const { state, error, sampling, lastAttemptMeters, lastAttemptPinpointCount, lastAttemptCoordinate } = captureUi;
   const captureInFlight = useRef(false);
   const progressRef = useRef<GpsCaptureProgress | null>(null);
-  const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeWarmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warmupDeadlineRef = useRef(Date.now() + GPS_WARMUP_GATE_MS);
   const [captureAllowed, setCaptureAllowed] = useState(false);
-  const [warmupSecondsLeft, setWarmupSecondsLeft] = useState(Math.ceil(GPS_WARMUP_GATE_MS / 1000));
+  const [warmupSecondsLeft, setWarmupSecondsLeft] = useState(() => Math.ceil(GPS_WARMUP_GATE_MS / 1000));
 
-  const scheduleWarmupGate = useCallback(() => {
-    if (warmupTimerRef.current) clearTimeout(warmupTimerRef.current);
+  const cancelActiveWarmupTimer = useCallback(() => {
+    const timerId = activeWarmupTimerRef.current;
+    if (timerId != null) {
+      clearTimeout(timerId);
+      activeWarmupTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleWarmupGate = useCallback((): ReturnType<typeof setTimeout> => {
+    cancelActiveWarmupTimer();
     warmupDeadlineRef.current = Date.now() + GPS_WARMUP_GATE_MS;
     setCaptureAllowed(false);
     setWarmupSecondsLeft(Math.ceil(GPS_WARMUP_GATE_MS / 1000));
-    warmupTimerRef.current = setTimeout(() => {
+    const timerId = setTimeout(() => {
       setCaptureAllowed(true);
       setWarmupSecondsLeft(0);
+      activeWarmupTimerRef.current = null;
     }, GPS_WARMUP_GATE_MS);
-  }, []);
+    activeWarmupTimerRef.current = timerId;
+    return timerId;
+  }, [cancelActiveWarmupTimer]);
 
   useEffect(() => {
     void startGnssWarmup();
-    scheduleWarmupGate();
+    const warmupTimer = scheduleWarmupGate();
     const countdown = setInterval(() => {
       const leftMs = warmupDeadlineRef.current - Date.now();
       if (leftMs <= 0) {
@@ -174,10 +185,11 @@ function GpsStepContent({
     }, 500);
     return () => {
       clearInterval(countdown);
-      if (warmupTimerRef.current) clearTimeout(warmupTimerRef.current);
+      clearTimeout(warmupTimer);
+      cancelActiveWarmupTimer();
       stopGnssWarmup();
     };
-  }, [scheduleWarmupGate]);
+  }, [scheduleWarmupGate, cancelActiveWarmupTimer]);
 
   const capture = async () => {
     if (captureInFlight.current || state === 'locating') return;
@@ -354,11 +366,9 @@ function GpsStepContent({
           {ui === 'locating' && sampling ? (
             <View className="mt-2 items-center gap-1">
               <Text className="text-caption text-ink-primary-light dark:text-ink-primary-dark text-center">
-                Pinpoint readings: {sampling.pinpointSampleCount}/{sampling.minSamplesAccept} at ≤ ±
-                {policy.acceptMaxAccuracyMeters} m
                 {sampling.bestAccuracyMeters != null
-                  ? ` · best ±${Math.round(sampling.bestAccuracyMeters * 10) / 10} m`
-                  : ''}
+                  ? `Best reading: ±${Math.round(sampling.bestAccuracyMeters * 10) / 10} m (need ≤ ±${policy.acceptMaxAccuracyMeters} m)`
+                  : `Sampling GPS… (need ≤ ±${policy.acceptMaxAccuracyMeters} m)`}
               </Text>
               <Text className="text-caption text-ink-tertiary-light text-center">
                 {sampling.sampleCount} samples · {Math.round(sampling.elapsedMs / 1000)}s
@@ -401,8 +411,8 @@ function GpsStepContent({
 
       <Banner
         tone="info"
-        title={`Pinpoint required · ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m max`}
-        message={`Government survey standard. Stand at the property boundary in open sky and hold still. Good signal usually finishes in a few seconds; retakes use a shorter window (up to ${Math.round(GPS_RETAKE_SAMPLE_DURATION_MS / 1000)} s). First capture allows up to ${Math.round(GPS_SAMPLE_DURATION_MS / 1000)} s. Readings above ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m are rejected.`}
+        title={`Target ±${GPS_TARGET_ACCURACY_METERS} m · accept up to ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m`}
+        message={`Stand at the property boundary in open sky and hold still. One tap captures the best reading (up to ${Math.round(GPS_SAMPLE_DURATION_MS / 1000)} s). Retakes use a shorter window (up to ${Math.round(GPS_RETAKE_SAMPLE_DURATION_MS / 1000)} s). Readings above ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m are rejected.`}
         icon="information-circle-outline"
         className="mt-3"
       />

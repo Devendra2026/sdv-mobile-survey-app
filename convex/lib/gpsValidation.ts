@@ -60,7 +60,7 @@ export function validateGpsCapture(gps: GpsCaptureInput, opts: ValidateGpsOption
   if (devPreview) {
     if (strict) {
       errors.push(
-        'Dev preview GPS cannot be submitted — retake with a production build at the property boundary (±1 m required)',
+        'Dev preview GPS cannot be submitted — retake with a production build at the property boundary (±5 m max)',
       );
     } else if (gps.accuracyMeters > GPS_DEV_PREVIEW_MAX_ACCURACY_METERS) {
       errors.push(

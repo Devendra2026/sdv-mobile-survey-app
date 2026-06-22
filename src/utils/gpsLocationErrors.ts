@@ -8,7 +8,7 @@ export function locationErrorMessage(e: unknown, isOnline: boolean, devPreview: 
     if (devPreview) {
       return `${base} Expo Go dev preview accepts up to ±10 m for flow testing only — use a fleet APK for production surveys at ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m.`;
     }
-    return `${base} Move outdoors to the property boundary in open sky. Hold still until two readings reach ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m. Enable Android High accuracy location and disable mock location apps.`;
+    return `${base} Move outdoors to the property boundary in open sky. Hold still until a reading reaches ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m. Enable Android High accuracy location and disable mock location apps.`;
   }
   if (e instanceof Error) {
     if (!isOnline && /network|offline|internet/i.test(e.message)) {
@@ -38,12 +38,11 @@ export function formatGpsAccuracyErrorDetail(
   acceptMaxMeters: number,
 ): string | null {
   if (lastAttemptMeters == null && pinpointSampleCount == null) return null;
-  const parts: string[] = [];
-  if (pinpointSampleCount != null) {
-    parts.push(`Pinpoint readings: ${pinpointSampleCount}/${minSamplesAccept} at ≤ ±${acceptMaxMeters} m`);
-  }
   if (lastAttemptMeters != null) {
-    parts.push(`best ±${Math.round(lastAttemptMeters * 10) / 10} m`);
+    return `Best reading: ±${Math.round(lastAttemptMeters * 10) / 10} m (need ≤ ±${acceptMaxMeters} m)`;
   }
-  return parts.join(' · ');
+  if (pinpointSampleCount != null) {
+    return `Acceptable readings: ${pinpointSampleCount}/${minSamplesAccept} at ≤ ±${acceptMaxMeters} m`;
+  }
+  return null;
 }
