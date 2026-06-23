@@ -8,6 +8,13 @@ import { draftToSaveDraftPayload, type WizardDraft } from '@/hooks/useWizardDraf
 import { useConvex, useMutation } from 'convex/react';
 import { useCallback, useRef, useState } from 'react';
 
+export type DraftSyncSection = 'header' | 'floors' | 'photos';
+
+export type SaveDraftResult = {
+  surveyId: Id<'surveys'> | null;
+  failedSections: DraftSyncSection[];
+};
+
 function floorReadyForSync(f: NonNullable<WizardDraft['floors']>[number]): boolean {
   return !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType);
 }
@@ -20,20 +27,29 @@ export function useSaveSurveyDraft() {
   const linkPhoto = useMutation(api.photos.linkPhoto);
   const [saving, setSaving] = useState(false);
 
-  const saveInFlight = useRef<Promise<Id<'surveys'> | null> | null>(null);
+  const saveInFlight = useRef<Promise<SaveDraftResult> | null>(null);
 
   const save = useCallback(
-    async (draft: WizardDraft): Promise<Id<'surveys'> | null> => {
+    async (draft: WizardDraft): Promise<SaveDraftResult> => {
       if (saveInFlight.current) return saveInFlight.current;
 
       const payload = draftToSaveDraftPayload(draft);
-      if (!payload) return null;
+      if (!payload) return { surveyId: null, failedSections: [] };
 
       saveInFlight.current = (async () => {
         setSaving(true);
-        try {
-          const surveyId = await saveDraft(payload);
+        const failedSections: DraftSyncSection[] = [];
+        let surveyId: Id<'surveys'> | null = null;
 
+        try {
+          try {
+            surveyId = await saveDraft(payload);
+          } catch {
+            failedSections.push('header');
+            return { surveyId: null, failedSections };
+          }
+
+          const sid = surveyId;
           const floorSyncs: { f: NonNullable<WizardDraft['floors']>[number]; i: number }[] = [];
           const syncedFloorIds: string[] = [];
           (draft.floors ?? []).forEach((f, i) => {
@@ -42,47 +58,55 @@ export function useSaveSurveyDraft() {
             syncedFloorIds.push(f.clientFloorId);
           });
 
-          await Promise.all(
-            floorSyncs.map(({ f, i }) =>
-              upsertFloor({
-                surveyId,
-                clientFloorId: f.clientFloorId,
-                position: i,
-                floorName: f.floorName,
-                usageFactor: f.usageFactor,
-                usageType: f.usageType,
-                constructionType: f.constructionType,
-                isOccupied: f.isOccupied,
-                areaSqft: f.areaSqft,
-              }),
-            ),
-          );
+          try {
+            await Promise.all(
+              floorSyncs.map(({ f, i }) =>
+                upsertFloor({
+                  surveyId: sid,
+                  clientFloorId: f.clientFloorId,
+                  position: i,
+                  floorName: f.floorName,
+                  usageFactor: f.usageFactor,
+                  usageType: f.usageType,
+                  constructionType: f.constructionType,
+                  isOccupied: f.isOccupied,
+                  areaSqft: f.areaSqft,
+                }),
+              ),
+            );
 
-          const keep = new Set(syncedFloorIds);
-          const serverFloors = await convex.query(api.floors.list, { surveyId });
-          const removals = [];
-          for (const row of serverFloors) {
-            if (!keep.has(row.clientFloorId)) {
-              removals.push(removeFloor({ id: row._id }));
+            const keep = new Set(syncedFloorIds);
+            const serverFloors = await convex.query(api.floors.list, { surveyId: sid });
+            const removals = [];
+            for (const row of serverFloors) {
+              if (!keep.has(row.clientFloorId)) {
+                removals.push(removeFloor({ id: row._id }));
+              }
             }
+            await Promise.all(removals);
+          } catch {
+            failedSections.push('floors');
           }
-          await Promise.all(removals);
 
-          await Promise.all(
-            (draft.photos ?? []).map((photo) =>
-              linkPhoto({
-                surveyId,
-                slot: photo.slot,
-                storageId: photo.storageId,
-                sizeKb: photo.sizeKb,
-                width: photo.width,
-                height: photo.height,
-                capturedAt: photo.capturedAt,
-              }),
-            ),
-          );
+          try {
+            await Promise.all(
+              (draft.photos ?? []).map((photo) =>
+                linkPhoto({
+                  surveyId: sid,
+                  slot: photo.slot,
+                  storageId: photo.storageId,
+                  sizeKb: photo.sizeKb,
+                  width: photo.width,
+                  height: photo.height,
+                  capturedAt: photo.capturedAt,
+                }),
+              ),
+            );
+          } catch {
+            failedSections.push('photos');
+          }
 
-          return surveyId;
+          return { surveyId: sid, failedSections };
         } finally {
           setSaving(false);
         }

@@ -133,6 +133,7 @@ function StartFields({
       municipalityId: municipalityId as Id<'municipalities'>,
       districtId: ulb?.districtId ?? draft.districtId,
       wardNo: undefined,
+      ulbPostalCode: ulb?.postalCode ?? undefined,
     });
   };
 

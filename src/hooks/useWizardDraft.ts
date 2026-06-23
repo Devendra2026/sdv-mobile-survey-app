@@ -20,6 +20,7 @@
  *   - useWizardDraft(id) → loads the draft for `localId`, exposes update + reset
  *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
  */
+import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import { primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
 import {
   altMobileError,
@@ -29,8 +30,8 @@ import {
   isValidUnitNo,
   primaryMobileError,
 } from '@/convex/surveyFieldValidation';
+import { isPinValidForUlb } from '@/utils/addressValidation';
 import { plinthSqftFromFloors } from '@/utils/area';
-import { isGpsStepComplete } from '@/utils/captureGps';
 import { normalizeFloorFields, usageTypeToOccupied } from '@/utils/floorRow';
 import { coerceSanitationType, coerceWaterSource, servicesStepComplete } from '@/utils/services';
 import { surveyPhotosComplete } from '@/utils/surveyPhotos';
@@ -121,6 +122,12 @@ export interface WizardDraft {
   updatedAt: number;
   /** Last wizard screen visited — used to resume in-progress drafts. */
   lastActiveStepKey?: StepConfig['key'] | 'review';
+  /** Highest step index opened — allows returning to in-progress sections. */
+  furthestStepIndex?: number;
+  /** Cloud sync state — persisted so retries survive app restarts. */
+  pendingCloudSync?: boolean;
+  lastSyncError?: string;
+  lastSyncedAt?: number;
 
   // Step 0 — Survey start
   districtId?: Id<'districts'>;
@@ -128,6 +135,8 @@ export interface WizardDraft {
 
   // Step 1 — Property
   municipalityId?: Id<'municipalities'>;
+  /** ULB postal code — used for address step completion. */
+  ulbPostalCode?: string;
   wardNo?: string;
   sectorNo?: string;
   oldPropertyNo?: string;
@@ -227,7 +236,11 @@ export async function clearDraft(localId: string): Promise<void> {
 }
 
 export async function persistDraft(draft: WizardDraft): Promise<void> {
-  const next = { ...draft, updatedAt: Date.now() };
+  const next = {
+    ...draft,
+    updatedAt: Date.now(),
+    pendingCloudSync: draft.municipalityId ? true : draft.pendingCloudSync,
+  };
   await AsyncStorage.setItem(KEY(next.localId), JSON.stringify(next));
 }
 
@@ -252,6 +265,8 @@ export async function getDraft(localId: string): Promise<WizardDraft | null> {
 /** Hydrate a server survey into a local wizard draft (resume / edit). */
 export function surveyToDraft(survey: {
   _id: Id<'surveys'>;
+  _creationTime?: number;
+  clientUpdatedAt?: number;
   localId: string;
   districtId?: Id<'districts'>;
   municipalityId: Id<'municipalities'>;
@@ -313,12 +328,13 @@ export function surveyToDraft(survey: {
     capturedAt: number;
   }[];
 }): WizardDraft {
-  const now = Date.now();
+  const createdAt = survey._creationTime ?? Date.now();
+  const updatedAt = survey.clientUpdatedAt ?? createdAt;
   return {
     localId: survey.localId,
     serverSurveyId: survey._id,
-    createdAt: now,
-    updatedAt: now,
+    createdAt,
+    updatedAt,
     districtId: survey.districtId,
     municipalityId: survey.municipalityId,
     wardNo: survey.wardNo,
@@ -545,6 +561,7 @@ export function draftToSaveDraftPayload(d: WizardDraft) {
 
   return {
     localId: d.localId,
+    id: d.serverSurveyId,
     municipalityId: d.municipalityId,
     clientUpdatedAt: Date.now(),
     wardNo: d.wardNo?.trim() || undefined,
@@ -597,7 +614,7 @@ export function draftToUpsertArgs(d: WizardDraft) {
     !d.wardNo ||
     !d.parcelNo?.trim() ||
     !d.unitNo?.trim() ||
-    !isValidConstructedYear(d.constructedYear) ||
+    (d.constructedYear != null && !isValidConstructedYear(d.constructedYear)) ||
     !ownerStepComplete(d) ||
     !d.locality?.trim() ||
     !d.colonyName?.trim() ||
@@ -686,10 +703,10 @@ export function stepCompletion(d: WizardDraft) {
       d.wardNo &&
       isValidParcelNo(d.parcelNo ?? '') &&
       isValidUnitNo(d.unitNo ?? '') &&
-      isValidConstructedYear(d.constructedYear)
+      (d.constructedYear == null || isValidConstructedYear(d.constructedYear))
     ),
     owner: ownerStepComplete(d),
-    address: !!(d.locality?.trim() && d.colonyName?.trim() && d.pinCode),
+    address: !!(d.locality?.trim() && d.colonyName?.trim() && isPinValidForUlb(d.pinCode, d.ulbPostalCode)),
     taxation: !!(
       d.ownershipType &&
       d.propertyUse &&
@@ -705,7 +722,15 @@ export function stepCompletion(d: WizardDraft) {
       d.floors.every((f) => !!(f.floorName && f.areaSqft > 0 && f.usageFactor && f.usageType && f.constructionType))
     ),
     services: servicesStepComplete(d),
-    gps: isGpsStepComplete(d.gps),
+    gps: !!d.gps && validateGpsCapture(d.gps, { strict: true }).length === 0,
     photos: surveyPhotosComplete(d.photos),
   };
+}
+
+/** Wizard completion % from step checklist (0–100). */
+export function draftCompletionPct(d: WizardDraft): number {
+  const c = stepCompletion(d);
+  const keys = Object.keys(c) as (keyof typeof c)[];
+  const done = keys.filter((k) => c[k]).length;
+  return Math.round((done / keys.length) * 100);
 }

@@ -4,7 +4,6 @@ import { SurveyPhotoGrid } from '@/components/survey/survey-photo-grid';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
-import { gpsAccuracyTagLabel, gpsAccuracyTier } from '@/utils/captureGps';
 import { formatArea, formatSurveyParcelLabel, humanizeRole, timeAgo } from '@/utils/format';
 import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import type { MastersBundle } from '@/utils/mastersBundle';
@@ -318,13 +317,6 @@ export function SurveyGpsSection({ survey }: { survey: SurveyDetail }) {
               showChevron={false}
             />
             <RowDivider />
-            <ListRow
-              icon="locate-outline"
-              iconTone={gpsAccuracyTier(survey.gps.accuracyMeters) === 'poor' ? 'danger' : 'neutral'}
-              title="Accuracy"
-              subtitle={gpsAccuracyTagLabel(survey.gps.accuracyMeters)}
-              showChevron={false}
-            />
             {survey.gps.isMockLocation ? (
               <>
                 <RowDivider />
@@ -422,6 +414,7 @@ export function SurveyDetailActions({
   canSubmit,
   canReview,
   busy,
+  submitHint,
   onContinueWizard,
   onSubmit,
   onDecide,
@@ -430,6 +423,7 @@ export function SurveyDetailActions({
   canSubmit: boolean;
   canReview: boolean;
   busy: boolean;
+  submitHint?: string;
   onContinueWizard: () => void;
   onSubmit: () => void;
   onDecide: (decision: 'approve' | 'reject') => void;
@@ -457,6 +451,18 @@ export function SurveyDetailActions({
           fullWidth
           className="mb-2"
         />
+      ) : submitHint ? (
+        <AppButton
+          label="Submit for review"
+          disabled
+          iconLeft="cloud-upload-outline"
+          size="lg"
+          fullWidth
+          className="mb-2"
+        />
+      ) : null}
+      {submitHint && !canSubmit ? (
+        <Text className="text-caption text-ink-tertiary-light text-center mb-3">Complete: {submitHint}</Text>
       ) : null}
       {canReview ? (
         <View className="flex-row gap-2">

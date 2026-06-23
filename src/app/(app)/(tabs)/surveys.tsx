@@ -2,12 +2,13 @@
  * Surveys list with status filter and cursor pagination.
  * Reactive: any survey created or updated appears without refresh.
  */
-import { EmptyState, ListSkeleton, SurveyCard } from '@/components';
+import { AppButton, EmptyState, ListSkeleton, SurveyCard } from '@/components';
 import { api } from '@/convex/_generated/api';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { surveyOwnerListLabel } from '@/utils/format';
 import { flatListProps } from '@/utils/scroll-props';
 import { TabScreenBottomSpacer } from '@/utils/ui-layout';
-import { usePaginatedQuery } from 'convex/react';
+import { usePaginatedQuery, useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, type ListRenderItemInfo, Pressable, Text, View } from 'react-native';
@@ -29,12 +30,15 @@ const ListSeparator = () => <View className="h-2" />;
 
 export default function SurveysScreen() {
   const router = useRouter();
+  const { convexReady } = useClerkConvexAuth();
+  const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
   const [filter, setFilter] = useState<StatusFilter>('all');
 
   const queryArgs = useMemo(
     () => ({
       status: filter === 'all' || filter === 'rejected' ? undefined : filter,
       qcStatus: filter === 'rejected' ? ('rejected' as const) : undefined,
+      sortBy: filter === 'draft' ? ('updated' as const) : undefined,
     }),
     [filter],
   );
@@ -45,21 +49,42 @@ export default function SurveysScreen() {
 
   const isLoading = status === 'LoadingFirstPage';
   const isLoadingMore = status === 'LoadingMore';
+  const isDraftFilter = filter === 'draft';
+
+  const sortedResults = useMemo(() => {
+    if (!isDraftFilter) return results;
+    return [...results].sort((a, b) => b.clientUpdatedAt - a.clientUpdatedAt);
+  }, [isDraftFilter, results]);
+
+  const onSurveyPress = useCallback(
+    (item: (typeof results)[number]) => {
+      const isOwnDraft = item.status === 'draft' && me && item.surveyorId === me._id;
+      if (isOwnDraft) {
+        router.push({ pathname: '/(app)/wizard', params: { surveyId: item._id } });
+        return;
+      }
+      router.push({ pathname: '/(app)/survey/[id]', params: { id: item._id } });
+    },
+    [me, router],
+  );
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<(typeof results)[number]>) => (
+    ({ item, index }: ListRenderItemInfo<(typeof results)[number]>) => (
       <SurveyCard
-        parcelNo={item.parcelNo}
-        unitNo={item.unitNo}
+        parcelNo={item.parcelNo || 'Draft'}
+        unitNo={item.unitNo || '—'}
         ownerName={surveyOwnerListLabel(item.owners, item.respondentName)}
-        wardNo={item.wardNo}
+        wardNo={item.wardNo || '—'}
         status={item.status}
         qcStatus={item.qcStatus}
-        updatedAt={item._creationTime}
-        onPress={() => router.push({ pathname: '/(app)/survey/[id]', params: { id: item._id } })}
+        createdAt={item._creationTime}
+        updatedAt={item.clientUpdatedAt}
+        completionPct={item.completionPct}
+        highlight={isDraftFilter && index === 0 ? 'recent' : 'none'}
+        onPress={() => onSurveyPress(item)}
       />
     ),
-    [router],
+    [isDraftFilter, onSurveyPress],
   );
 
   const listFooter = useCallback(
@@ -76,44 +101,68 @@ export default function SurveysScreen() {
     [isLoadingMore],
   );
 
+  const listSubtitle = isDraftFilter
+    ? 'Sorted by last updated · tap own drafts to continue'
+    : 'Sorted by Property ID · tap own drafts to continue';
+
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
       <SafeAreaView edges={['top']} className="bg-surface-light dark:bg-surface-dark border-b border-line-subtle">
         <View className="px-4 pt-2 pb-3">
           <Text className="text-h1 font-medium text-ink-primary-light dark:text-ink-primary-dark">Surveys</Text>
-          <Text className="text-helper text-ink-tertiary-light mt-0.5">Sorted by Property ID</Text>
+          <Text className="text-helper text-ink-tertiary-light mt-0.5">{listSubtitle}</Text>
         </View>
-        <View className="px-4 pb-3 flex-row gap-1.5">
-          {FILTERS.map((f) => {
-            const active = filter === f.value;
-            return (
-              <Pressable
-                key={f.value}
-                onPress={() => setFilter(f.value)}
-                className={`px-3 py-1.5 rounded-full border ${active ? 'bg-brand border-brand' : 'bg-surface-light dark:bg-surface-dark border-line-default'}`}
-              >
-                <Text
-                  className={`text-[12px] font-medium ${active ? 'text-white' : 'text-ink-secondary-light dark:text-ink-secondary-dark'}`}
+        <View className="px-4 pb-3 flex-row gap-2 items-center">
+          <View className="flex-1 flex-row gap-1.5 flex-wrap">
+            {FILTERS.map((f) => {
+              const active = filter === f.value;
+              return (
+                <Pressable
+                  key={f.value}
+                  onPress={() => setFilter(f.value)}
+                  className={`px-3 py-1.5 rounded-full border ${active ? 'bg-brand border-brand' : 'bg-surface-light dark:bg-surface-dark border-line-default'}`}
                 >
-                  {f.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    className={`text-[12px] font-medium ${active ? 'text-white' : 'text-ink-secondary-light dark:text-ink-secondary-dark'}`}
+                  >
+                    {f.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+        <View className="px-4 pb-3">
+          <AppButton
+            label="Start new survey"
+            iconLeft="add"
+            size="md"
+            onPress={() => router.push('/(app)/wizard')}
+            fullWidth
+          />
         </View>
       </SafeAreaView>
 
       {isLoading ? (
         <ListSkeleton count={6} />
-      ) : results.length === 0 ? (
-        <EmptyState
-          icon="document-text-outline"
-          title="No surveys here"
-          message="Try a different filter or start a new survey."
-        />
+      ) : sortedResults.length === 0 ? (
+        <View className="flex-1 px-4">
+          <EmptyState
+            icon="document-text-outline"
+            title="No surveys here"
+            message="Try a different filter or start a new survey."
+          />
+          <AppButton
+            label="Start new survey"
+            iconLeft="add"
+            onPress={() => router.push('/(app)/wizard')}
+            fullWidth
+            className="mt-4"
+          />
+        </View>
       ) : (
         <FlatList
-          data={results}
+          data={sortedResults}
           keyExtractor={(s) => s._id}
           contentContainerStyle={{ padding: 14 }}
           {...flatListProps}

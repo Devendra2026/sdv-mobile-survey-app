@@ -4,7 +4,7 @@
  * Surveyor: read-only after submit; can edit fields and add photos while draft.
  * Supervisor/admin: can leave QC remarks and approve/reject.
  */
-import { Spinner, Toast } from '@/components';
+import { Banner, Spinner, Toast } from '@/components';
 import {
   SurveyAddressSection,
   SurveyAreaSection,
@@ -21,10 +21,14 @@ import {
 } from '@/components/survey/survey-detail-sections';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { validateGpsCapture } from '@/convex/lib/gpsValidation';
+import { surveyToDraft } from '@/hooks/useWizardDraft';
+import { allStepsComplete, incompleteStepLabels } from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { backOrReplace } from '@/utils/navigation';
 import { scrollViewProps } from '@/utils/scroll-props';
+import { allMissingFields } from '@/utils/wizardValidation';
 import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -54,16 +58,38 @@ export default function SurveyDetailScreen() {
   }
 
   const canEdit = me?.role === 'surveyor' ? survey.surveyorId === me._id && survey.qcStatus !== 'approved' : true;
-  const canSubmit = canEdit && survey.status === 'draft';
+  const bundle = normalizeMastersBundle(masters);
+  const isOwnDraft = survey.status === 'draft' && !!me && survey.surveyorId === me._id;
+  const draftForCheck = surveyToDraft(survey);
+  const ulb = bundle.ulbs.find((u) => String(u._id) === String(survey.municipalityId));
+  if (ulb?.postalCode) draftForCheck.ulbPostalCode = ulb.postalCode;
+  const submitReady = allStepsComplete(draftForCheck);
+  const incompleteSteps = incompleteStepLabels(draftForCheck);
+  const missingFields = allMissingFields(draftForCheck);
+  const canSubmitBase = canEdit && survey.status === 'draft' && isOwnDraft;
+  const canSubmit = canSubmitBase && submitReady;
   const canContinueWizard = canEdit && (survey.status === 'draft' || survey.qcStatus === 'rejected');
   const canReview =
     (me?.role === 'supervisor' || me?.role === 'admin') &&
     survey.status === 'submitted' &&
     survey.qcStatus !== 'approved';
 
-  const bundle = normalizeMastersBundle(masters);
-
   const doSubmit = async () => {
+    if (!submitReady) {
+      const preview = missingFields.slice(0, 3).join(', ');
+      setToast({
+        title: preview ? `Missing: ${preview}` : `Complete steps: ${incompleteSteps.join(', ')}`,
+        tone: 'danger',
+      });
+      return;
+    }
+    if (survey.gps) {
+      const gpsErrors = validateGpsCapture(survey.gps, { strict: true });
+      if (gpsErrors.length > 0) {
+        setToast({ title: gpsErrors[0]!, tone: 'danger' });
+        return;
+      }
+    }
     setBusy(true);
     try {
       await submit({ id });
@@ -111,6 +137,19 @@ export default function SurveyDetailScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, flexGrow: 1 }} {...scrollViewProps}>
         <SurveyRejectedBanner survey={survey} />
+        {canSubmitBase && !submitReady ? (
+          <Banner
+            tone="warning"
+            icon="warning-outline"
+            title="Complete wizard before submitting"
+            message={
+              missingFields.length > 0
+                ? `Missing: ${missingFields.slice(0, 5).join(', ')}${missingFields.length > 5 ? '…' : ''}`
+                : `Missing steps: ${incompleteSteps.join(', ')}`
+            }
+            className="mb-3"
+          />
+        ) : null}
         <SurveyOwnerSection survey={survey} />
         <SurveyAddressSection survey={survey} />
         <SurveyTaxationSection survey={survey} bundle={bundle} />
@@ -129,6 +168,13 @@ export default function SurveyDetailScreen() {
           canSubmit={canSubmit}
           canReview={canReview}
           busy={busy}
+          submitHint={
+            canSubmitBase && !submitReady
+              ? missingFields.length > 0
+                ? missingFields.slice(0, 3).join(', ')
+                : incompleteSteps.join(', ')
+              : undefined
+          }
           onContinueWizard={() =>
             router.push({
               pathname: '/(app)/wizard',

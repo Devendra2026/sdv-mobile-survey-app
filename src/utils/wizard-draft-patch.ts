@@ -60,6 +60,7 @@ type MastersSlice = {
     districtId: Id<'districts'>;
     districtCode: string;
     code: string;
+    postalCode?: string | null;
   }[];
 };
 
@@ -106,5 +107,10 @@ export function startTenantAutoPatch(
   if (convexIdEq(districtId, draft.districtId) && convexIdEq(municipalityId, draft.municipalityId)) {
     return null;
   }
-  return { districtId, municipalityId };
+  const ulb = municipalityId ? masters.ulbs.find((u) => convexIdEq(u._id, municipalityId)) : undefined;
+  return {
+    districtId,
+    municipalityId,
+    ulbPostalCode: ulb?.postalCode ?? undefined,
+  };
 }

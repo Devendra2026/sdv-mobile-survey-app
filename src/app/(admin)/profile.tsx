@@ -1,11 +1,38 @@
 import { AppButton, AppCard, Avatar, ListRow, SectionLabel, Spinner, Tag } from '@/components';
-import { AdminHeader } from '@/components/admin/admin-header';
 import { api } from '@/convex/_generated/api';
 import { humanizeRole } from '@/utils/format';
 import { useAuth } from '@clerk/expo';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+function StatTile({
+  label,
+  value,
+  icon,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
+  onPress?: () => void;
+}) {
+  const content = (
+    <View className="flex-1 p-4 bg-surface-light dark:bg-surface-dark rounded-2xl border border-line-subtle items-center shadow-sm">
+      <Tag label={label} tone="neutral" icon={icon} />
+      <Text className="text-h1 font-semibold text-brand mt-2">{value}</Text>
+    </View>
+  );
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} className="flex-1 active:opacity-90">
+        {content}
+      </Pressable>
+    );
+  }
+  return content;
+}
 
 export default function AdminProfileScreen() {
   const router = useRouter();
@@ -28,39 +55,42 @@ export default function AdminProfileScreen() {
 
   return (
     <View className="flex-1 bg-page-light dark:bg-page-dark">
-      <AdminHeader
-        title={me.name}
-        subtitle={me.email}
-        eyebrow="Your account"
-        footer={
-          <View className="mt-3 flex-row justify-center">
-            <Tag label={humanizeRole(me.role)} tone="brand" icon="shield-checkmark-outline" />
-          </View>
-        }
-      />
-
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
-        <View className="items-center -mt-10 mb-4">
-          <View className="rounded-full border-4 border-page-light dark:border-page-dark">
+      <SafeAreaView edges={['top']} className="bg-brand">
+        <View className="px-4 pt-4 pb-8 items-center">
+          <Text className="text-helper text-white/70 uppercase tracking-wide">Your account</Text>
+          <View className="mt-4 rounded-full border-4 border-white/20">
             <Avatar name={me.name} tone="brand" size="xl" />
           </View>
+          <Text className="text-h2 font-medium text-white mt-3" numberOfLines={1}>
+            {me.name}
+          </Text>
+          <Text className="text-caption text-white/75 mt-1" numberOfLines={1}>
+            {me.email}
+          </Text>
+          <View className="mt-3">
+            <Tag label={humanizeRole(me.role)} tone="brand" icon="shield-checkmark-outline" />
+          </View>
         </View>
+      </SafeAreaView>
 
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, marginTop: -16 }}>
         <View className="flex-row gap-2 mb-4">
-          <View className="flex-1 p-3 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle items-center">
-            <Text className="text-h2 font-semibold text-brand">{pendingCount}</Text>
-            <Text className="text-caption text-ink-tertiary-light mt-0.5">Pending</Text>
-          </View>
-          <View className="flex-1 p-3 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle items-center">
-            <Text className="text-h2 font-semibold text-ink-primary-light dark:text-ink-primary-dark">
-              {activeUsersLabel}
-            </Text>
-            <Text className="text-caption text-ink-tertiary-light mt-0.5">Active users</Text>
-          </View>
+          <StatTile
+            label="Pending"
+            value={String(pendingCount)}
+            icon="time-outline"
+            onPress={() => router.push('/(admin)/approvals')}
+          />
+          <StatTile
+            label="Active users"
+            value={activeUsersLabel}
+            icon="people-outline"
+            onPress={() => router.push('/(admin)/users')}
+          />
         </View>
 
         <SectionLabel>Navigate</SectionLabel>
-        <AppCard padded={false} className="mb-4">
+        <AppCard padded={false} className="mb-4 shadow-sm">
           <ListRow
             icon="checkmark-circle-outline"
             iconTone="brand"
@@ -76,7 +106,7 @@ export default function AdminProfileScreen() {
             icon="people-outline"
             iconTone="neutral"
             title="Users"
-            subtitle="Browse and filter accounts"
+            subtitle="Browse, filter, and assign accounts"
             onPress={() => router.push('/(admin)/users')}
           />
           <View className="h-px bg-line-subtle" />

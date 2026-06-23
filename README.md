@@ -95,14 +95,16 @@ Field APKs use the **preview** EAS environment (`eas.json` → `environment: "pr
    npm run eas:build:android:preview
    ```
 
-5. **After GPS or auth fixes:** uninstall the old APK from fleet devices, install the new build, and confirm the GPS step footer shows `Build … · fleet APK · ±5 m max`. Accuracy errors must **not** mention Expo Go; they should mention **High accuracy location**. If you still see Expo Go text, the device has an outdated APK (built before the `9ecee25` message fix).
+5. **After GPS or auth fixes:** uninstall the old APK from fleet devices and install the new build.
 
-### Fleet GPS accuracy (target ±1 m, accept ±5 m)
+### Fleet GPS capture
 
-- Fleet APKs capture the device’s best reading up to ±5 m (not Expo Go’s ±10 m dev preview).
-- Wait for the **3 s GNSS warmup** countdown on the GPS step before tapping Capture.
-- One tap samples up to **12 s**; hold still at the property boundary in open sky.
-- Enable Android **High accuracy** location; disable mock-location apps.
-- `npm run verify:gps-error-messages` guards against inverted Expo Go error text on fleet builds.
+- Tap **Capture Coordinate** once location permission is granted — coordinates save immediately with no accuracy gate.
+- High-accuracy location mode is used when available; poor reported accuracy does not block capture or submit.
+- Disable mock-location apps — simulated GPS is rejected on submit.
+- Retake GPS if submit reports the capture is too old (15 min).
+- Expo Go captures are tagged for audit but are not blocked on submit.
+- `npm run verify:gps-error-messages` guards unavailable-location error text on fleet builds.
+- `npm run verify:gps-validation` guards submit validation (coordinates required; no accuracy threshold).
 
 `npm run verify:eas-preview` fails if web/mobile/Convex Clerk settings disagree.

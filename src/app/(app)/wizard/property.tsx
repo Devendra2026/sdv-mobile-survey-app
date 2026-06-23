@@ -7,14 +7,14 @@ import { AppCard, AppDropdown, AppInput, ChipSelector, SectionLabel, Spinner } f
 import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { formatPropertyId } from '@/convex/propertyId';
+import { displayPropertyId } from '@/convex/propertyId';
 import { constructedYearError, parcelNoError, sanitizeFixedDigits, unitNoError } from '@/convex/surveyFieldValidation';
 import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';
 import type { MastersBundle } from '@/utils/mastersBundle';
 import { useApplyDraftPatch, wardAutoPatch } from '@/utils/wizard-draft-patch';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
@@ -40,12 +40,7 @@ export default function StepProperty() {
       subtitle="Ward, parcel, and unit identification"
       nextDisabled={(d) => !stepCompletion(d).property}
     >
-      {({ draft, update }) => {
-        if (!stepCompletion(draft).start) {
-          return <Redirect href={{ pathname: '/(app)/wizard/start', params: { localId } }} />;
-        }
-        return <PropertyFields draft={draft} update={update} masters={bundle} />;
-      }}
+      {({ draft, update }) => <PropertyFields draft={draft} update={update} masters={bundle} />}
     </WizardStepFrame>
   );
 }
@@ -83,13 +78,16 @@ function PropertyFields({
 
   const selectedWard = wardsForSelectedUlb.find((w: WardRow) => w.wardNo === draft.wardNo);
   const wardLocked = wardOptions.length === 1;
-  const previewPropertyId = formatPropertyId({
-    ulbCode: selectedUlb?.code ?? '',
-    wardNo: draft.wardNo ?? '',
-    parcelNo: draft.parcelNo ?? '',
-    unitNo: draft.unitNo ?? '',
-    propertyUse: draft.propertyUse ?? '',
-  });
+  const displayId = displayPropertyId(
+    {
+      propertyId: draft.propertyId,
+      wardNo: draft.wardNo,
+      parcelNo: draft.parcelNo,
+      unitNo: draft.unitNo,
+      propertyUse: draft.propertyUse,
+    },
+    selectedUlb?.code ?? '',
+  );
 
   useApplyDraftPatch(update, wardAutoPatch(draft.municipalityId, draft.wardNo, liveWards));
 
@@ -179,28 +177,26 @@ function PropertyFields({
           </View>
         </View>
 
-        <AppInput
-          label="Constructed year"
-          required
-          value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
-          onChangeText={(v) => {
-            const digits = v.replace(/\D/g, '').slice(0, 4);
-            update({ constructedYear: digits ? Number(digits) : undefined });
-          }}
-          placeholder="e.g. 1998"
-          keyboardType="number-pad"
-          maxLength={4}
-          iconLeft="calendar-outline"
-          helperText={
-            constructedYearError(draft.constructedYear) ? undefined : 'Year the structure was built (1800–present)'
-          }
-          errorText={draft.constructedYear != null ? constructedYearError(draft.constructedYear) : undefined}
-        />
-
         <View style={{ gap: 12 }}>
           <Text className="text-caption font-medium text-ink-tertiary-light dark:text-ink-tertiary-dark">
             Additional details (optional)
           </Text>
+          <AppInput
+            label="Constructed year"
+            value={draft.constructedYear != null ? String(draft.constructedYear) : ''}
+            onChangeText={(v) => {
+              const digits = v.replace(/\D/g, '').slice(0, 4);
+              update({ constructedYear: digits ? Number(digits) : undefined });
+            }}
+            placeholder="e.g. 1998"
+            keyboardType="number-pad"
+            maxLength={4}
+            iconLeft="calendar-outline"
+            helperText={
+              constructedYearError(draft.constructedYear) ? undefined : 'Year the structure was built (1800–present)'
+            }
+            errorText={draft.constructedYear != null ? constructedYearError(draft.constructedYear) : undefined}
+          />
           <AppInput
             label="Old property number"
             value={draft.oldPropertyNo ?? ''}
@@ -211,11 +207,15 @@ function PropertyFields({
           />
           <AppInput
             label="Property ID"
-            value={previewPropertyId ?? draft.propertyId ?? ''}
+            value={displayId ?? ''}
             onChangeText={() => {}}
-            placeholder="Auto-generated after ward, parcel & property use"
+            placeholder="Auto-generated from ward, parcel, and unit"
             iconLeft="finger-print-outline"
-            helperText="Format: 800828-001-00001-P (ULB–Ward–Parcel–Use)"
+            helperText={
+              draft.propertyUse
+                ? 'Format: 801262-001-00004-001-R (ULB–Ward–Parcel–Unit–Use)'
+                : 'Base ID fills in here; property-use suffix is added on the taxation step'
+            }
             editable={false}
           />
         </View>
@@ -239,7 +239,7 @@ function PropertyFields({
 
       {!stepCompletion(draft).property ? (
         <Text className="text-caption text-ink-tertiary-light px-1 mt-3">
-          Select a ward, enter valid parcel and unit numbers, and provide the constructed year to continue.
+          Select a ward and enter valid parcel and unit numbers to continue.
         </Text>
       ) : null}
     </>

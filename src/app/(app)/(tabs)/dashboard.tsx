@@ -19,13 +19,12 @@ import { api } from '@/convex/_generated/api';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { useDashboardCounts } from '@/hooks/use-dashboard-counts';
 import { useNetworkStatus } from '@/hooks/use-network-status';
-import { listDrafts, type WizardDraft } from '@/hooks/useWizardDraft';
+import { useUnifiedDrafts } from '@/hooks/useUnifiedDrafts';
 import { humanizeRole, surveyOwnerListLabel } from '@/utils/format';
 import { scrollViewProps } from '@/utils/scroll-props';
 import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -34,16 +33,14 @@ export default function DashboardScreen() {
   const { convexReady } = useClerkConvexAuth();
   const counts = useDashboardCounts();
   const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
-  const recent = useQuery(api.survey.list, convexReady ? { limit: 5 } : 'skip');
+  const recent = useQuery(api.survey.list, convexReady ? { limit: 5, sortBy: 'updated' as const } : 'skip');
 
   const { isOnline } = useNetworkStatus();
-  const [localDrafts, setLocalDrafts] = useState<WizardDraft[]>([]);
+  const { items: draftItems, loading: draftsLoading } = useUnifiedDrafts();
 
-  useEffect(() => {
-    void listDrafts().then(setLocalDrafts);
-  }, []);
+  const recentActivity = (recent ?? []).filter((s) => s.status !== 'draft');
 
-  if (me === undefined || counts === undefined || recent === undefined) {
+  if (me === undefined || counts === undefined || recent === undefined || draftsLoading) {
     return (
       <View className="flex-1 bg-page-light dark:bg-page-dark p-4 pt-16">
         <DashboardSkeleton />
@@ -82,6 +79,10 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={{ padding: 14 }} {...scrollViewProps}>
         {isSupervisor ? (
           <>
+            <View className="flex-row gap-2 mb-3">
+              <KpiCard label="My drafts" value={counts.drafts} icon="create-outline" tone="warning" />
+              <KpiCard label="Submitted" value={counts.submitted} icon="cloud-upload-outline" tone="info" />
+            </View>
             <SectionLabel>Team analytics</SectionLabel>
             <SurveyStatsBreakdown eyebrow="Scoped to your district or ULB assignment" />
           </>
@@ -108,53 +109,69 @@ export default function DashboardScreen() {
           />
         ) : null}
 
-        {!isSupervisor && localDrafts.length > 0 ? (
+        <SectionLabel>New survey</SectionLabel>
+        <AppButton
+          label="Start new survey"
+          iconLeft="add"
+          size="lg"
+          onPress={() => router.push('/(app)/wizard')}
+          fullWidth
+          className="mb-5"
+        />
+
+        {draftItems.length > 0 ? (
           <View className="mb-4">
-            <SectionLabel>Continue draft</SectionLabel>
-            <View className="gap-2 mt-2">
-              {localDrafts.slice(0, 3).map((d) => (
+            <View className="flex-row items-center justify-between mb-2">
+              <SectionLabel>Saved drafts ({draftItems.length})</SectionLabel>
+              <Text className="text-helper text-brand font-medium" onPress={() => router.push('/surveys')}>
+                View all
+              </Text>
+            </View>
+            <View className="gap-2">
+              {draftItems.map((d, i) => (
                 <SurveyCard
-                  key={d.localId}
-                  parcelNo={d.parcelNo || 'Draft'}
-                  unitNo={d.unitNo || '—'}
-                  ownerName={d.owners?.[0]?.name ?? 'In progress'}
-                  wardNo={d.wardNo ?? '—'}
+                  key={d.key}
+                  parcelNo={d.parcelNo}
+                  unitNo={d.unitNo}
+                  ownerName={d.ownerName}
+                  wardNo={d.wardNo}
                   status="draft"
                   qcStatus="pending"
-                  updatedAt={d.updatedAt ?? 0}
-                  onPress={() => router.push({ pathname: '/(app)/wizard', params: { resume: d.localId } })}
+                  createdAt={d.createdAt}
+                  updatedAt={d.updatedAt}
+                  completionPct={d.completionPct}
+                  highlight={i === 0 ? 'recent' : 'none'}
+                  onPress={() => {
+                    if (d.resumeLocal) {
+                      router.push({ pathname: '/(app)/wizard', params: { resume: d.localId } });
+                      return;
+                    }
+                    if (d.serverSurveyId) {
+                      router.push({ pathname: '/(app)/wizard', params: { surveyId: d.serverSurveyId } });
+                    }
+                  }}
                 />
               ))}
             </View>
           </View>
         ) : null}
 
-        {!isSupervisor ? (
-          <AppButton
-            label="Start new survey"
-            iconLeft="add"
-            size="lg"
-            onPress={() => router.push('/(app)/wizard')}
-            fullWidth
-          />
-        ) : null}
-
-        <View className="flex-row items-center justify-between mt-5 mb-2">
-          <SectionLabel>Recent</SectionLabel>
+        <View className="flex-row items-center justify-between mt-2 mb-2">
+          <SectionLabel>Recent activity</SectionLabel>
           <Text className="text-helper text-brand font-medium" onPress={() => router.push('/surveys')}>
             View all
           </Text>
         </View>
 
-        {recent.length === 0 ? (
+        {recentActivity.length === 0 ? (
           <EmptyState
             icon="document-text-outline"
-            title="No surveys yet"
-            message="Tap 'Start new survey' to capture your first property."
+            title="No submitted surveys yet"
+            message="Start a new survey above. Submitted and approved surveys appear here."
           />
         ) : (
           <View className="gap-2">
-            {recent.map((s) => (
+            {recentActivity.map((s) => (
               <SurveyCard
                 key={s._id}
                 parcelNo={s.parcelNo}
@@ -163,7 +180,9 @@ export default function DashboardScreen() {
                 wardNo={s.wardNo}
                 status={s.status}
                 qcStatus={s.qcStatus}
-                updatedAt={s._creationTime}
+                createdAt={s._creationTime}
+                updatedAt={s.clientUpdatedAt}
+                completionPct={s.completionPct}
                 onPress={() => router.push({ pathname: '/(app)/survey/[id]', params: { id: s._id } })}
               />
             ))}

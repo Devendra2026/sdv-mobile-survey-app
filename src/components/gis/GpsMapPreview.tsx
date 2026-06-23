@@ -26,7 +26,7 @@ function regionForCoordinate(coordinate: Pick<GpsCaptureInput, 'latitude' | 'lon
 
 function GpsMapPreviewInner({ coordinate, interactive = true, height = 220 }: GpsMapPreviewProps) {
   const mapRef = useRef<MapView>(null);
-  const { latitude, longitude, accuracyMeters, capturedAt } = coordinate;
+  const { latitude, longitude, capturedAt } = coordinate;
   const region = useMemo(() => regionForCoordinate({ latitude, longitude }), [latitude, longitude]);
   const showMap = canRenderNativeMap();
   const useGoogleProvider = !isExpoGo() && Platform.OS === 'android';
@@ -80,7 +80,7 @@ function GpsMapPreviewInner({ coordinate, interactive = true, height = 220 }: Gp
             longitude,
           }}
           title="Survey GPS"
-          description={`±${Math.round(accuracyMeters)} m`}
+          description={new Date(capturedAt).toLocaleString()}
         />
       </MapView>
     </View>

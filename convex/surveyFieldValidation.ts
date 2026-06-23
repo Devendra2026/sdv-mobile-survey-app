@@ -61,7 +61,7 @@ export function isValidConstructedYear(year: number | undefined, nowYear = new D
 }
 
 export function constructedYearError(year: number | undefined, nowYear = new Date().getFullYear()): string | undefined {
-  if (year == null) return 'Constructed year is required';
+  if (year == null) return undefined;
   if (!isValidConstructedYear(year, nowYear)) {
     return `Enter a year between 1800 and ${nowYear}`;
   }

@@ -28,12 +28,12 @@ export function FloatingSaveBar({
   return (
     <SafeAreaView
       edges={['bottom']}
-      className="border-t border-line-subtle bg-surface-light dark:bg-surface-dark px-4 pt-3"
+      className="border-t border-line-subtle bg-surface-light dark:bg-surface-dark px-4 pt-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]"
     >
       <View className="flex-row gap-2">
         {onBack ? (
           <View className="flex-1">
-            <AppButton label="Back" variant="outline" onPress={onBack} fullWidth />
+            <AppButton label="Previous" variant="outline" onPress={onBack} fullWidth />
           </View>
         ) : null}
         {onSaveDraft ? (

@@ -24,6 +24,7 @@ import {
   ReviewPhotosSection,
   ReviewPropertySection,
   ReviewServicesSection,
+  ReviewStepChecklist,
   ReviewSubmitActions,
   ReviewSurveyStartSection,
   ReviewTaxationSection,
@@ -31,6 +32,7 @@ import {
 } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import {
@@ -40,8 +42,9 @@ import {
   stepCompletion,
   useWizardDraft,
 } from '@/hooks/useWizardDraft';
-import { toUserMessage } from '@/utils/errors';
+import { convexValidationMessages, toUserMessage } from '@/utils/errors';
 import { scrollViewProps } from '@/utils/scroll-props';
+import { allMissingFields } from '@/utils/wizardValidation';
 import { useMutation } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -80,7 +83,9 @@ export default function ReviewScreen() {
 
   const completion = stepCompletion(draft);
   const allComplete = Object.values(completion).every(Boolean);
-  const args = allComplete ? draftToUpsertArgs(draft) : null;
+  const missingFields = allMissingFields(draft);
+  const submitReady = allComplete && missingFields.length === 0;
+  const args = submitReady ? draftToUpsertArgs(draft) : null;
 
   const selectedUlb = bundle.ulbs.find((u) => u._id === draft.municipalityId);
   const muniName = selectedUlb?.name ?? '—';
@@ -99,8 +104,8 @@ export default function ReviewScreen() {
       return;
     }
     try {
-      const surveyId = await saveToServer(draft);
-      if (surveyId) await persistServerSurveyId(surveyId);
+      const result = await saveToServer(draft);
+      if (result.surveyId) await persistServerSurveyId(result.surveyId);
       setToast({ title: 'Draft saved — you can continue later', tone: 'success' });
     } catch (e) {
       setToast({ title: toUserMessage(e), tone: 'danger' });
@@ -108,14 +113,35 @@ export default function ReviewScreen() {
   };
 
   const onSubmit = async () => {
-    if (!args) return;
+    if (!args || !submitReady) {
+      const preview = missingFields.slice(0, 3).join(', ');
+      setToast({
+        title: preview ? `Missing: ${preview}` : 'Complete all required steps before submitting',
+        tone: 'danger',
+      });
+      return;
+    }
+
+    if (draft.gps) {
+      const gpsErrors = validateGpsCapture(draft.gps, { strict: true });
+      if (gpsErrors.length > 0) {
+        setToast({ title: gpsErrors[0]!, tone: 'danger' });
+        return;
+      }
+    }
+
     setBusy(true);
     try {
-      const surveyId = await saveToServer(draft);
-      if (!surveyId) {
+      const result = await saveToServer(draft);
+      if (!result.surveyId) {
         setToast({ title: 'Complete all required steps before submitting', tone: 'danger' });
         return;
       }
+      if (result.failedSections.length > 0) {
+        setToast({ title: `Save incomplete: ${result.failedSections.join(', ')}`, tone: 'danger' });
+        return;
+      }
+      const surveyId = result.surveyId;
       await Promise.all([persistServerSurveyId(surveyId), submit({ id: surveyId })]);
       await clearDraft(draft.localId);
       setToast({ title: 'Submitted for review', tone: 'success' });
@@ -123,7 +149,11 @@ export default function ReviewScreen() {
         router.replace({ pathname: '/(app)/survey/[id]', params: { id: surveyId } });
       }, 700);
     } catch (e) {
-      setToast({ title: toUserMessage(e), tone: 'danger' });
+      const serverMsgs = convexValidationMessages(e);
+      setToast({
+        title: serverMsgs.length > 0 ? serverMsgs.slice(0, 2).join(' · ') : toUserMessage(e),
+        tone: 'danger',
+      });
     } finally {
       setBusy(false);
     }
@@ -134,14 +164,15 @@ export default function ReviewScreen() {
       <ReviewWizardHeader draft={draft} />
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32, flexGrow: 1 }} {...scrollViewProps}>
-        <ReviewCompletionBanner allComplete={allComplete} />
+        <ReviewCompletionBanner allComplete={submitReady} draft={draft} />
+        {!submitReady ? <ReviewStepChecklist draft={draft} /> : null}
         <ReviewSurveyStartSection
           draft={draft}
           districtName={districtName}
           muniName={muniName}
           muniCode={selectedUlb?.code ?? '—'}
         />
-        <ReviewPropertySection draft={draft} />
+        <ReviewPropertySection draft={draft} ulbCode={selectedUlb?.code ?? ''} />
         <ReviewOwnerSection draft={draft} />
         <ReviewAddressSection draft={draft} />
         <ReviewTaxationSection draft={draft} bundle={bundle} />
@@ -161,7 +192,7 @@ export default function ReviewScreen() {
 
         <ReviewSubmitActions
           canSaveDraft={!!draftToSaveDraftPayload(draft)}
-          allComplete={allComplete}
+          allComplete={submitReady}
           savingDraft={savingDraft}
           busy={busy}
           onSaveDraft={onSaveDraft}

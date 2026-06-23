@@ -1,4 +1,4 @@
-# GIS field verification checklist (±1 m target, ±5 m accept)
+# GIS field verification checklist
 
 Use this on Nagar Nigam fleet devices before promoting a production Android build.
 
@@ -9,22 +9,18 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 - `npm run verify:eas-preview` fails if the EAS Maps key is missing or does not match `.env.local`
 - Enable Maps SDK for Android and iOS in Google Cloud Console
 - Use a **development build** or **preview/production APK** for field validation — embedded Google Maps keys apply to native builds
-- **Expo Go** runs in dev-preview mode: accepts up to ±10 m for wizard flow testing only; dev-preview GPS **cannot be submitted**
+- **Expo Go** can complete the full wizard including submit for dev testing; captures are tagged `expo-go-dev-preview` for audit. Use a **fleet APK** for field validation before production rollout.
 - **GIS debug** panel is dev-client only — not shown in Expo Go or fleet preview/production APKs
 
-## Capture accuracy
+## Capture
 
-- GNSS pre-warm starts when the GPS wizard step opens (before tapping Capture) to improve time-to-fix
-- Wait **3 s** on the GPS step before first capture (warmup countdown on the Capture button)
-- During capture, live progress shows `Best reading: ±X m (need ≤ ±5 m)`
-- One tap samples up to **12 s** (no automatic retry) and saves the best reading at or below ±5 m
-- Target pinpoint is ±1 m; readings between ±1 m and ±5 m are accepted with success tone (not "Pinpoint" badge)
-- Production APK accuracy failures show field guidance (outdoor, hold still, High accuracy mode) — not Expo Go messaging
-- Footer shows build fingerprint: `Build 1.0.0 · fleet APK · ±5 m max` — confirm this before field testing; if it says Expo Go or errors mention Expo Go, reinstall the latest fleet APK
-- [ ] Outdoor open sky at **property boundary** (not mid-road): capture completes at ≤ ±5 m or shows retry guidance
-- [ ] Indoor / weak GNSS: "Waiting for better GPS signal…" appears; capture rejects above ±5 m
+- Tap **Capture Coordinate** once location permission is granted — no warmup countdown or accuracy gate
+- One tap fetches the current device location and saves latitude, longitude, and timestamp immediately
+- High-accuracy location mode is used when available; poor reported accuracy does not block capture
+- [ ] Outdoor at **property boundary**: capture completes and wizard Next is enabled
+- [ ] Indoor / weak GNSS: capture still saves coordinates (no accuracy rejection)
 - [ ] Mock location app enabled: capture blocked with explicit error
-- [ ] Double-tap Capture: only one sampling session runs
+- [ ] Double-tap Capture Coordinate: only one capture runs at a time
 
 ## Map / coordinate sync
 
@@ -36,12 +32,12 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 ## Convex
 
 - [ ] After cloud save, Convex `surveys.gps` matches client coordinates (full precision)
-- [ ] Submit rejects invalid lat/lng, mock GPS, accuracy > 5 m, or stale capture (> 15 min)
+- [ ] Submit rejects invalid lat/lng, mock GPS, or stale capture (> 15 min)
 
 ## Permissions
 
 - [ ] Denied permission → actionable Settings message
-- [ ] Location services off → "Turn on device location services"
+- [ ] Location services off → "Unable to get location. Please enable Location Services."
 - [ ] Airplane mode → capture fails gracefully (offline GPS may still work if GNSS enabled)
 
 ## Scenarios
@@ -51,8 +47,4 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 - [ ] Poor network (offline capture still works)
 - [ ] Fresh install Android production build
 
-## Known risk
-
-Consumer phone GNSS may not report ≤ 5 m in urban canyons or under cover. If failure rate is high on fleet devices, log best accuracy from the error banner (`Best reading: ±N m (need ≤ ±5 m)`) and evaluate hardware or moving to open sky at the property boundary.
-
-**Current fleet policy (v3):** target ±1 m pinpoint; accept best single reading up to ±5 m for capture, wizard step, and submit. One-click capture (~12 s max) without automatic retry.
+**Current fleet policy:** single-shot coordinate capture with no accuracy validation. Mock location is blocked; capture freshness is enforced on submit (15 min).

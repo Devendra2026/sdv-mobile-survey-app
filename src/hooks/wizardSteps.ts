@@ -7,7 +7,8 @@
  * Add a step → add a row here and a screen file. Nothing else to touch.
  */
 import type { WizardDraft } from '@/hooks/useWizardDraft';
-import { stepCompletion } from '@/hooks/useWizardDraft';
+import { draftCompletionPct, stepCompletion } from '@/hooks/useWizardDraft';
+import { stepHasProgress, type StepStatus } from '@/utils/wizardValidation';
 
 export interface StepConfig {
   key: keyof ReturnType<typeof stepCompletion>;
@@ -31,6 +32,81 @@ export const WIZARD_STEPS: StepConfig[] = [
 const REVIEW_ROUTE = '/(app)/wizard/review';
 
 export { REVIEW_ROUTE };
+
+export function stepIndex(targetKey: StepConfig['key']): number {
+  return WIZARD_STEPS.findIndex((s) => s.key === targetKey);
+}
+
+/** Highest step index the user has opened in this draft session. */
+export function resolvedFurthestStepIndex(draft: WizardDraft): number {
+  const stored = draft.furthestStepIndex ?? 0;
+  const fromActive =
+    draft.lastActiveStepKey && draft.lastActiveStepKey !== 'review'
+      ? stepIndex(draft.lastActiveStepKey)
+      : draft.lastActiveStepKey === 'review'
+        ? WIZARD_STEPS.length
+        : 0;
+  return Math.max(stored, fromActive >= 0 ? fromActive : 0);
+}
+
+/** True when every step before `targetKey` is complete (required to advance forward). */
+export function canNavigateToStep(draft: WizardDraft, targetKey: StepConfig['key']): boolean {
+  const c = stepCompletion(draft);
+  const targetIndex = stepIndex(targetKey);
+  if (targetIndex < 0) return false;
+  for (let i = 0; i < targetIndex; i++) {
+    const step = WIZARD_STEPS[i]!;
+    if (!c[step.key]) return false;
+  }
+  return true;
+}
+
+/**
+ * True when the user may open a step from the header chips.
+ * Completed and previously visited sections stay editable; only unvisited
+ * future steps stay locked until earlier steps are complete.
+ */
+export function canPickStep(draft: WizardDraft, targetKey: StepConfig['key']): boolean {
+  const targetIndex = stepIndex(targetKey);
+  if (targetIndex < 0) return false;
+  if (stepCompletion(draft)[targetKey]) return true;
+  if (targetIndex <= resolvedFurthestStepIndex(draft)) return true;
+  return canNavigateToStep(draft, targetKey);
+}
+
+export function wizardStepProgress(draft: WizardDraft, activeKey: string) {
+  const total = WIZARD_STEPS.length;
+  const stepIdx = WIZARD_STEPS.findIndex((s) => s.key === activeKey);
+  const current = stepIdx >= 0 ? stepIdx + 1 : total;
+  const label = stepIdx >= 0 ? WIZARD_STEPS[stepIdx]!.label : 'Review';
+  return {
+    current,
+    total,
+    percent: draftCompletionPct(draft),
+    label,
+  };
+}
+
+/** Patch to record a visited wizard step (call before navigating). */
+export function visitedStepPatch(
+  draft: WizardDraft,
+  key: StepConfig['key'] | 'review',
+): Pick<WizardDraft, 'lastActiveStepKey' | 'furthestStepIndex'> {
+  const idx = key === 'review' ? WIZARD_STEPS.length : stepIndex(key);
+  return {
+    lastActiveStepKey: key,
+    furthestStepIndex: Math.max(draft.furthestStepIndex ?? 0, idx >= 0 ? idx : 0),
+  };
+}
+
+export function incompleteStepLabels(draft: WizardDraft): string[] {
+  const c = stepCompletion(draft);
+  return WIZARD_STEPS.filter((s) => !c[s.key]).map((s) => s.label);
+}
+
+export function allStepsComplete(draft: WizardDraft): boolean {
+  return Object.values(stepCompletion(draft)).every(Boolean);
+}
 
 /** Resolve the wizard route to open when resuming a local draft. */
 export function routeForDraftResume(draft: WizardDraft): string {
@@ -58,6 +134,8 @@ export function indicatorSteps(draft: WizardDraft, activeKey: string) {
     label: s.label,
     short: s.short,
     completed: c[s.key],
+    progress: (c[s.key] ? 'complete' : stepHasProgress(draft, s.key) ? 'in_progress' : 'incomplete') as StepStatus,
+    reachable: canPickStep(draft, s.key),
   }));
 }
 

@@ -33,13 +33,13 @@ import { validateServicesSection } from './serviceMasters';
 import {
   assertSurveyWritable,
   auditActionForSave,
+  canCreateFieldSurvey,
   requireSurveyDraftEdit,
   resolveExistingSurveyForSave,
   resolvePostSaveStatuses,
 } from './surveyEditRules';
 import {
   constructedYearError,
-  isValidConstructedYear,
   isValidParcelNo,
   isValidTenDigitMobile,
   isValidUnitNo,
@@ -142,7 +142,7 @@ const surveyInput = {
   propertyId: v.optional(v.string()),
   parcelNo: v.string(),
   unitNo: v.string(),
-  constructedYear: v.number(),
+  constructedYear: v.optional(v.number()),
   isSlum: v.boolean(),
 
   respondentName: v.optional(v.string()),
@@ -182,6 +182,24 @@ const surveyInput = {
 
 /* ────────────────────────── reactive queries ────────────────────────── */
 
+const surveySortBy = v.union(v.literal('propertyId'), v.literal('updated'));
+
+function resolveListSort(args: {
+  status?: Doc<'surveys'>['status'];
+  sortBy?: 'propertyId' | 'updated';
+}): 'propertyId' | 'updated' {
+  if (args.sortBy) return args.sortBy;
+  if (args.status === 'draft') return 'updated';
+  return 'propertyId';
+}
+
+function sortSurveyRows(rows: Doc<'surveys'>[], sortBy: 'propertyId' | 'updated'): Doc<'surveys'>[] {
+  if (sortBy === 'updated') {
+    return [...rows].sort((a, b) => b.clientUpdatedAt - a.clientUpdatedAt);
+  }
+  return [...rows].sort((a, b) => comparePropertyIds(a.propertyId, b.propertyId));
+}
+
 /**
  * Tenant-filtered list. The mobile app subscribes to this with `useQuery`
  * — Convex pushes updates automatically when any matching row changes,
@@ -197,6 +215,7 @@ export const list = query({
     municipalityId: v.optional(v.id('municipalities')),
     surveyorId: v.optional(v.id('users')),
     limit: v.optional(v.number()),
+    sortBy: v.optional(surveySortBy),
   },
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
@@ -249,7 +268,7 @@ export const list = query({
     if (args.wardNo) {
       rows = rows.filter((r) => wardNumbersMatch(r.wardNo, args.wardNo!));
     }
-    rows.sort((a, b) => comparePropertyIds(a.propertyId, b.propertyId));
+    rows = sortSurveyRows(rows, resolveListSort(args));
     const codes = await loadMunicipalityCodes(
       ctx,
       rows.map((r) => r.municipalityId),
@@ -270,6 +289,7 @@ const listFilterArgs = {
   fromMs: v.optional(v.number()),
   toMs: v.optional(v.number()),
   searchTerm: v.optional(v.string()),
+  sortBy: v.optional(surveySortBy),
 };
 
 function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
@@ -291,6 +311,7 @@ function applySurveyListFilters(
     surveyorId?: Id<'users'>;
     fromMs?: number;
     toMs?: number;
+    sortBy?: 'propertyId' | 'updated';
   },
   me: Doc<'users'>,
   muniIds: Set<Id<'municipalities'>>,
@@ -315,6 +336,10 @@ function applySurveyListFilters(
   if (args.wardNo) filtered = filtered.filter((r) => wardNumbersMatch(r.wardNo, args.wardNo!));
   if (args.fromMs !== undefined) filtered = filtered.filter((r) => r._creationTime >= args.fromMs!);
   if (args.toMs !== undefined) filtered = filtered.filter((r) => r._creationTime <= args.toMs!);
+  const sortBy = resolveListSort(args);
+  if (sortBy === 'updated') {
+    return filtered.sort((a, b) => b.clientUpdatedAt - a.clientUpdatedAt);
+  }
   return filtered.sort(compareWardThenParcel);
 }
 
@@ -809,9 +834,10 @@ export const saveDraft = mutation({
   args: draftSurveyInput,
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
-    const [, ownScope, muni, existing] = await Promise.all([
+    const [, ownScope, canCreate, muni, existing] = await Promise.all([
       requireSurveyDraftEdit(ctx, me),
       isOwnScopeSurveyor(ctx, me),
+      canCreateFieldSurvey(ctx, me),
       assertMunicipalityInScope(ctx, me, args.municipalityId),
       resolveExistingSurveyForSave(ctx, me, {
         id: args.id,
@@ -820,8 +846,11 @@ export const saveDraft = mutation({
       }),
     ]);
     if (existing) await assertSurveyWritable(ctx, me, existing);
-    if (!existing && !ownScope) {
-      clientError('BAD_REQUEST', 'No survey found to update — open the record from QC review and try saving again');
+    if (!existing && !canCreate) {
+      clientError(
+        'BAD_REQUEST',
+        'Cannot save a new survey draft with this account. Field supervisors and surveyors need an active role with district/ULB assigned.',
+      );
     }
 
     const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? '';
@@ -920,9 +949,10 @@ export const upsert = mutation({
   args: surveyInput,
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
-    const [, ownScope, muni] = await Promise.all([
+    const [, ownScope, canCreate, muni] = await Promise.all([
       requireSurveyDraftEdit(ctx, me),
       isOwnScopeSurveyor(ctx, me),
+      canCreateFieldSurvey(ctx, me),
       assertMunicipalityInScope(ctx, me, args.municipalityId),
     ]);
     assertCanReadWard(me, args.municipalityId, args.wardNo);
@@ -951,8 +981,11 @@ export const upsert = mutation({
       municipalityId: args.municipalityId,
     });
     if (existing) await assertSurveyWritable(ctx, me, existing);
-    if (!existing && !ownScope) {
-      clientError('BAD_REQUEST', 'No survey found to update — open the record from QC review and try saving again');
+    if (!existing && !canCreate) {
+      clientError(
+        'BAD_REQUEST',
+        'Cannot save a new survey draft with this account. Field supervisors and surveyors need an active role with district/ULB assigned.',
+      );
     }
 
     await assertUniqueSurveySlot(ctx, {
@@ -996,6 +1029,7 @@ export const upsert = mutation({
       status: 'draft',
       qcStatus: 'pending',
       serverVersion: 1,
+      clientUpdatedAt: args.clientUpdatedAt,
     });
     await Promise.all([
       refreshSurveyCompletionPct(ctx, newId),
@@ -1597,11 +1631,9 @@ function validateBusinessRules(
   );
   const constructedYear = in_.constructedYear as unknown as number | undefined;
   const currentYear = new Date().getFullYear();
-  if (strict) {
+  if (constructedYear != null) {
     const err = constructedYearError(constructedYear, currentYear);
     if (err) details.constructedYear = [err];
-  } else if (constructedYear != null && !isValidConstructedYear(constructedYear, currentYear)) {
-    details.constructedYear = [`Enter a year between 1800 and ${currentYear}`];
   }
   if (in_.gps) {
     Object.assign(

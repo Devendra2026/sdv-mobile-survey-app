@@ -9,14 +9,15 @@ import { SYSTEM_ROLE_PERMISSIONS } from './permissionCatalog';
 type Ctx = QueryCtx | MutationCtx;
 
 export async function permissionsForRole(ctx: Ctx, roleKey: string): Promise<Set<string>> {
+  const systemBaseline = SYSTEM_ROLE_PERMISSIONS[roleKey] ?? [];
+
   const role = await ctx.db
     .query('roles')
     .withIndex('by_key', (q) => q.eq('key', roleKey))
     .unique();
 
   if (!role || role.isActive === false) {
-    const fallback = SYSTEM_ROLE_PERMISSIONS[roleKey];
-    return fallback ? new Set(fallback) : new Set();
+    return new Set(systemBaseline);
   }
 
   const rows = await ctx.db
@@ -24,7 +25,12 @@ export async function permissionsForRole(ctx: Ctx, roleKey: string): Promise<Set
     .withIndex('by_role', (q) => q.eq('roleId', role._id))
     .collect();
 
-  return new Set(rows.map((r) => r.permissionKey));
+  const fromDb = new Set(rows.map((r) => r.permissionKey));
+  // System roles keep catalog baseline; DB rows can add custom grants.
+  for (const key of systemBaseline) {
+    fromDb.add(key);
+  }
+  return fromDb;
 }
 
 /** Reuse permission set across multiple capability checks in one handler. */

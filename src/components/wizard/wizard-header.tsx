@@ -8,6 +8,8 @@ export interface WizardStepIndicator {
   label: string;
   short: string;
   completed: boolean;
+  progress?: 'complete' | 'in_progress' | 'incomplete';
+  reachable?: boolean;
 }
 
 interface WizardHeaderProps {
@@ -15,6 +17,7 @@ interface WizardHeaderProps {
   subtitle?: string;
   steps: WizardStepIndicator[];
   activeKey: string;
+  progress?: { current: number; total: number; percent: number; label: string };
   onBack: () => void;
   onSelectStep?: (key: string) => void;
 }
@@ -28,17 +31,33 @@ function WizardStepChip({
   active: boolean;
   onSelectStep?: (key: string) => void;
 }) {
+  const locked = step.reachable === false;
+  const inProgress = !step.completed && step.progress === 'in_progress';
+  const canPress = onSelectStep && !locked;
+
   return (
     <Pressable
-      onPress={() => onSelectStep?.(step.key)}
-      disabled={!onSelectStep}
+      onPress={() => canPress && onSelectStep(step.key)}
+      disabled={!canPress}
       className={[
         'min-w-[44px] items-center rounded-full px-2.5 py-2',
-        active ? 'bg-white' : step.completed ? 'bg-white/25' : 'bg-white/10',
+        active
+          ? 'bg-white'
+          : step.completed
+            ? 'bg-white/25'
+            : inProgress
+              ? 'bg-warning/30'
+              : locked
+                ? 'bg-white/5 opacity-50'
+                : 'bg-white/10',
       ].join(' ')}
     >
-      {step.completed && !active ? (
+      {locked ? (
+        <Ionicons name="lock-closed" size={12} color="#FFFFFF99" />
+      ) : step.completed && !active ? (
         <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+      ) : inProgress ? (
+        <View className="w-2 h-2 rounded-full bg-warning" />
       ) : (
         <Text className={['text-[11px] font-semibold', active ? 'text-brand' : 'text-white'].join(' ')}>
           {step.short}
@@ -54,7 +73,7 @@ function WizardStepChip({
   );
 }
 
-export function WizardHeader({ title, subtitle, steps, activeKey, onBack, onSelectStep }: WizardHeaderProps) {
+export function WizardHeader({ title, subtitle, steps, activeKey, progress, onBack, onSelectStep }: WizardHeaderProps) {
   const renderStep = useCallback(
     ({ item: step }: ListRenderItemInfo<WizardStepIndicator>) => (
       <WizardStepChip step={step} active={step.key === activeKey} onSelectStep={onSelectStep} />
@@ -75,9 +94,21 @@ export function WizardHeader({ title, subtitle, steps, activeKey, onBack, onSele
         <View className="flex-1 ml-1">
           <Text className="text-helper text-white/65">New survey</Text>
           <Text className="text-h1 font-medium text-white mt-0.5">{title}</Text>
-          {subtitle ? <Text className="text-caption text-white/75 mt-1">{subtitle}</Text> : null}
+          {progress ? (
+            <Text className="text-caption text-white/80 mt-1">
+              Step {progress.current} of {progress.total} · {progress.label} · {progress.percent}% complete
+            </Text>
+          ) : subtitle ? (
+            <Text className="text-caption text-white/75 mt-1">{subtitle}</Text>
+          ) : null}
         </View>
       </View>
+
+      {progress ? (
+        <View className="mt-3 h-1.5 rounded-full bg-white/20 overflow-hidden">
+          <View className="h-full rounded-full bg-white" style={{ width: `${Math.min(100, progress.percent)}%` }} />
+        </View>
+      ) : null}
 
       <FlatList
         horizontal

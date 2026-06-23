@@ -1,16 +1,8 @@
 /**
- * Ensures fleet APK accuracy failures use production field guidance (not inverted Expo Go text).
+ * Ensures unavailable-location failures use actionable field guidance.
  * Imports the real locationErrorMessage — run via: npx tsx ./scripts/verify-gps-error-messages.ts
  */
-import { GPS_ACCEPT_MAX_ACCURACY_METERS } from '../convex/gpsAccuracy';
-import { GpsAccuracyError } from '../src/utils/gpsAccuracyError';
 import { locationErrorMessage } from '../src/utils/gpsLocationErrors';
-
-const base = `Best reading ±7.7 m exceeds ±${GPS_ACCEPT_MAX_ACCURACY_METERS} m. Hold still at the boundary in open sky.`;
-const accuracyError = new GpsAccuracyError(7.7, GPS_ACCEPT_MAX_ACCURACY_METERS, base);
-
-const productionMsg = locationErrorMessage(accuracyError, true, false);
-const devPreviewMsg = locationErrorMessage(accuracyError, true, true);
 
 let failed = false;
 
@@ -21,21 +13,22 @@ function assert(condition: boolean, msg: string) {
   }
 }
 
-assert(productionMsg.includes('High accuracy location'), 'fleet message must mention Android High accuracy location');
-assert(!productionMsg.includes('Expo Go'), 'fleet message must NOT mention Expo Go');
-assert(productionMsg.includes(`±${GPS_ACCEPT_MAX_ACCURACY_METERS} m`), 'fleet message must reference accept max');
-assert(devPreviewMsg.includes('Expo Go dev preview'), 'dev preview message must mention Expo Go dev preview');
-assert(devPreviewMsg.includes('fleet APK'), 'dev preview message must direct users to fleet APK');
-assert(!devPreviewMsg.includes('High accuracy location'), 'dev preview message must not use production suffix');
+const permissionError = new Error('Location permission is required to continue');
+const servicesError = new Error('Turn on device location services');
+const noFixError = new Error('Could not get a GPS fix — move to open sky and try again');
 
-// Guard against the ca12f47 inversion: fleet must never get Expo Go suffix when devPreview is false.
-assert(
-  !locationErrorMessage(accuracyError, true, false).includes('cannot guarantee'),
-  'fleet branch must not use inverted Expo Go wording',
-);
+const permissionMsg = locationErrorMessage(permissionError, true);
+const servicesMsg = locationErrorMessage(servicesError, true);
+const noFixMsg = locationErrorMessage(noFixError, true);
+
+assert(permissionMsg.includes('permission'), 'permission message must mention permission');
+assert(servicesMsg.includes('enable Location Services'), 'services message must prompt enabling location');
+assert(noFixMsg.includes('enable Location Services'), 'no-fix message must prompt enabling location');
+assert(!permissionMsg.includes('±'), 'messages must not reference accuracy thresholds');
+assert(!servicesMsg.includes('Expo Go'), 'unavailable messages must not mention Expo Go');
 
 if (failed) {
   process.exit(1);
 }
 
-console.log('[verify-gps-error-messages] OK — production vs dev-preview GPS error text is correct.');
+console.log('[verify-gps-error-messages] OK — unavailable-location GPS error text is correct.');

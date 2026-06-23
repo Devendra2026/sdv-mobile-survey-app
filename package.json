@@ -21,12 +21,15 @@
     "verify:preview-native": "node ./scripts/verify-no-dev-client.mjs preview",
     "verify:clerk-convex": "node ./scripts/verify-clerk-convex.mjs",
     "verify:gps-error-messages": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-error-messages.ts",
+    "verify:gps-validation": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-validation.ts",
+    "verify:wizard": "npx tsx --tsconfig tsconfig.json ./scripts/verify-wizard-validation.ts",
+    "verify:draft-payload": "npx tsx --tsconfig tsconfig.json ./scripts/verify-draft-payload.ts",
     "clerk:unblock-field-user": "node ./scripts/clerk-dev-field-unblock.mjs",
     "verify:eas-preview": "node ./scripts/verify-eas-preview.mjs",
-    "eas:build:android": "eas build --platform android",
-    "eas:build:android:preview": "npm run verify:eas-preview && eas build --platform android --profile preview --non-interactive",
-    "eas:build:android:dev": "eas build --platform android --profile development --non-interactive",
-    "eas:build:android:production": "npm run verify:eas-preview && eas build --platform android --profile production --non-interactive",
+    "eas:build:android": "npx eas-cli build --platform android",
+    "eas:build:android:preview": "npm run verify:eas-preview && npx eas-cli build --platform android --profile preview --non-interactive",
+    "eas:build:android:dev": "npx eas-cli build --platform android --profile development --non-interactive",
+    "eas:build:android:production": "npm run verify:eas-preview && npx eas-cli build --platform android --profile production --non-interactive",
     "eas-build-pre-install": "node ./scripts/configure-eas-autolinking.mjs",
     "android": "expo run:android",
     "ios": "expo run:ios"
@@ -68,7 +71,8 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "survey-app": "."
   },
   "optionalDependencies": {
     "utf-8-validate": "6.0.6",
@@ -82,7 +86,6 @@
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
     "eslint": "^9.39.0",
-    "eas-cli": "^18.0.0",
     "eslint-config-expo": "~10.0.0",
     "expo-dev-client": "~6.0.21",
     "expo-docs-mcp": "^1.0.0",

@@ -9,6 +9,7 @@ export {
   ReviewOwnerSection,
   ReviewPropertySection,
   ReviewServicesSection,
+  ReviewStepChecklist,
   ReviewSubmitActions,
   ReviewSurveyStartSection,
   ReviewTaxationSection,

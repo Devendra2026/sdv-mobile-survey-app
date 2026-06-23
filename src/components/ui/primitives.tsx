@@ -6,9 +6,8 @@
  * to audit. Components are pure (no hooks beyond local state) so they
  * can render anywhere in the tree.
  */
-import { GPS_ACCEPT_MAX_ACCURACY_METERS } from '@/convex/gpsAccuracy';
 import { formatSqmDisplay, parseAreaInput, sqftFromSqm, sqmFromSqft } from '@/utils/area';
-import { formatSurveyParcelLabel } from '@/utils/format';
+import { formatSurveyParcelLabel, timeAgo } from '@/utils/format';
 import { androidRipple, horizontalScrollProps } from '@/utils/scroll-props';
 import { optionLabel } from '@/utils/services';
 import { Ionicons } from '@expo/vector-icons';
@@ -759,9 +758,21 @@ interface SurveyCardProps {
   wardNo: string;
   status: StatusBadgeProps['status'];
   qcStatus?: 'pending' | 'approved' | 'rejected';
+  createdAt?: number;
   updatedAt: number;
+  completionPct?: number;
+  highlight?: 'recent' | 'none';
   onPress: () => void;
 }
+
+function draftTimestampLabel(createdAt: number | undefined, updatedAt: number): string {
+  const updated = `Updated ${timeAgo(updatedAt)}`;
+  if (createdAt != null && Math.abs(createdAt - updatedAt) > 60_000) {
+    return `Created ${timeAgo(createdAt)} · ${updated}`;
+  }
+  return updated;
+}
+
 export const SurveyCard = memo(function SurveyCard({
   parcelNo,
   unitNo,
@@ -769,28 +780,48 @@ export const SurveyCard = memo(function SurveyCard({
   wardNo,
   status,
   qcStatus,
+  createdAt,
   updatedAt,
+  completionPct,
+  highlight = 'none',
   onPress,
 }: SurveyCardProps) {
+  const isRecent = highlight === 'recent';
   return (
     <Pressable
       onPress={onPress}
-      className="p-3.5 bg-surface-light dark:bg-surface-dark rounded-xl border border-line-subtle active:opacity-90"
+      className={[
+        'p-3.5 bg-surface-light dark:bg-surface-dark rounded-xl border active:opacity-90',
+        isRecent ? 'border-brand border-l-4 shadow-md' : 'border-line-subtle shadow-sm',
+      ].join(' ')}
     >
       <View className="flex-row items-start">
-        <View className="w-10 h-10 rounded-md bg-brand-soft items-center justify-center">
+        <View className="w-10 h-10 rounded-lg bg-brand-soft items-center justify-center">
           <Ionicons name="home-outline" size={20} color="#003B8E" />
         </View>
-        <View className="flex-1 ml-3">
-          <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
-            {formatSurveyParcelLabel(parcelNo, unitNo)}
-          </Text>
+        <View className="flex-1 ml-3 min-w-0">
+          <View className="flex-row items-center gap-1.5 flex-wrap">
+            <Text className="text-[13px] font-medium text-ink-primary-light dark:text-ink-primary-dark">
+              {formatSurveyParcelLabel(parcelNo, unitNo)}
+            </Text>
+            {isRecent ? <Tag label="Most recent" tone="brand" icon="time-outline" /> : null}
+          </View>
           <Text className="text-caption text-ink-tertiary-light dark:text-ink-tertiary-dark mt-0.5" numberOfLines={1}>
             {ownerName}
           </Text>
-          <View className="flex-row gap-1.5 mt-2 items-center">
+          <Text className="text-[11px] text-ink-tertiary-light dark:text-ink-tertiary-dark mt-0.5">
+            {draftTimestampLabel(createdAt, updatedAt)}
+          </Text>
+          <View className="flex-row gap-1.5 mt-2 items-center flex-wrap">
             <Tag label={`Ward ${wardNo}`} tone="neutral" icon="map-outline" />
             <StatusBadge status={status} />
+            {status === 'draft' && completionPct != null ? (
+              <Tag
+                label={`${completionPct}%`}
+                tone={completionPct >= 100 ? 'success' : 'warning'}
+                icon="pie-chart-outline"
+              />
+            ) : null}
             {qcStatus === 'rejected' ? <Tag label="QC: rejected" tone="danger" icon="alert" /> : null}
           </View>
         </View>
@@ -809,6 +840,8 @@ export interface StepIndicatorStep {
   label: string;
   short: string; // 1–2 char label for the dot
   completed: boolean;
+  progress?: 'complete' | 'in_progress' | 'incomplete';
+  reachable?: boolean;
 }
 interface StepIndicatorProps {
   steps: StepIndicatorStep[];
@@ -819,13 +852,31 @@ export function StepIndicator({ steps, activeKey, onSelect }: StepIndicatorProps
   const renderItem = useCallback(
     ({ item: s, index: i }: { item: StepIndicatorStep; index: number }) => {
       const active = s.key === activeKey;
-      const bg = active ? 'bg-brand' : s.completed ? 'bg-success' : 'bg-line-subtle';
-      const fg = active || s.completed ? 'text-white' : 'text-ink-secondary-light';
+      const locked = s.reachable === false;
+      const inProgress = !s.completed && s.progress === 'in_progress';
+      const bg = active
+        ? 'bg-brand'
+        : s.completed
+          ? 'bg-success'
+          : inProgress
+            ? 'bg-warning'
+            : locked
+              ? 'bg-line-subtle/60 opacity-50'
+              : 'bg-line-subtle';
+      const fg = active || s.completed ? 'text-white' : inProgress ? 'text-white' : 'text-ink-secondary-light';
       return (
-        <Pressable onPress={() => onSelect?.(s.key)} disabled={!onSelect} className="flex-row items-center">
+        <Pressable
+          onPress={() => !locked && onSelect?.(s.key)}
+          disabled={!onSelect || locked}
+          className="flex-row items-center"
+        >
           <View className={`px-2.5 py-1 rounded-full flex-row items-center gap-1 ${bg}`}>
-            {s.completed && !active ? (
+            {locked ? (
+              <Ionicons name="lock-closed" size={10} color="#9AA3AF" />
+            ) : s.completed && !active ? (
               <Ionicons name="checkmark" size={11} color="#FFFFFF" />
+            ) : inProgress ? (
+              <View className="w-1.5 h-1.5 rounded-full bg-white" />
             ) : (
               <Text className={`text-[10px] font-medium ${fg}`}>{i + 1}</Text>
             )}
@@ -929,40 +980,34 @@ export function ChipSelector({ value, options, onChange, scroll = true }: ChipSe
 
 interface GPSStatusProps {
   state: 'idle' | 'locating' | 'captured' | 'error';
-  accuracy?: number;
-  /** Policy accept ceiling — fixes at or below this show success when captured. */
-  acceptMaxMeters?: number;
+  /** Whether device location permission and services are ready. */
+  locationAvailable?: boolean;
 }
-export function GPSStatus({ state, accuracy, acceptMaxMeters = GPS_ACCEPT_MAX_ACCURACY_METERS }: GPSStatusProps) {
-  const withinAccept = accuracy != null && accuracy <= acceptMaxMeters;
+export function GPSStatus({ state, locationAvailable = true }: GPSStatusProps) {
   const tone: Tone =
     state === 'captured'
-      ? withinAccept
-        ? 'success'
-        : 'warning'
-      : state === 'error'
-        ? accuracy != null
-          ? 'warning'
-          : 'danger'
+      ? 'success'
+      : state === 'error' || !locationAvailable
+        ? 'danger'
         : state === 'locating'
           ? 'brand'
-          : 'neutral';
+          : locationAvailable
+            ? 'success'
+            : 'danger';
   const label =
     state === 'locating'
-      ? accuracy != null
-        ? `Sampling… ±${Math.round(accuracy)} m`
-        : 'Sampling GPS…'
+      ? 'Capturing…'
       : state === 'captured'
-        ? `±${Math.round(accuracy ?? 0)} m accuracy`
-        : state === 'error'
-          ? accuracy != null
-            ? `±${Math.round(accuracy)} m — retry`
-            : 'GPS unavailable'
-          : 'GPS not captured';
+        ? 'Captured'
+        : state === 'error' || !locationAvailable
+          ? 'Unavailable'
+          : locationAvailable
+            ? 'Available'
+            : 'Unavailable';
   const icon: IconName =
     state === 'captured'
       ? 'checkmark-circle'
-      : state === 'error'
+      : state === 'error' || !locationAvailable
         ? 'alert-circle'
         : state === 'locating'
           ? 'compass'

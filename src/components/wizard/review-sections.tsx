@@ -1,14 +1,22 @@
-import { AppButton, AppCard, Banner, ListRow, SectionLabel, StepIndicator, Tag } from '@/components';
+import { AppButton, AppCard, Banner, ListRow, SectionLabel, StepIndicator } from '@/components';
 import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
+import { displayPropertyId } from '@/convex/propertyId';
 import type { WizardDraft, WizardOwnerRow } from '@/hooks/useWizardDraft';
-import { indicatorSteps, STEP_BEFORE_REVIEW_ROUTE, WIZARD_STEPS } from '@/hooks/wizardSteps';
+import {
+  canPickStep,
+  incompleteStepLabels,
+  indicatorSteps,
+  STEP_BEFORE_REVIEW_ROUTE,
+  WIZARD_STEPS,
+  wizardStepProgress,
+} from '@/hooks/wizardSteps';
 import { builtUpSqftFromFloors, plinthSqftFromFloors } from '@/utils/area';
-import { gpsAccuracyTagLabel, gpsAccuracyTagTone } from '@/utils/captureGps';
 import { formatArea, formatSurveyParcelLabel, humanizeRole } from '@/utils/format';
 import { formatGpsDisplay, formatGpsFull } from '@/utils/formatGps';
 import type { MastersBundle } from '@/utils/mastersBundle';
 import { optionLabel, yesNoLabel } from '@/utils/services';
 import { taxationSubcategoryFieldLabel } from '@/utils/taxation';
+import { allMissingFields, stepValidationDetails } from '@/utils/wizardValidation';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
@@ -45,6 +53,7 @@ function formatOwnerSubtitle(o: WizardOwnerRow): string {
 
 export function ReviewWizardHeader({ draft }: { draft: WizardDraft }) {
   const router = useRouter();
+  const progress = wizardStepProgress(draft, 'photos');
 
   return (
     <SafeAreaView edges={['top']} className="bg-brand">
@@ -60,27 +69,85 @@ export function ReviewWizardHeader({ draft }: { draft: WizardDraft }) {
         <View className="flex-1 ml-2">
           <Text className="text-helper text-white/70">New survey</Text>
           <Text className="text-h3 font-medium text-white">Review & submit</Text>
+          <Text className="text-caption text-white/80 mt-1">
+            Step {progress.total} of {progress.total} · Review · {progress.percent}% complete
+          </Text>
         </View>
+      </View>
+      <View className="mx-4 mb-2 h-1.5 rounded-full bg-white/20 overflow-hidden">
+        <View className="h-full rounded-full bg-white" style={{ width: `${Math.min(100, progress.percent)}%` }} />
       </View>
       <StepIndicator
         steps={indicatorSteps(draft, '')}
         activeKey=""
         onSelect={(key) => {
           const step = WIZARD_STEPS.find((s) => s.key === key);
-          if (step) router.replace({ pathname: step.route as never, params: { localId: draft.localId } });
+          if (!step || !canPickStep(draft, step.key)) return;
+          router.replace({ pathname: step.route as never, params: { localId: draft.localId } });
         }}
       />
     </SafeAreaView>
   );
 }
 
-export function ReviewCompletionBanner({ allComplete }: { allComplete: boolean }) {
+export function ReviewStepChecklist({ draft }: { draft: WizardDraft }) {
+  const router = useRouter();
+  const details = stepValidationDetails(draft);
+
+  return (
+    <>
+      <SectionLabel>Step checklist</SectionLabel>
+      <AppCard padded={false} className="mb-3">
+        {details.map((step, i) => {
+          const done = step.status === 'complete';
+          const inProgress = step.status === 'in_progress';
+          const subtitle = done
+            ? 'Complete'
+            : step.missingFields.length > 0
+              ? `Missing: ${step.missingFields.slice(0, 3).join(', ')}${step.missingFields.length > 3 ? '…' : ''}`
+              : inProgress
+                ? 'In progress — tap to continue'
+                : 'Incomplete — tap to fix';
+          const route = WIZARD_STEPS.find((s) => s.key === step.key)?.route;
+          return (
+            <View key={step.key}>
+              {i > 0 ? <ReviewDivider /> : null}
+              <ListRow
+                icon={done ? 'checkmark-circle' : inProgress ? 'ellipse' : 'ellipse-outline'}
+                iconTone={done ? 'success' : inProgress ? 'warning' : 'neutral'}
+                title={step.label}
+                subtitle={subtitle}
+                showChevron={!done}
+                onPress={
+                  !done && route && canPickStep(draft, step.key)
+                    ? () => router.replace({ pathname: route as never, params: { localId: draft.localId } })
+                    : undefined
+                }
+              />
+            </View>
+          );
+        })}
+      </AppCard>
+    </>
+  );
+}
+
+export function ReviewCompletionBanner({ allComplete, draft }: { allComplete: boolean; draft?: WizardDraft }) {
   if (!allComplete) {
+    const missingFields = draft ? allMissingFields(draft) : [];
+    const missingSteps = draft ? incompleteStepLabels(draft) : [];
+    const fieldPreview = missingFields.slice(0, 5).join(', ');
     return (
       <Banner
         tone="warning"
         title="Some steps incomplete"
-        message="Tap the indicator above to jump to a step and finish it."
+        message={
+          missingFields.length > 0
+            ? `Missing: ${fieldPreview}${missingFields.length > 5 ? ` (+${missingFields.length - 5} more)` : ''}. Steps: ${missingSteps.join(', ')}.`
+            : missingSteps.length > 0
+              ? `Complete: ${missingSteps.join(', ')}. Tap the checklist to jump to a step.`
+              : 'Tap the checklist to jump to a step and finish it.'
+        }
         icon="warning-outline"
         className="mb-3"
       />
@@ -135,7 +202,18 @@ export function ReviewSurveyStartSection({
   );
 }
 
-export function ReviewPropertySection({ draft }: { draft: WizardDraft }) {
+export function ReviewPropertySection({ draft, ulbCode }: { draft: WizardDraft; ulbCode: string }) {
+  const propertyId = displayPropertyId(
+    {
+      propertyId: draft.propertyId,
+      wardNo: draft.wardNo,
+      parcelNo: draft.parcelNo,
+      unitNo: draft.unitNo,
+      propertyUse: draft.propertyUse,
+    },
+    ulbCode,
+  );
+
   return (
     <>
       <SectionLabel>Property</SectionLabel>
@@ -180,18 +258,14 @@ export function ReviewPropertySection({ draft }: { draft: WizardDraft }) {
             />
           </>
         ) : null}
-        {draft.propertyId ? (
-          <>
-            <ReviewDivider />
-            <ListRow
-              icon="finger-print-outline"
-              iconTone="neutral"
-              title="Property ID"
-              subtitle={draft.propertyId}
-              showChevron={false}
-            />
-          </>
-        ) : null}
+        <ReviewDivider />
+        <ListRow
+          icon="finger-print-outline"
+          iconTone="neutral"
+          title="Property ID"
+          subtitle={propertyId ?? '—'}
+          showChevron={false}
+        />
         {draft.constructedYear != null ? (
           <>
             <ReviewDivider />
@@ -433,13 +507,6 @@ export function ReviewGpsSection({ draft }: { draft: WizardDraft }) {
               {formatGpsFull(draft.gps)}
             </Text>
             <Text className="text-caption text-ink-tertiary-light mt-1">{formatGpsDisplay(draft.gps)}</Text>
-            <View className="flex-row gap-1.5 mt-2">
-              <Tag
-                label={gpsAccuracyTagLabel(draft.gps.accuracyMeters)}
-                tone={gpsAccuracyTagTone(draft.gps.accuracyMeters)}
-                icon="locate-outline"
-              />
-            </View>
             <GpsDebugPanel gps={draft.gps} />
           </>
         ) : (

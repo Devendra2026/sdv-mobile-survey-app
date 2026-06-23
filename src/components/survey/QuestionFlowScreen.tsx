@@ -1,6 +1,8 @@
 import { AppButton, AppInput, Banner } from '@/components';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { allStepsComplete, incompleteStepLabels } from '@/hooks/wizardSteps';
 import {
   isQuestionComplete,
   questionFieldError,
@@ -9,9 +11,10 @@ import {
   type SurveyQuestion,
   writeQuestionValue,
 } from '@/survey/questionCatalog';
+import { toUserMessage } from '@/utils/errors';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 interface QuestionFlowScreenProps {
@@ -27,9 +30,25 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
   const q = questions[questionIndex];
   const progress = questionProgress(questionIndex);
   const [error, setError] = useState<string | null>(null);
-  const { lastSyncedAt, syncing, isOnline } = useDebouncedCloudSave(draft);
+  const [flowToast, setFlowToast] = useState<string | null>(null);
+
+  const onSynced = useCallback(
+    async (result: { surveyId: Id<'surveys'> | null }) => {
+      if (result.surveyId && draft.serverSurveyId !== result.surveyId) {
+        await update({ serverSurveyId: result.surveyId });
+      }
+    },
+    [draft.serverSurveyId, update],
+  );
+
+  const { lastSyncedAt, syncing, isOnline } = useDebouncedCloudSave(draft, {
+    onSynced,
+    onError: (e) => setFlowToast(toUserMessage(e)),
+  });
 
   const value = useMemo(() => (q ? readQuestionValue(draft, q.field) : ''), [draft, q]);
+
+  const incomplete = incompleteStepLabels(draft);
 
   if (!q) {
     return (
@@ -38,6 +57,7 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
         <AppButton
           label="Review"
           className="mt-4"
+          disabled={!allStepsComplete(draft)}
           onPress={() => router.replace({ pathname: '/(app)/wizard/review', params: { localId } })}
         />
       </View>
@@ -54,6 +74,10 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
 
   const goNext = async () => {
     if (q.kind === 'redirect' && q.redirectRoute) {
+      if (!allStepsComplete(draft)) {
+        setError(`Complete these steps first: ${incomplete.join(', ')}`);
+        return;
+      }
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       router.replace({ pathname: q.redirectRoute as never, params: { localId } });
       return;
@@ -66,6 +90,10 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const next = questionIndex + 1;
     if (next >= questions.length) {
+      if (!allStepsComplete(draft)) {
+        setError(`Complete these steps first: ${incomplete.join(', ')}`);
+        return;
+      }
       router.replace({ pathname: '/(app)/wizard/review', params: { localId } });
       return;
     }
@@ -90,6 +118,10 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
         <View className="h-full bg-brand rounded-full" style={{ width: `${progress.pct}%` }} />
       </View>
       <Text className="text-caption text-ink-tertiary-light mt-2">{syncLabel}</Text>
+      {flowToast ? <Text className="text-caption text-danger mt-1">{flowToast}</Text> : null}
+      {!allStepsComplete(draft) && q.kind === 'redirect' ? (
+        <Banner tone="warning" title="Steps incomplete" message={`Finish: ${incomplete.join(', ')}`} className="mt-4" />
+      ) : null}
 
       <Text className="text-display font-medium text-ink-primary-light dark:text-ink-primary-dark mt-8">{q.label}</Text>
       {q.helper ? <Text className="text-body text-ink-secondary-light mt-2">{q.helper}</Text> : null}
