@@ -63,15 +63,10 @@ export function canNavigateToStep(draft: WizardDraft, targetKey: StepConfig['key
 
 /**
  * True when the user may open a step from the header chips.
- * Completed and previously visited sections stay editable; only unvisited
- * future steps stay locked until earlier steps are complete.
+ * All wizard steps are freely navigable; completion is shown via checkmarks only.
  */
-export function canPickStep(draft: WizardDraft, targetKey: StepConfig['key']): boolean {
-  const targetIndex = stepIndex(targetKey);
-  if (targetIndex < 0) return false;
-  if (stepCompletion(draft)[targetKey]) return true;
-  if (targetIndex <= resolvedFurthestStepIndex(draft)) return true;
-  return canNavigateToStep(draft, targetKey);
+export function canPickStep(_draft: WizardDraft, targetKey: StepConfig['key']): boolean {
+  return stepIndex(targetKey) >= 0;
 }
 
 export function wizardStepProgress(draft: WizardDraft, activeKey: string) {
@@ -135,7 +130,7 @@ export function indicatorSteps(draft: WizardDraft, activeKey: string) {
     short: s.short,
     completed: c[s.key],
     progress: (c[s.key] ? 'complete' : stepHasProgress(draft, s.key) ? 'in_progress' : 'incomplete') as StepStatus,
-    reachable: canPickStep(draft, s.key),
+    reachable: true,
   }));
 }
 

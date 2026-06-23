@@ -31,13 +31,12 @@ function WizardStepChip({
   active: boolean;
   onSelectStep?: (key: string) => void;
 }) {
-  const locked = step.reachable === false;
   const inProgress = !step.completed && step.progress === 'in_progress';
-  const canPress = onSelectStep && !locked;
+  const canPress = Boolean(onSelectStep);
 
   return (
     <Pressable
-      onPress={() => canPress && onSelectStep(step.key)}
+      onPress={() => canPress && onSelectStep!(step.key)}
       disabled={!canPress}
       className={[
         'min-w-[44px] items-center rounded-full px-2.5 py-2',
@@ -47,14 +46,10 @@ function WizardStepChip({
             ? 'bg-white/25'
             : inProgress
               ? 'bg-warning/30'
-              : locked
-                ? 'bg-white/5 opacity-50'
-                : 'bg-white/10',
+              : 'bg-white/10',
       ].join(' ')}
     >
-      {locked ? (
-        <Ionicons name="lock-closed" size={12} color="#FFFFFF99" />
-      ) : step.completed && !active ? (
+      {step.completed && !active ? (
         <Ionicons name="checkmark" size={14} color="#FFFFFF" />
       ) : inProgress ? (
         <View className="w-2 h-2 rounded-full bg-warning" />

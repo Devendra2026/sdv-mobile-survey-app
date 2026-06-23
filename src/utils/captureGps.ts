@@ -1,5 +1,6 @@
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
+import { locationErrorMessage } from '@/utils/gpsLocationErrors';
 import { getGpsProviderTag } from '@/utils/gpsPolicy';
 import * as Location from 'expo-location';
 
@@ -33,11 +34,11 @@ function toCapture(loc: Location.LocationObject): GpsCapture {
 }
 
 async function ensureLocationReady(): Promise<void> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') {
-    throw new Error('Location permission is required to continue');
-  }
-  if (!(await Location.hasServicesEnabledAsync())) {
+  if (!(await prepareLocationAccess())) {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('Location permission is required to continue');
+    }
     throw new Error('Turn on device location services');
   }
 
@@ -91,7 +92,26 @@ export async function captureGps(): Promise<GpsCapture> {
   }
 }
 
-/** Check whether live location permission and services are available (no capture). */
+/** Prompt for foreground location permission and verify device location services are on. */
+export async function prepareLocationAccess(): Promise<boolean> {
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') return false;
+  return Location.hasServicesEnabledAsync();
+}
+
+/** User-facing reason when prepareLocationAccess() returns false (permission already requested). */
+export async function getLocationUnavailableMessage(isOnline = true): Promise<string> {
+  const { status } = await Location.getForegroundPermissionsAsync();
+  if (status !== 'granted') {
+    return locationErrorMessage(new Error('Location permission is required to continue'), isOnline);
+  }
+  if (!(await Location.hasServicesEnabledAsync())) {
+    return locationErrorMessage(new Error('Turn on device location services'), isOnline);
+  }
+  return locationErrorMessage(new Error('Turn on device location services'), isOnline);
+}
+
+/** Read-only check — does not show the system permission dialog. */
 export async function checkLocationAvailability(): Promise<boolean> {
   const { status } = await Location.getForegroundPermissionsAsync();
   if (status !== 'granted') return false;
@@ -103,7 +123,7 @@ let liveLocationSubscription: Location.LocationSubscription | null = null;
 /** Subscribe to live coordinates for display before capture. */
 export async function startLiveLocationWatch(onUpdate: (latitude: number, longitude: number) => void): Promise<void> {
   stopLiveLocationWatch();
-  const available = await checkLocationAvailability();
+  const available = await prepareLocationAccess();
   if (!available) return;
 
   liveLocationSubscription = await Location.watchPositionAsync(

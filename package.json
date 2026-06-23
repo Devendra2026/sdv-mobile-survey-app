@@ -24,6 +24,7 @@
     "verify:gps-validation": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-validation.ts",
     "verify:wizard": "npx tsx --tsconfig tsconfig.json ./scripts/verify-wizard-validation.ts",
     "verify:draft-payload": "npx tsx --tsconfig tsconfig.json ./scripts/verify-draft-payload.ts",
+    "verify:pre-apk": "npm run verify:env-prod && npm run verify:wizard && npm run verify:gps-validation && npm run verify:gps-error-messages && npm run verify:draft-payload && npm run typecheck",
     "clerk:unblock-field-user": "node ./scripts/clerk-dev-field-unblock.mjs",
     "verify:env-prod": "node ./scripts/verify-env-prod.mjs",
     "env:sync:preview": "node ./scripts/verify-env-prod.mjs && node ./scripts/sync-eas-env.mjs preview",

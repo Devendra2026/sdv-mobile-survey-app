@@ -1,10 +1,10 @@
 /**
  * Shared tenant-scope resolution for queries and mutations.
  */
-import { ConvexError } from 'convex/values';
-import type { Doc, Id } from './_generated/dataModel';
-import type { MutationCtx, QueryCtx } from './_generated/server';
-import { roleRequiresTenancy } from './capabilities';
+import { ConvexError } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { roleRequiresTenancy } from "./capabilities";
 
 function isActive<T extends { isActive?: boolean }>(row: T): boolean {
   return row.isActive !== false;
@@ -13,19 +13,19 @@ function isActive<T extends { isActive?: boolean }>(row: T): boolean {
 /** Resolve ULBs/districts from ward numbers when profile tenant ids are missing. */
 async function scopeFromWardAssignments(
   ctx: QueryCtx,
-  me: Doc<'users'>,
-  districtsAll: Doc<'districts'>[],
-  municipalitiesAll: Doc<'municipalities'>[],
-): Promise<{ districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] } | null> {
+  me: Doc<"users">,
+  districtsAll: Doc<"districts">[],
+  municipalitiesAll: Doc<"municipalities">[],
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] } | null> {
   if (me.wardAssignments.length === 0) return null;
 
   const wardSet = new Set(me.wardAssignments);
-  const candidateMuniIds = new Set<Id<'municipalities'>>();
+  const candidateMuniIds = new Set<Id<"municipalities">>();
   if (me.municipalityId) candidateMuniIds.add(me.municipalityId);
 
   const allotmentRows = await ctx.db
-    .query('userAllotments')
-    .withIndex('by_user_active', (q) => q.eq('userId', me._id).eq('isActive', true))
+    .query("userAllotments")
+    .withIndex("by_user_active", (q) => q.eq("userId", me._id).eq("isActive", true))
     .collect();
   for (const row of allotmentRows) {
     if (row.municipalityId) {
@@ -48,12 +48,12 @@ async function scopeFromWardAssignments(
   const wardBatches = await Promise.all(
     candidateMunis.map((muni) =>
       ctx.db
-        .query('wards')
-        .withIndex('by_municipality_ward', (q) => q.eq('municipalityId', muni._id))
+        .query("wards")
+        .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", muni._id))
         .collect(),
     ),
   );
-  const matched: Doc<'wards'>[] = [];
+  const matched: Doc<"wards">[] = [];
   for (const rows of wardBatches) {
     for (const w of rows) {
       if (wardSet.has(w.wardNo)) matched.push(w);
@@ -73,8 +73,8 @@ async function scopeFromWardAssignments(
 /** District id from user row or their assigned ULB. */
 export async function effectiveDistrictId(
   ctx: QueryCtx | MutationCtx,
-  user: Doc<'users'>,
-): Promise<Id<'districts'> | undefined> {
+  user: Doc<"users">,
+): Promise<Id<"districts"> | undefined> {
   if (user.districtId) {
     const dist = await ctx.db.get(user.districtId);
     if (dist && isActive(dist)) return user.districtId;
@@ -87,10 +87,10 @@ export async function effectiveDistrictId(
 }
 
 function scopeForDistrict(
-  districtId: Id<'districts'>,
-  districtsAll: Doc<'districts'>[],
-  municipalitiesAll: Doc<'municipalities'>[],
-): { districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] } {
+  districtId: Id<"districts">,
+  districtsAll: Doc<"districts">[],
+  municipalitiesAll: Doc<"municipalities">[],
+): { districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] } {
   return {
     districts: districtsAll.filter((d) => d._id === districtId),
     municipalities: municipalitiesAll.filter((m) => m.districtId === districtId),
@@ -100,19 +100,19 @@ function scopeForDistrict(
 /** Multi-district / multi-ULB scope from userAllotments (Agra + Mathura + Hathras, etc.). */
 async function resolveScopeFromAllotments(
   ctx: QueryCtx,
-  me: Doc<'users'>,
-  districtsAll: Doc<'districts'>[],
-  municipalitiesAll: Doc<'municipalities'>[],
-): Promise<{ districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] } | null> {
+  me: Doc<"users">,
+  districtsAll: Doc<"districts">[],
+  municipalitiesAll: Doc<"municipalities">[],
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] } | null> {
   const rows = await ctx.db
-    .query('userAllotments')
-    .withIndex('by_user_active', (q) => q.eq('userId', me._id).eq('isActive', true))
+    .query("userAllotments")
+    .withIndex("by_user_active", (q) => q.eq("userId", me._id).eq("isActive", true))
     .collect();
 
   if (rows.length === 0) return null;
 
-  const districtIds = new Set<Id<'districts'>>();
-  const municipalityIds = new Set<Id<'municipalities'>>();
+  const districtIds = new Set<Id<"districts">>();
+  const municipalityIds = new Set<Id<"municipalities">>();
   const muniById = new Map(municipalitiesAll.map((m) => [m._id, m]));
 
   for (const row of rows) {
@@ -138,11 +138,11 @@ async function resolveScopeFromAllotments(
 
 /** Union profile tenant ids with an allotment-derived scope (primary ULB + multi-city rows). */
 function mergeScopeWithProfile(
-  scope: { districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] },
-  me: Doc<'users'>,
-  districtsAll: Doc<'districts'>[],
-  municipalitiesAll: Doc<'municipalities'>[],
-): { districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] } {
+  scope: { districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] },
+  me: Doc<"users">,
+  districtsAll: Doc<"districts">[],
+  municipalitiesAll: Doc<"municipalities">[],
+): { districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] } {
   const districtIds = new Set(scope.districts.map((d) => d._id));
   const municipalityIds = new Set(scope.municipalities.map((m) => m._id));
 
@@ -169,12 +169,12 @@ function mergeScopeWithProfile(
 /** Districts and ULBs visible to the signed-in user (multitenant isolation). */
 export async function resolveTenantScope(
   ctx: QueryCtx,
-  me: Doc<'users'>,
-): Promise<{ districts: Doc<'districts'>[]; municipalities: Doc<'municipalities'>[] }> {
-  const districtsAll = (await ctx.db.query('districts').collect()).filter(isActive);
-  const municipalitiesAll = (await ctx.db.query('municipalities').collect()).filter(isActive);
+  me: Doc<"users">,
+): Promise<{ districts: Doc<"districts">[]; municipalities: Doc<"municipalities">[] }> {
+  const districtsAll = (await ctx.db.query("districts").collect()).filter(isActive);
+  const municipalitiesAll = (await ctx.db.query("municipalities").collect()).filter(isActive);
 
-  if (me.role === 'admin') {
+  if (me.role === "admin") {
     return { districts: districtsAll, municipalities: municipalitiesAll };
   }
 
@@ -207,16 +207,22 @@ export async function resolveTenantScope(
   const fromWards = await scopeFromWardAssignments(ctx, me, districtsAll, municipalitiesAll);
   if (fromWards) return fromWards;
 
+  // Active field users without a profile assignment can use the seeded catalog
+  // (common when approved before tenant ids were persisted).
+  if (needsTenancy && me.status === "active" && districtsAll.length > 0) {
+    return { districts: districtsAll, municipalities: municipalitiesAll };
+  }
+
   return { districts: [], municipalities: [] };
 }
 
 /** District ids the caller may access (Agra, Kasganj, …). */
-export function tenantDistrictIds(scope: { districts: Doc<'districts'>[] }): Set<Id<'districts'>> {
+export function tenantDistrictIds(scope: { districts: Doc<"districts">[] }): Set<Id<"districts">> {
   return new Set(scope.districts.map((d) => d._id));
 }
 
 /** ULB ids the caller may access within their tenant scope. */
-export function tenantMunicipalityIds(scope: { municipalities: Doc<'municipalities'>[] }): Set<Id<'municipalities'>> {
+export function tenantMunicipalityIds(scope: { municipalities: Doc<"municipalities">[] }): Set<Id<"municipalities">> {
   return new Set(scope.municipalities.map((m) => m._id));
 }
 
@@ -226,21 +232,21 @@ export function tenantMunicipalityIds(scope: { municipalities: Doc<'municipaliti
  */
 export async function assertMunicipalityInScope(
   ctx: QueryCtx | MutationCtx,
-  user: Doc<'users'>,
-  municipalityId: Id<'municipalities'>,
-): Promise<Doc<'municipalities'>> {
+  user: Doc<"users">,
+  municipalityId: Id<"municipalities">,
+): Promise<Doc<"municipalities">> {
   const muni = await ctx.db.get(municipalityId);
   if (!muni || muni.isActive === false) {
-    throw new ConvexError({ code: 'BAD_REQUEST', message: 'Unknown municipality' });
+    throw new ConvexError({ code: "BAD_REQUEST", message: "Unknown municipality" });
   }
 
-  if (user.role === 'admin') return muni;
+  if (user.role === "admin") return muni;
 
   const scope = await resolveTenantScope(ctx, user);
   if (!tenantMunicipalityIds(scope).has(municipalityId)) {
     throw new ConvexError({
-      code: 'FORBIDDEN',
-      message: 'This ULB is outside your allotted municipalities.',
+      code: "FORBIDDEN",
+      message: "This ULB is outside your allotted municipalities.",
     });
   }
 

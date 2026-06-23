@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared survey field validation — importable from Convex backend and Expo client.
  * Parcel/unit values are validated and stored as strings to preserve leading zeros.
  */
@@ -20,37 +20,37 @@ export function isValidTenDigitMobile(value: string): boolean {
 }
 
 export function sanitizeFixedDigits(raw: string, maxLen: number): string {
-  return raw.replace(/\D/g, '').slice(0, maxLen);
+  return raw.replace(/\D/g, "").slice(0, maxLen);
 }
 
 export function parcelNoError(value: string | undefined): string | undefined {
-  const trimmed = value?.trim() ?? '';
-  if (!trimmed) return 'Parcel number is required';
-  if (!isValidParcelNo(trimmed)) return 'Enter exactly 5 digits (e.g. 00001)';
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "Parcel number is required";
+  if (!isValidParcelNo(trimmed)) return "Enter exactly 5 digits (e.g. 00001)";
   return undefined;
 }
 
 export function unitNoError(value: string | undefined): string | undefined {
-  const trimmed = value?.trim() ?? '';
-  if (!trimmed) return 'Unit number is required';
-  if (!isValidUnitNo(trimmed)) return 'Enter exactly 3 digits (e.g. 001)';
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "Unit number is required";
+  if (!isValidUnitNo(trimmed)) return "Enter exactly 3 digits (e.g. 001)";
   return undefined;
 }
 
 export function primaryMobileError(value: string | undefined): string | undefined {
-  const trimmed = value?.trim() ?? '';
-  if (!trimmed) return 'Mobile number is required';
-  if (!isValidTenDigitMobile(trimmed)) return 'Enter a valid 10-digit mobile number';
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "Mobile number is required";
+  if (!isValidTenDigitMobile(trimmed)) return "Enter a valid 10-digit mobile number";
   return undefined;
 }
 
 export function altMobileError(value: string | undefined, primaryMobile?: string): string | undefined {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = value?.trim() ?? "";
   if (!trimmed) return undefined;
-  if (!isValidTenDigitMobile(trimmed)) return 'Enter a valid 10-digit mobile number';
+  if (!isValidTenDigitMobile(trimmed)) return "Enter a valid 10-digit mobile number";
   const primary = primaryMobile?.trim();
   if (primary && isValidTenDigitMobile(primary) && trimmed === primary) {
-    return 'Must differ from primary mobile';
+    return "Must differ from primary mobile";
   }
   return undefined;
 }

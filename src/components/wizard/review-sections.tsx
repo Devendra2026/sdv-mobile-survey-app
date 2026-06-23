@@ -3,7 +3,6 @@ import { GpsDebugPanel, GpsMapPreview } from '@/components/gis';
 import { displayPropertyId } from '@/convex/propertyId';
 import type { WizardDraft, WizardOwnerRow } from '@/hooks/useWizardDraft';
 import {
-  canPickStep,
   incompleteStepLabels,
   indicatorSteps,
   STEP_BEFORE_REVIEW_ROUTE,
@@ -82,7 +81,7 @@ export function ReviewWizardHeader({ draft }: { draft: WizardDraft }) {
         activeKey=""
         onSelect={(key) => {
           const step = WIZARD_STEPS.find((s) => s.key === key);
-          if (!step || !canPickStep(draft, step.key)) return;
+          if (!step) return;
           router.replace({ pathname: step.route as never, params: { localId: draft.localId } });
         }}
       />
@@ -102,7 +101,7 @@ export function ReviewStepChecklist({ draft }: { draft: WizardDraft }) {
           const done = step.status === 'complete';
           const inProgress = step.status === 'in_progress';
           const subtitle = done
-            ? 'Complete'
+            ? 'Complete — tap to review'
             : step.missingFields.length > 0
               ? `Missing: ${step.missingFields.slice(0, 3).join(', ')}${step.missingFields.length > 3 ? '…' : ''}`
               : inProgress
@@ -117,9 +116,9 @@ export function ReviewStepChecklist({ draft }: { draft: WizardDraft }) {
                 iconTone={done ? 'success' : inProgress ? 'warning' : 'neutral'}
                 title={step.label}
                 subtitle={subtitle}
-                showChevron={!done}
+                showChevron
                 onPress={
-                  !done && route && canPickStep(draft, step.key)
+                  route
                     ? () => router.replace({ pathname: route as never, params: { localId: draft.localId } })
                     : undefined
                 }

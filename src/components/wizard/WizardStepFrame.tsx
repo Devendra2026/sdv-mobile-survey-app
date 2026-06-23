@@ -8,9 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
 import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import { createNewDraft, draftToSaveDraftPayload, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
-import { useWizardStepGuard } from '@/hooks/useWizardStepGuard';
 import {
-  canPickStep,
   FIRST_WIZARD_ROUTE,
   indicatorSteps,
   nextStep,
@@ -57,8 +55,6 @@ export function WizardStepFrame({
   const { save: saveToServer, saving: savingDraft } = useSaveSurveyDraft();
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
-  const { checking: guardChecking } = useWizardStepGuard(localId, activeKey);
-
   const onSynced = useCallback(
     async (result: { surveyId: Id<'surveys'> | null }) => {
       if (draft && result.surveyId && draft.serverSurveyId !== result.surveyId) {
@@ -89,7 +85,7 @@ export function WizardStepFrame({
     onSyncState,
   });
 
-  if (loadingDraft || !draft || guardChecking) {
+  if (loadingDraft || !draft || loading) {
     return (
       <View className="flex-1 bg-page-light dark:bg-page-dark">
         <Spinner label="Loading draft…" />
@@ -192,10 +188,6 @@ export function WizardStepFrame({
   const onPickStep = async (key: string) => {
     const step = WIZARD_STEPS.find((s) => s.key === key);
     if (!step) return;
-    if (!canPickStep(draft, step.key)) {
-      setToast({ title: 'Complete earlier steps to open this section', tone: 'danger' });
-      return;
-    }
     await update(visitedStepPatch(draft, step.key));
     await persistAndSync();
     router.replace({ pathname: step.route as never, params: { localId } });

@@ -11,7 +11,9 @@ import type { WizardDraft } from '@/hooks/useWizardDraft';
 import {
   captureGps,
   checkLocationAvailability,
+  getLocationUnavailableMessage,
   isGpsStepComplete,
+  prepareLocationAccess,
   startLiveLocationWatch,
   stopLiveLocationWatch,
 } from '@/utils/captureGps';
@@ -73,11 +75,16 @@ function GpsStepContent({
   }, [displayLatitude, displayLongitude, gps?.accuracyMeters, gps?.capturedAt]);
 
   const refreshAvailability = useCallback(async () => {
-    dispatch({ type: 'patch', patch: { locationState: 'checking' } });
-    const available = await checkLocationAvailability();
-    dispatch({ type: 'patch', patch: { locationState: available ? 'available' : 'unavailable' } });
-    return available;
-  }, []);
+    dispatch({ type: 'patch', patch: { locationState: 'checking', captureError: null } });
+    const available = await prepareLocationAccess();
+    if (!available) {
+      const message = await getLocationUnavailableMessage(isOnline);
+      dispatch({ type: 'patch', patch: { locationState: 'unavailable', captureError: message } });
+      return false;
+    }
+    dispatch({ type: 'patch', patch: { locationState: 'available', captureError: null } });
+    return true;
+  }, [isOnline]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,15 +111,6 @@ function GpsStepContent({
     dispatch({ type: 'patch', patch: { capturing: true, captureError: null } });
 
     try {
-      const available = await refreshAvailability();
-      if (!available) {
-        dispatch({
-          type: 'patch',
-          patch: { captureError: 'Unable to get location. Please enable Location Services.' },
-        });
-        return;
-      }
-
       const captured = await captureGps();
       await update({ gps: captured });
       dispatch({
@@ -143,6 +141,16 @@ function GpsStepContent({
 
   return (
     <>
+      {locationState === 'checking' ? (
+        <Banner
+          tone="info"
+          title="Requesting location access"
+          message="Allow location when prompted to show the map and capture coordinates."
+          icon="location-outline"
+          className="mb-3"
+        />
+      ) : null}
+
       {locationState === 'unavailable' || captureError ? (
         <Banner
           tone="warning"
@@ -194,7 +202,9 @@ function GpsStepContent({
       ) : (
         <AppCard padded className="mb-3">
           <Text className="text-helper text-ink-tertiary-light text-center py-6">
-            Allow location access to show the map, then capture coordinates at the property.
+            {locationState === 'checking'
+              ? 'Waiting for location…'
+              : 'Move to the property to preview coordinates on the map.'}
           </Text>
         </AppCard>
       )}

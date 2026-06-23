@@ -2,17 +2,16 @@
  * Owner-step business rules — respondent relationships and owner list limits.
  * Canonical dropdown values live here (not admin-editable masters).
  */
-import { query } from './_generated/server';
-import { MAX_SURVEY_OWNERS, RESPONDENT_RELATIONSHIPS, RESPONDENT_RELATIONSHIP_VALUES } from './ownerConstants';
-import { primaryOwnerMobileFromOwners } from './ownerMobile';
-import { altMobileError, isValidTenDigitMobile, primaryMobileError } from './surveyFieldValidation';
+import { query } from "./_generated/server";
+import { MAX_SURVEY_OWNERS, RESPONDENT_RELATIONSHIPS, RESPONDENT_RELATIONSHIP_VALUES } from "./ownerConstants";
+import { isRespondentOwner, isValidIndianOwnerMobile, primaryOwnerMobileFromOwners } from "./ownerMobile";
 
 export {
   MAX_SURVEY_OWNERS,
   RESPONDENT_RELATIONSHIPS,
   RESPONDENT_RELATIONSHIP_VALUES,
   type RespondentRelationshipValue,
-} from './ownerConstants';
+} from "./ownerConstants";
 
 export {
   OWNER_MOBILE_UNKNOWN,
@@ -20,7 +19,7 @@ export {
   isRespondentOwner,
   isValidIndianOwnerMobile,
   primaryOwnerMobileFromOwners,
-} from './ownerMobile';
+} from "./ownerMobile";
 
 const RELATIONSHIP_SET = new Set<string>(RESPONDENT_RELATIONSHIP_VALUES);
 
@@ -35,9 +34,9 @@ export function isValidRespondentRelationship(value: string): boolean {
   return RELATIONSHIP_SET.has(value);
 }
 
-/** @deprecated Use `isValidTenDigitMobile` from `./surveyFieldValidation`. */
+/** @deprecated Use `isValidIndianOwnerMobile` from `./ownerMobile`. */
 export function isValidOwnerMobile(value: string): boolean {
-  return isValidTenDigitMobile(value);
+  return isValidIndianOwnerMobile(value);
 }
 
 /** First owner row with an accepted mobile (primary contact for the survey). */
@@ -78,27 +77,31 @@ export function validateOwnerSection(
   const details: Record<string, string[]> = {};
   const requirePrimary = options?.requirePrimaryMobile ?? true;
   if (input.relationship && !isValidRespondentRelationship(input.relationship)) {
-    details.relationship = ['Select a valid relationship to owner'];
+    details.relationship = ["Select a valid relationship to owner"];
   }
   const owners = input.owners ?? [];
   if (owners.length > MAX_SURVEY_OWNERS) {
     details.owners = [`At most ${MAX_SURVEY_OWNERS} owners allowed`];
   }
-  const firstMobile = owners[0]?.mobileNo;
-  if (requirePrimary) {
-    const err = primaryMobileError(firstMobile);
-    if (err) details.mobileNo = [err];
-  } else if (firstMobile?.trim() && !isValidTenDigitMobile(firstMobile)) {
-    details.mobileNo = ['Enter a valid 10-digit mobile number'];
+  const relationship = input.relationship?.trim();
+  const firstMobile = owners[0]?.mobileNo?.trim() ?? "";
+  if (requirePrimary && isRespondentOwner(relationship) && !isValidIndianOwnerMobile(firstMobile)) {
+    details.mobileNo = ["Enter a valid 10-digit mobile for the owner (starts 6-9)"];
+  } else if (firstMobile && !isValidIndianOwnerMobile(firstMobile)) {
+    details.mobileNo = ["Enter a valid 10-digit mobile (starts 6-9)"];
   }
   owners.forEach((o, i) => {
     const mobile = o.mobileNo?.trim();
-    if (mobile && !isValidTenDigitMobile(mobile)) {
-      details[`owners.${i}.mobileNo`] = ['Enter a valid 10-digit mobile number'];
+    if (mobile && !isValidIndianOwnerMobile(mobile)) {
+      details[`owners.${i}.mobileNo`] = ["Enter a valid 10-digit mobile (starts 6-9)"];
     }
-    const altErr = altMobileError(o.altMobileNo, o.mobileNo);
-    if (altErr) {
-      details[`owners.${i}.altMobileNo`] = [altErr];
+    const alt = o.altMobileNo?.trim();
+    if (alt) {
+      if (!isValidIndianOwnerMobile(alt)) {
+        details[`owners.${i}.altMobileNo`] = ["Enter a valid 10-digit alternate mobile (starts 6-9)"];
+      } else if (alt === mobile) {
+        details[`owners.${i}.altMobileNo`] = ["Alternate mobile must differ from primary mobile"];
+      }
     }
   });
   return details;

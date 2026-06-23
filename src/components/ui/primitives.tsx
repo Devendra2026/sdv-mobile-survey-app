@@ -852,7 +852,6 @@ export function StepIndicator({ steps, activeKey, onSelect }: StepIndicatorProps
   const renderItem = useCallback(
     ({ item: s, index: i }: { item: StepIndicatorStep; index: number }) => {
       const active = s.key === activeKey;
-      const locked = s.reachable === false;
       const inProgress = !s.completed && s.progress === 'in_progress';
       const bg = active
         ? 'bg-brand'
@@ -860,20 +859,16 @@ export function StepIndicator({ steps, activeKey, onSelect }: StepIndicatorProps
           ? 'bg-success'
           : inProgress
             ? 'bg-warning'
-            : locked
-              ? 'bg-line-subtle/60 opacity-50'
-              : 'bg-line-subtle';
+            : 'bg-line-subtle';
       const fg = active || s.completed ? 'text-white' : inProgress ? 'text-white' : 'text-ink-secondary-light';
       return (
         <Pressable
-          onPress={() => !locked && onSelect?.(s.key)}
-          disabled={!onSelect || locked}
+          onPress={() => onSelect?.(s.key)}
+          disabled={!onSelect}
           className="flex-row items-center"
         >
           <View className={`px-2.5 py-1 rounded-full flex-row items-center gap-1 ${bg}`}>
-            {locked ? (
-              <Ionicons name="lock-closed" size={10} color="#9AA3AF" />
-            ) : s.completed && !active ? (
+            {s.completed && !active ? (
               <Ionicons name="checkmark" size={11} color="#FFFFFF" />
             ) : inProgress ? (
               <View className="w-1.5 h-1.5 rounded-full bg-white" />

@@ -10,48 +10,48 @@ export const LEGACY_PROPERTY_ID_PATTERN = /^\d{6}-\d{3}-\d{5}-[A-Z]$/;
 
 /** Single-letter codes for property-use master values. */
 export const PROPERTY_USE_CODES: Record<string, string> = {
-  residential: 'R',
-  commercial: 'C',
-  open_land: 'P',
-  religious_property: 'H',
-  mix_property: 'M',
-  agricultural_land: 'A',
+  residential: "R",
+  commercial: "C",
+  open_land: "P",
+  religious_property: "H",
+  mix_property: "M",
+  agricultural_land: "A",
 };
 
 export function padUlbCode(code: string): string {
-  const digits = code.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.padStart(6, '0').slice(-6);
+  const digits = code.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(6, "0").slice(-6);
 }
 
 export function padWardNo(wardNo: string): string {
-  const digits = wardNo.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.padStart(3, '0').slice(-3);
+  const digits = wardNo.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(3, "0").slice(-3);
 }
 
 export function padParcelNo(parcelNo: string): string {
-  const digits = parcelNo.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.padStart(5, '0').slice(-5);
+  const digits = parcelNo.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(5, "0").slice(-5);
 }
 
 export function padUnitNo(unitNo: string): string {
-  const digits = unitNo.replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.padStart(3, '0').slice(-3);
+  const digits = unitNo.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(3, "0").slice(-3);
 }
 
 /** Canonical parcel key for comparisons — `01`, `1`, and `00001` resolve to the same value. */
 export function normalizeParcelKey(parcelNo: string): string {
-  const digits = parcelNo.replace(/\D/g, '');
+  const digits = parcelNo.replace(/\D/g, "");
   if (!digits) return parcelNo.trim();
   const n = Number.parseInt(digits, 10);
   return Number.isNaN(n) ? parcelNo.trim() : String(n);
 }
 
 export function propertyUseCode(propertyUse: string | undefined): string {
-  if (!propertyUse) return '';
+  if (!propertyUse) return "";
   return PROPERTY_USE_CODES[propertyUse] ?? propertyUse.charAt(0).toUpperCase();
 }
 
@@ -101,8 +101,8 @@ export function validatePropertyIdFormat(id: string): boolean {
 
 /** Sort surveys by property ID ascending (empty IDs last). */
 export function comparePropertyIds(a?: string, b?: string): number {
-  const ka = (a ?? '').trim().toUpperCase();
-  const kb = (b ?? '').trim().toUpperCase();
+  const ka = (a ?? "").trim().toUpperCase();
+  const kb = (b ?? "").trim().toUpperCase();
   if (!ka && !kb) return 0;
   if (!ka) return 1;
   if (!kb) return -1;
@@ -143,10 +143,10 @@ export function resolvePropertyId(
 ): string | undefined {
   const generated = formatPropertyId({
     ulbCode,
-    wardNo: input.wardNo ?? '',
-    parcelNo: input.parcelNo ?? '',
-    unitNo: input.unitNo ?? '',
-    propertyUse: input.propertyUse ?? '',
+    wardNo: input.wardNo ?? "",
+    parcelNo: input.parcelNo ?? "",
+    unitNo: input.unitNo ?? "",
+    propertyUse: input.propertyUse ?? "",
   });
   // Prefer slot-derived IDs so parcel / ward / unit / use corrections renumber Property ID.
   if (generated) return generated;
@@ -175,8 +175,8 @@ export function displayPropertyId(
 
   return formatPropertyIdSlots({
     ulbCode,
-    wardNo: input.wardNo ?? '',
-    parcelNo: input.parcelNo ?? '',
-    unitNo: input.unitNo ?? '',
+    wardNo: input.wardNo ?? "",
+    parcelNo: input.parcelNo ?? "",
+    unitNo: input.unitNo ?? "",
   });
 }
