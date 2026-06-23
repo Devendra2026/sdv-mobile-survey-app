@@ -8,9 +8,10 @@ import {
   missingLinuxOptionalMarkers,
   readRootOptionalDependencies,
 } from './eas-lockfile-optional.mjs';
+import { parseEnvFile, resolveFleetEnvPath } from './read-env-file.mjs';
 
 const REQUIRED_REACT = '19.1.0';
-const EAS_ENV_LIST = 'eas env:list --environment preview';
+const EAS_ENV_LIST = 'npx eas-cli env:list --environment preview';
 let failed = false;
 
 function fail(msg) {
@@ -71,14 +72,18 @@ function readEasPreviewEnv() {
   });
 }
 
-const envLocalPath = '.env.local';
+const envLocalPath = resolveFleetEnvPath(process.cwd());
+const envLocalName = envLocalPath.endsWith('.env.prod') ? '.env.prod' : '.env.local';
 if (existsSync(envLocalPath)) {
-  const envLocal = readFileSync(envLocalPath, 'utf8');
-  const localPk = envLocal.match(/^EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$/m)?.[1]?.trim();
-  const localMapsKey = resolveMapsKeyFromEnvContent(envLocal);
+  const fleetEnv = parseEnvFile(envLocalPath);
+  const localPk = fleetEnv.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const localConvexUrl = fleetEnv.EXPO_PUBLIC_CONVEX_URL?.trim();
+  const localMapsKey =
+    fleetEnv.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY?.trim() ??
+    fleetEnv.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 
   let easOut = '';
-  if (localPk || localMapsKey) {
+  if (localPk || localMapsKey || localConvexUrl) {
     try {
       easOut = readEasPreviewEnv();
     } catch (err) {
@@ -104,17 +109,31 @@ if (existsSync(envLocalPath)) {
       const localHost = clerkIssuerFromPublishableKey(localPk);
       const easHost = clerkIssuerFromPublishableKey(easPk);
       fail(
-        `EAS preview Clerk key does not match .env.local (${easHost ?? 'invalid'} vs ${localHost ?? 'invalid'}). ` +
-        'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "<from .env.local>"',
+        `EAS preview Clerk key does not match ${envLocalName} (${easHost ?? 'invalid'} vs ${localHost ?? 'invalid'}). ` +
+        `Run: npm run env:sync:preview`,
       );
     } else {
       const host = clerkIssuerFromPublishableKey(localPk);
-      ok(`EAS preview Clerk key matches .env.local (${host})`);
+      ok(`EAS preview Clerk key matches ${envLocalName} (${host})`);
       if (easPk.startsWith('pk_test_')) {
         console.warn(
           '[verify-eas-preview] Using Clerk development key (pk_test_…) — 100 emails/month limit on field APKs.',
         );
       }
+    }
+  }
+
+  if (localConvexUrl && easOut) {
+    const easLine = easOut.split('\n').find((line) => line.startsWith('EXPO_PUBLIC_CONVEX_URL='));
+    const easConvex = easLine?.slice('EXPO_PUBLIC_CONVEX_URL='.length).trim();
+    if (!easConvex) {
+      fail('EAS preview missing EXPO_PUBLIC_CONVEX_URL — run: npm run env:sync:preview');
+    } else if (easConvex !== localConvexUrl) {
+      fail(
+        `EAS preview Convex URL (${easConvex}) does not match ${envLocalName} (${localConvexUrl}). Run: npm run env:sync:preview`,
+      );
+    } else {
+      ok(`EAS preview Convex URL matches ${envLocalName}`);
     }
   }
 
@@ -124,22 +143,24 @@ if (existsSync(envLocalPath)) {
       if (!easMaps?.value) {
         fail(
           'EAS preview missing EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY). ' +
-          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY --value "<from .env.local>"',
+          'Run: npm run env:sync:preview',
         );
       } else if (easMaps.value !== localMapsKey) {
         fail(
-          `EAS preview Google Maps key does not match .env.local (${easMaps.name}). ` +
-          'Run: npx eas env:update preview --variable-name EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY --value "<from .env.local>"',
+          `EAS preview Google Maps key does not match ${envLocalName} (${easMaps.name}). ` +
+          'Run: npm run env:sync:preview',
         );
       } else {
-        ok('EAS preview Google Maps key matches .env.local');
+        ok(`EAS preview Google Maps key matches ${envLocalName}`);
       }
     }
   } else {
     fail(
-      '.env.local missing EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) — required for GPS map preview in field APKs',
+      `${envLocalName} missing EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) — required for GPS map preview in field APKs`,
     );
   }
+} else {
+  fail('Missing .env.prod — copy .env.prod.example to .env.prod and fill in fleet values.');
 }
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));

@@ -23,8 +23,8 @@ export function ConfigGate({ children }: { children: ReactNode }) {
         </Text>
         <Text style={[authStyles.label, { fontFamily: 'monospace' }]}>{issues.join('\n')}</Text>
         <Text style={[authStyles.subtitle, { marginTop: 16 }]}>
-          Local dev: copy `.env.example` to `.env.local`. EAS: run `npm run verify:eas-preview` so the Clerk key matches
-          the web app, then `npm run eas:build:android:preview`.
+          Fleet APK: fill `.env.prod` (copy from `.env.prod.example`), run `npm run env:sync:preview`, then `npm run
+          verify:env-prod` and `npm run eas:build:android:preview`. Local dev uses `.env.local`.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -4,6 +4,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { parseEnvFile, resolveFleetEnvPath } from './read-env-file.mjs';
 
 let failed = false;
 
@@ -36,16 +37,17 @@ function readEnvFile(filePath, key) {
 
 const surveyRoot = process.cwd();
 const webRoot = path.join(surveyRoot, '..', 'sdv-front-new-app');
+const fleetEnvPath = resolveFleetEnvPath(surveyRoot);
+const fleetEnvName = fleetEnvPath.endsWith('.env.prod') ? '.env.prod' : '.env.local';
 
-const mobilePk =
-  readEnvFile(path.join(surveyRoot, '.env.local'), 'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY') ?? null;
+const mobilePk = parseEnvFile(fleetEnvPath).EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null;
 const webPk =
   readEnvFile(path.join(webRoot, '.env.local'), 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY') ?? null;
 const webIssuer = readEnvFile(path.join(webRoot, '.env.local'), 'CLERK_JWT_ISSUER_DOMAIN') ?? null;
 
 let easPk = null;
 try {
-  const easOut = execSync('eas env:list --environment preview', {
+  const easOut = execSync('npx eas-cli env:list --environment preview', {
     encoding: 'utf8',
     cwd: surveyRoot,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -82,9 +84,9 @@ if (easPk) {
 }
 
 if (mobilePk && easPk && mobilePk !== easPk) {
-  fail('survey-app .env.local Clerk key does not match EAS preview');
+  fail(`${fleetEnvName} Clerk key does not match EAS preview`);
 } else if (mobilePk && easPk) {
-  ok('survey-app .env.local matches EAS preview Clerk key');
+  ok(`${fleetEnvName} matches EAS preview Clerk key`);
 }
 
 if (webPk && easPk) {

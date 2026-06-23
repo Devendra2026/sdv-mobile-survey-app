@@ -6,6 +6,10 @@ node_modules/
 bun.lock
 bun.lockb
 
+# local env files
+.env*.local
+.env.prod
+
 # Expo
 .expo/
 dist/

@@ -16,15 +16,23 @@ export function clerkFrontendApiHost(): string | null {
   return clerkFrontendApiFromPublishableKey(env.clerkPublishableKey);
 }
 
-const CONVEX_URL_RE = /^https:\/\/[a-z0-9-]+\.convex\.cloud\/?$/i;
 const CLERK_KEY_RE = /^pk_(test|live)_/;
+
+function isValidConvexUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 /** Human-readable problems when the APK was built without required EAS env vars. */
 export function getEnvIssues(): string[] {
   const issues: string[] = [];
   if (!env.convexUrl.trim()) {
     issues.push('EXPO_PUBLIC_CONVEX_URL');
-  } else if (!CONVEX_URL_RE.test(env.convexUrl.trim())) {
+  } else if (!isValidConvexUrl(env.convexUrl)) {
     issues.push('EXPO_PUBLIC_CONVEX_URL (invalid URL)');
   }
   if (!env.clerkPublishableKey.trim()) {
