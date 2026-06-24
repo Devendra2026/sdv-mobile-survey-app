@@ -124,8 +124,7 @@ export function useWizardPhotoCapture({
           height: photo.height ?? 0,
           capturedAt: photo.capturedAt,
         });
-        await dequeuePhotoUpload(localId, photo.slot);
-        await refreshPendingLinkCount();
+        await Promise.all([dequeuePhotoUpload(localId, photo.slot), refreshPendingLinkCount()]);
       } catch {
         await enqueueForLink({
           localId,

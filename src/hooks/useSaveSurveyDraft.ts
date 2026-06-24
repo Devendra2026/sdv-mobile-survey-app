@@ -103,11 +103,13 @@ export function useSaveSurveyDraft() {
             try {
               const keep = new Set(syncedFloorIds);
               const serverFloors = await convex.query(api.floors.list, { surveyId: sid });
-              const removalResults = await Promise.allSettled(
-                serverFloors
-                  .filter((row) => !keep.has(row.clientFloorId))
-                  .map((row) => withMutationRetry(() => removeFloor({ id: row._id }))),
-              );
+              const removalPromises: ReturnType<typeof removeFloor>[] = [];
+              for (const row of serverFloors) {
+                if (!keep.has(row.clientFloorId)) {
+                  removalPromises.push(withMutationRetry(() => removeFloor({ id: row._id })));
+                }
+              }
+              const removalResults = await Promise.allSettled(removalPromises);
               const removalFailed = removalResults.filter((r) => r.status === 'rejected');
               if (removalFailed.length > 0) {
                 failedSections.push('floors');

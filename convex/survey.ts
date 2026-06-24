@@ -1,8 +1,8 @@
-import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { addressTenantContext, normalizeAddressFields, validateAddressSection } from "./addressRules";
+import { paginationOptsValidator } from 'convex/server';
+import { ConvexError, v } from 'convex/values';
+import type { Doc, Id } from './_generated/dataModel';
+import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { addressTenantContext, normalizeAddressFields, validateAddressSection } from './addressRules';
 import {
   derivePlotSqftForSubmit,
   normalizeFloorFields,
@@ -11,8 +11,8 @@ import {
   usageTypeToOccupied,
   validateAreaSection,
   validateFloorRow,
-} from "./areaMasters";
-import { hasCapability, requireCapability } from "./capabilities";
+} from './areaMasters';
+import { hasCapability, requireCapability } from './capabilities';
 import {
   assertCanAccessSurvey,
   canInsertSurveyDraft,
@@ -20,54 +20,54 @@ import {
   fieldSurveyAccess,
   isOwnScopeSurveyor,
   querySurveysInFieldScope,
-} from "./fieldAccess";
-import { assertCanReadWard, canReadWard, clientError, requireUser, writeAudit } from "./helpers";
-import { validateGps } from "./lib/gpsValidation";
-import { refreshSurveyCompletionPct } from "./lib/surveyProgress";
-import { filterSurveysBySearch } from "./lib/surveySearch";
-import { assertUniqueSurveySlot, surveyIdentifyingSlotChanged } from "./lib/surveyUniqueness";
-import { computeSurveyWardAggregates } from "./lib/surveyWardStats";
-import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from "./ownerRules";
-import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from "./propertyId";
-import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from "./schema";
-import { validateServicesSection } from "./serviceMasters";
+} from './fieldAccess';
+import { assertCanReadWard, canReadWard, clientError, requireUser, writeAudit } from './helpers';
+import { validateGps } from './lib/gpsValidation';
+import { refreshSurveyCompletionPct } from './lib/surveyProgress';
+import { filterSurveysBySearch } from './lib/surveySearch';
+import { assertUniqueSurveySlot, surveyIdentifyingSlotChanged } from './lib/surveyUniqueness';
+import { computeSurveyWardAggregates } from './lib/surveyWardStats';
+import { isValidIndianOwnerMobile, normalizeOwners, primaryOwnerMobile, validateOwnerSection } from './ownerRules';
+import { comparePropertyIds, compareWardThenParcel, resolvePropertyId } from './propertyId';
+import { gpsCapture, qcStatus, sanitationType, surveyOwnerEntry, surveyStatus, waterSource } from './schema';
+import { validateServicesSection } from './serviceMasters';
 import {
   assertSurveyWritable,
   auditActionForSave,
   requireSurveyDraftEdit,
   resolveExistingSurveyForSave,
   resolvePostSaveStatuses,
-} from "./surveyEditRules";
-import { validateTaxationSection } from "./taxationMasters";
-import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "./tenancy";
+} from './surveyEditRules';
+import { validateTaxationSection } from './taxationMasters';
+import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
 async function loadMunicipalityCodes(
   ctx: QueryCtx,
-  municipalityIds: Id<"municipalities">[],
-): Promise<Map<Id<"municipalities">, string>> {
+  municipalityIds: Id<'municipalities'>[],
+): Promise<Map<Id<'municipalities'>, string>> {
   const unique = [...new Set(municipalityIds)];
   const munis = await Promise.all(unique.map((id) => ctx.db.get(id)));
-  const codes = new Map<Id<"municipalities">, string>();
+  const codes = new Map<Id<'municipalities'>, string>();
   for (const m of munis) {
     if (m) codes.set(m._id, m.code);
   }
   return codes;
 }
 
-function enrichSurveyPropertyIds(rows: Doc<"surveys">[], codes: Map<Id<"municipalities">, string>): Doc<"surveys">[] {
+function enrichSurveyPropertyIds(rows: Doc<'surveys'>[], codes: Map<Id<'municipalities'>, string>): Doc<'surveys'>[] {
   return rows.map((row) => ({
     ...row,
-    propertyId: resolvePropertyId(row, codes.get(row.municipalityId) ?? "") ?? row.propertyId,
+    propertyId: resolvePropertyId(row, codes.get(row.municipalityId) ?? '') ?? row.propertyId,
   }));
 }
 
 async function enrichSurveyorNames(
   ctx: QueryCtx,
-  rows: Doc<"surveys">[],
-): Promise<Array<Doc<"surveys"> & { surveyorName?: string }>> {
+  rows: Doc<'surveys'>[],
+): Promise<Array<Doc<'surveys'> & { surveyorName?: string }>> {
   const surveyorIds = [...new Set(rows.map((r) => r.surveyorId))];
   const surveyors = await Promise.all(surveyorIds.map((id) => ctx.db.get(id)));
-  const nameById = new Map<Id<"users">, string>();
+  const nameById = new Map<Id<'users'>, string>();
   for (const s of surveyors) {
     if (s) nameById.set(s._id, s.name);
   }
@@ -82,9 +82,9 @@ async function enrichSurveyorNames(
 /** Partial payload for in-progress saves — only `localId` + `municipalityId` are required. */
 const draftSurveyInput = {
   /** Server row id — required when a supervisor/admin edits someone else's survey. */
-  id: v.optional(v.id("surveys")),
+  id: v.optional(v.id('surveys')),
   localId: v.string(),
-  municipalityId: v.id("municipalities"),
+  municipalityId: v.id('municipalities'),
   clientUpdatedAt: v.number(),
   wardNo: v.optional(v.string()),
   sectorNo: v.optional(v.string()),
@@ -124,9 +124,9 @@ const draftSurveyInput = {
 };
 
 const surveyInput = {
-  id: v.optional(v.id("surveys")),
+  id: v.optional(v.id('surveys')),
   localId: v.string(),
-  municipalityId: v.id("municipalities"),
+  municipalityId: v.id('municipalities'),
   wardNo: v.string(),
 
   sectorNo: v.optional(v.string()),
@@ -174,19 +174,19 @@ const surveyInput = {
 
 /* ────────────────────────── reactive queries ────────────────────────── */
 
-const surveySortBy = v.union(v.literal("propertyId"), v.literal("updated"));
+const surveySortBy = v.union(v.literal('propertyId'), v.literal('updated'));
 
 function resolveListSort(args: {
-  status?: Doc<"surveys">["status"];
-  sortBy?: "propertyId" | "updated";
-}): "propertyId" | "updated" {
+  status?: Doc<'surveys'>['status'];
+  sortBy?: 'propertyId' | 'updated';
+}): 'propertyId' | 'updated' {
   if (args.sortBy) return args.sortBy;
-  if (args.status === "draft") return "updated";
-  return "propertyId";
+  if (args.status === 'draft') return 'updated';
+  return 'propertyId';
 }
 
-function sortSurveyRows(rows: Doc<"surveys">[], sortBy: "propertyId" | "updated"): Doc<"surveys">[] {
-  if (sortBy === "updated") {
+function sortSurveyRows(rows: Doc<'surveys'>[], sortBy: 'propertyId' | 'updated'): Doc<'surveys'>[] {
+  if (sortBy === 'updated') {
     return [...rows].sort((a, b) => b.clientUpdatedAt - a.clientUpdatedAt);
   }
   return [...rows].sort((a, b) => comparePropertyIds(a.propertyId, b.propertyId));
@@ -203,9 +203,9 @@ export const list = query({
     qcStatus: v.optional(qcStatus),
     qcStatuses: v.optional(v.array(qcStatus)),
     wardNo: v.optional(v.string()),
-    districtId: v.optional(v.id("districts")),
-    municipalityId: v.optional(v.id("municipalities")),
-    surveyorId: v.optional(v.id("users")),
+    districtId: v.optional(v.id('districts')),
+    municipalityId: v.optional(v.id('municipalities')),
+    surveyorId: v.optional(v.id('users')),
     limit: v.optional(v.number()),
     sortBy: v.optional(surveySortBy),
   },
@@ -221,8 +221,8 @@ export const list = query({
     if (args.municipalityId) {
       await assertMunicipalityInScope(ctx, me, args.municipalityId);
     }
-    if (args.districtId && access !== "admin" && !districtIds.has(args.districtId)) {
-      clientError("FORBIDDEN", "This district is outside your assigned scope");
+    if (args.districtId && access !== 'admin' && !districtIds.has(args.districtId)) {
+      clientError('FORBIDDEN', 'This district is outside your assigned scope');
     }
 
     let rows = await querySurveysInFieldScope(ctx, me, {
@@ -253,7 +253,7 @@ export const list = query({
       const allowed = new Set(args.qcStatuses);
       rows = rows.filter((r) => {
         if (!allowed.has(r.qcStatus)) return false;
-        if (r.qcStatus === "pending" && r.status !== "submitted") return false;
+        if (r.qcStatus === 'pending' && r.status !== 'submitted') return false;
         return true;
       });
     }
@@ -275,9 +275,9 @@ const listFilterArgs = {
   qcStatus: v.optional(qcStatus),
   qcStatuses: v.optional(v.array(qcStatus)),
   wardNo: v.optional(v.string()),
-  districtId: v.optional(v.id("districts")),
-  municipalityId: v.optional(v.id("municipalities")),
-  surveyorId: v.optional(v.id("users")),
+  districtId: v.optional(v.id('districts')),
+  municipalityId: v.optional(v.id('municipalities')),
+  surveyorId: v.optional(v.id('users')),
   fromMs: v.optional(v.number()),
   toMs: v.optional(v.number()),
   searchTerm: v.optional(v.string()),
@@ -292,23 +292,23 @@ function wardNumbersMatch(rowWard: string, filterWard: string): boolean {
 }
 
 function applySurveyListFilters(
-  rows: Doc<"surveys">[],
+  rows: Doc<'surveys'>[],
   args: {
-    status?: Doc<"surveys">["status"];
-    qcStatus?: Doc<"surveys">["qcStatus"];
-    qcStatuses?: Doc<"surveys">["qcStatus"][];
+    status?: Doc<'surveys'>['status'];
+    qcStatus?: Doc<'surveys'>['qcStatus'];
+    qcStatuses?: Doc<'surveys'>['qcStatus'][];
     wardNo?: string;
-    districtId?: Id<"districts">;
-    municipalityId?: Id<"municipalities">;
-    surveyorId?: Id<"users">;
+    districtId?: Id<'districts'>;
+    municipalityId?: Id<'municipalities'>;
+    surveyorId?: Id<'users'>;
     fromMs?: number;
     toMs?: number;
-    sortBy?: "propertyId" | "updated";
+    sortBy?: 'propertyId' | 'updated';
   },
-  me: Doc<"users">,
-  muniIds: Set<Id<"municipalities">>,
+  me: Doc<'users'>,
+  muniIds: Set<Id<'municipalities'>>,
   access: Awaited<ReturnType<typeof fieldSurveyAccess>>,
-): Doc<"surveys">[] {
+): Doc<'surveys'>[] {
   let filtered = rows.filter((r) => muniIds.has(r.municipalityId) && canReadWard(me, r.municipalityId, r.wardNo));
   if (args.districtId) filtered = filtered.filter((r) => r.districtId === args.districtId);
   if (args.municipalityId) filtered = filtered.filter((r) => r.municipalityId === args.municipalityId);
@@ -321,7 +321,7 @@ function applySurveyListFilters(
     const allowed = new Set(args.qcStatuses);
     filtered = filtered.filter((r) => {
       if (!allowed.has(r.qcStatus)) return false;
-      if (r.qcStatus === "pending" && r.status !== "submitted") return false;
+      if (r.qcStatus === 'pending' && r.status !== 'submitted') return false;
       return true;
     });
   }
@@ -329,7 +329,7 @@ function applySurveyListFilters(
   if (args.fromMs !== undefined) filtered = filtered.filter((r) => r._creationTime >= args.fromMs!);
   if (args.toMs !== undefined) filtered = filtered.filter((r) => r._creationTime <= args.toMs!);
   const sortBy = resolveListSort(args);
-  if (sortBy === "updated") {
+  if (sortBy === 'updated') {
     return filtered.sort((a, b) => b.clientUpdatedAt - a.clientUpdatedAt);
   }
   return filtered.sort(compareWardThenParcel);
@@ -346,46 +346,46 @@ function parseListOffset(cursor: string | null | undefined): number {
 
 async function querySurveysByMunicipality(
   ctx: QueryCtx,
-  municipalityId: Id<"municipalities">,
-  status?: Doc<"surveys">["status"],
-): Promise<Doc<"surveys">[]> {
+  municipalityId: Id<'municipalities'>,
+  status?: Doc<'surveys'>['status'],
+): Promise<Doc<'surveys'>[]> {
   if (status) {
     return ctx.db
-      .query("surveys")
-      .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId).eq("status", status))
+      .query('surveys')
+      .withIndex('by_municipality_status', (q) => q.eq('municipalityId', municipalityId).eq('status', status))
       .collect();
   }
   return ctx.db
-    .query("surveys")
-    .withIndex("by_municipality_status", (q) => q.eq("municipalityId", municipalityId))
+    .query('surveys')
+    .withIndex('by_municipality_status', (q) => q.eq('municipalityId', municipalityId))
     .collect();
 }
 
 async function querySurveysByDistrict(
   ctx: QueryCtx,
-  districtId: Id<"districts">,
-  status?: Doc<"surveys">["status"],
-): Promise<Doc<"surveys">[]> {
+  districtId: Id<'districts'>,
+  status?: Doc<'surveys'>['status'],
+): Promise<Doc<'surveys'>[]> {
   if (status) {
     return ctx.db
-      .query("surveys")
-      .withIndex("by_district_status", (q) => q.eq("districtId", districtId).eq("status", status))
+      .query('surveys')
+      .withIndex('by_district_status', (q) => q.eq('districtId', districtId).eq('status', status))
       .collect();
   }
   return ctx.db
-    .query("surveys")
-    .withIndex("by_district_status", (q) => q.eq("districtId", districtId))
+    .query('surveys')
+    .withIndex('by_district_status', (q) => q.eq('districtId', districtId))
     .collect();
 }
 
 export type SurveyListFilterArgs = {
-  status?: Doc<"surveys">["status"];
-  qcStatus?: Doc<"surveys">["qcStatus"];
-  qcStatuses?: Doc<"surveys">["qcStatus"][];
+  status?: Doc<'surveys'>['status'];
+  qcStatus?: Doc<'surveys'>['qcStatus'];
+  qcStatuses?: Doc<'surveys'>['qcStatus'][];
   wardNo?: string;
-  districtId?: Id<"districts">;
-  municipalityId?: Id<"municipalities">;
-  surveyorId?: Id<"users">;
+  districtId?: Id<'districts'>;
+  municipalityId?: Id<'municipalities'>;
+  surveyorId?: Id<'users'>;
   fromMs?: number;
   toMs?: number;
 };
@@ -393,24 +393,24 @@ export type SurveyListFilterArgs = {
 /** Load all rows matching list filters using indexes, then scope + filter in memory. */
 export async function collectSurveysForListPaginated(
   ctx: QueryCtx,
-  me: Doc<"users">,
+  me: Doc<'users'>,
   args: SurveyListFilterArgs,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>,
-  muniIds: Set<Id<"municipalities">>,
+  muniIds: Set<Id<'municipalities'>>,
   access: Awaited<ReturnType<typeof fieldSurveyAccess>>,
-): Promise<Doc<"surveys">[]> {
-  let rows: Doc<"surveys">[] = [];
+): Promise<Doc<'surveys'>[]> {
+  let rows: Doc<'surveys'>[] = [];
 
   if (args.qcStatus) {
     rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_qc_status", (q) => q.eq("qcStatus", args.qcStatus!))
+      .query('surveys')
+      .withIndex('by_qc_status', (q) => q.eq('qcStatus', args.qcStatus!))
       .collect();
-  } else if (access === "own") {
+  } else if (access === 'own') {
     rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor", (q) => q.eq("surveyorId", me._id))
-      .order("desc")
+      .query('surveys')
+      .withIndex('by_surveyor', (q) => q.eq('surveyorId', me._id))
+      .order('desc')
       .take(LIST_PAGINATED_SCOPE_LIMIT);
   } else if (args.municipalityId) {
     rows = await querySurveysByMunicipality(ctx, args.municipalityId, args.status);
@@ -418,11 +418,11 @@ export async function collectSurveysForListPaginated(
     rows = await querySurveysByDistrict(ctx, args.districtId, args.status);
   } else if (args.surveyorId) {
     rows = await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor", (q) => q.eq("surveyorId", args.surveyorId!))
-      .order("desc")
+      .query('surveys')
+      .withIndex('by_surveyor', (q) => q.eq('surveyorId', args.surveyorId!))
+      .order('desc')
       .take(LIST_PAGINATED_SCOPE_LIMIT);
-  } else if (access === "assigned") {
+  } else if (access === 'assigned') {
     const scopedMunis = scope.municipalities.map((m) => m._id);
     if (scopedMunis.length > 1) {
       const batches = await Promise.all(
@@ -471,8 +471,8 @@ export const listPaginated = query({
     if (args.municipalityId) {
       await assertMunicipalityInScope(ctx, me, args.municipalityId);
     }
-    if (args.districtId && access !== "admin" && !districtIds.has(args.districtId)) {
-      clientError("FORBIDDEN", "This district is outside your assigned scope");
+    if (args.districtId && access !== 'admin' && !districtIds.has(args.districtId)) {
+      clientError('FORBIDDEN', 'This district is outside your assigned scope');
     }
 
     let filtered = await collectSurveysForListPaginated(ctx, me, args, scope, muniIds, access);
@@ -506,7 +506,7 @@ export const listPaginated = query({
 
     return {
       page,
-      continueCursor: nextOffset < filtered.length ? String(nextOffset) : "",
+      continueCursor: nextOffset < filtered.length ? String(nextOffset) : '',
       isDone: nextOffset >= filtered.length,
       totalCount,
       scopeTruncated,
@@ -516,7 +516,7 @@ export const listPaginated = query({
 
 const surveyWardStatsEntryShape = {
   wardNo: v.string(),
-  municipalityId: v.id("municipalities"),
+  municipalityId: v.id('municipalities'),
   city: v.string(),
   total: v.number(),
   drafts: v.number(),
@@ -541,8 +541,8 @@ const surveyCommandCenterStatsShape = {
 /** Scoped KPI counts for the Survey Command Center — full dataset, not client-capped. */
 export const commandCenterStats = query({
   args: {
-    districtId: v.optional(v.id("districts")),
-    municipalityId: v.optional(v.id("municipalities")),
+    districtId: v.optional(v.id('districts')),
+    municipalityId: v.optional(v.id('municipalities')),
     wardNo: v.optional(v.string()),
     status: v.optional(surveyStatus),
     qcStatus: v.optional(qcStatus),
@@ -561,8 +561,8 @@ export const commandCenterStats = query({
     if (args.municipalityId) {
       await assertMunicipalityInScope(ctx, me, args.municipalityId);
     }
-    if (args.districtId && access !== "admin" && !districtIds.has(args.districtId)) {
-      clientError("FORBIDDEN", "This district is outside your assigned scope");
+    if (args.districtId && access !== 'admin' && !districtIds.has(args.districtId)) {
+      clientError('FORBIDDEN', 'This district is outside your assigned scope');
     }
 
     const rows = await collectSurveysForListPaginated(
@@ -601,7 +601,7 @@ export const commandCenterStats = query({
     const wardAggregates = computeSurveyWardAggregates(filtered);
     const allSurveyorIds = [...new Set(wardAggregates.flatMap((w) => w.activeSurveyorIds))];
     const surveyors = await Promise.all(allSurveyorIds.map((id) => ctx.db.get(id)));
-    const nameById = new Map<Id<"users">, string>();
+    const nameById = new Map<Id<'users'>, string>();
     for (const s of surveyors) {
       if (s) nameById.set(s._id, s.name);
     }
@@ -623,16 +623,16 @@ export const commandCenterStats = query({
 
     return {
       total: filtered.length,
-      drafts: filtered.filter((r) => r.status === "draft").length,
-      submitted: filtered.filter((r) => r.status === "submitted").length,
+      drafts: filtered.filter((r) => r.status === 'draft').length,
+      submitted: filtered.filter((r) => r.status === 'submitted').length,
       submittedToday: filtered.filter(
         (r) =>
-          r.status === "submitted" &&
+          r.status === 'submitted' &&
           (r.submittedAt !== undefined ? r.submittedAt >= todayMs : r._creationTime >= todayMs),
       ).length,
-      qcApproved: filtered.filter((r) => r.qcStatus === "approved").length,
-      qcPending: filtered.filter((r) => r.qcStatus === "pending" && r.status === "submitted").length,
-      qcRejected: filtered.filter((r) => r.qcStatus === "rejected").length,
+      qcApproved: filtered.filter((r) => r.qcStatus === 'approved').length,
+      qcPending: filtered.filter((r) => r.qcStatus === 'pending' && r.status === 'submitted').length,
+      qcRejected: filtered.filter((r) => r.qcStatus === 'rejected').length,
       surveyCompletionPct,
       wardStats,
     };
@@ -641,26 +641,26 @@ export const commandCenterStats = query({
 
 /** Single survey with floors + photos + QC remarks hydrated for the detail screen. */
 export const get = query({
-  args: { id: v.id("surveys") },
+  args: { id: v.id('surveys') },
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)]);
     if (!survey) return null;
-    await assertCanAccessSurvey(ctx, me, survey);
 
-    const [floors, photos, qcRemarks, surveyor, muni] = await Promise.all([
+    const [, floors, photos, qcRemarks, surveyor, muni] = await Promise.all([
+      assertCanAccessSurvey(ctx, me, survey),
       ctx.db
-        .query("floors")
-        .withIndex("by_survey", (q) => q.eq("surveyId", args.id))
+        .query('floors')
+        .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
         .collect()
         .then((rows) => rows.sort((a, b) => a.position - b.position).map(presentFloorRow)),
       ctx.db
-        .query("photos")
-        .withIndex("by_survey", (q) => q.eq("surveyId", args.id))
+        .query('photos')
+        .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
         .collect(),
       ctx.db
-        .query("qcRemarks")
-        .withIndex("by_survey", (q) => q.eq("surveyId", args.id))
-        .order("desc")
+        .query('qcRemarks')
+        .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
+        .order('desc')
         .collect(),
       ctx.db.get(survey.surveyorId),
       ctx.db.get(survey.municipalityId),
@@ -673,7 +673,7 @@ export const get = query({
         url: await ctx.storage.getUrl(p.storageId),
       })),
     );
-    const propertyId = resolvePropertyId(survey, muni?.code ?? "") ?? survey.propertyId;
+    const propertyId = resolvePropertyId(survey, muni?.code ?? '') ?? survey.propertyId;
 
     return {
       ...survey,
@@ -692,8 +692,8 @@ export const getByLocalId = query({
   handler: async (ctx, args) => {
     const me = await requireUser(ctx);
     return await ctx.db
-      .query("surveys")
-      .withIndex("by_surveyor_localId", (q) => q.eq("surveyorId", me._id).eq("localId", args.localId))
+      .query('surveys')
+      .withIndex('by_surveyor_localId', (q) => q.eq('surveyorId', me._id).eq('localId', args.localId))
       .unique();
   },
 });
@@ -701,27 +701,27 @@ export const getByLocalId = query({
 /* ────────────────────────── mutations ────────────────────────── */
 
 const DRAFT_SURVEY_DEFAULTS = {
-  wardNo: "",
-  parcelNo: "",
-  unitNo: "",
-  mobileNo: "",
-  locality: "",
-  colonyName: "",
-  city: "",
-  pinCode: "",
-  assessmentYear: "",
-  ownershipType: "",
-  propertyType: "",
-  propertyUse: "",
-  situation: "",
-  roadType: "",
-  taxRateZone: "",
+  wardNo: '',
+  parcelNo: '',
+  unitNo: '',
+  mobileNo: '',
+  locality: '',
+  colonyName: '',
+  city: '',
+  pinCode: '',
+  assessmentYear: '',
+  ownershipType: '',
+  propertyType: '',
+  propertyUse: '',
+  situation: '',
+  roadType: '',
+  taxRateZone: '',
   plotSqft: 0,
   plinthSqft: 0,
   isSlum: false,
   municipalWaterConnection: false,
-  waterSource: "government_tap" as const,
-  sanitationType: "sewer_system" as const,
+  waterSource: 'government_tap' as const,
+  sanitationType: 'sewer_system' as const,
   municipalWasteCollection: false,
 };
 
@@ -747,17 +747,17 @@ export const saveDraft = mutation({
     ]);
     if (existing) await assertSurveyWritable(ctx, me, existing);
     if (!existing && !canInsert) {
-      clientError("BAD_REQUEST", "No survey found to update — open the record from QC review and try saving again");
+      clientError('BAD_REQUEST', 'No survey found to update — open the record from QC review and try saving again');
     }
 
-    const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? "";
+    const wardNo = args.wardNo?.trim() ?? existing?.wardNo ?? '';
     if (wardNo) {
       assertCanReadWard(me, args.municipalityId, wardNo);
       const ward = await ctx.db
-        .query("wards")
-        .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", wardNo))
+        .query('wards')
+        .withIndex('by_municipality_ward', (q) => q.eq('municipalityId', args.municipalityId).eq('wardNo', wardNo))
         .unique();
-      if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] });
+      if (!ward) clientError('BAD_REQUEST', 'Unknown ward', { wardNo: ['unknown ward'] });
     }
 
     const district = await ctx.db.get(muni.districtId);
@@ -771,10 +771,10 @@ export const saveDraft = mutation({
       normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code)),
       muni,
     );
-    validateBusinessRules(normalized, addressCtx, "draft");
+    validateBusinessRules(normalized, addressCtx, 'draft');
 
-    if (existing && existing.status === "submitted") {
-      const isQcEditor = await hasCapability(ctx, me, "qc.review");
+    if (existing && existing.status === 'submitted') {
+      const isQcEditor = await hasCapability(ctx, me, 'qc.review');
       if (isQcEditor && surveyIdentifyingSlotChanged(existing, normalized, muni.code)) {
         await assertUniqueSurveySlot(ctx, {
           municipalityId: args.municipalityId,
@@ -805,19 +805,19 @@ export const saveDraft = mutation({
         writeAudit(ctx, {
           actorId: me._id,
           action: auditActionForSave(existing, ownScope, false),
-          entity: "survey",
+          entity: 'survey',
           entityId: existing._id,
         }),
       ]);
       return existing._id;
     }
 
-    const newId = await ctx.db.insert("surveys", {
+    const newId = await ctx.db.insert('surveys', {
       ...writable,
       surveyorId: me._id,
       localId: args.localId,
-      status: "draft",
-      qcStatus: "pending",
+      status: 'draft',
+      qcStatus: 'pending',
       serverVersion: 1,
       clientUpdatedAt: args.clientUpdatedAt,
     });
@@ -826,7 +826,7 @@ export const saveDraft = mutation({
       writeAudit(ctx, {
         actorId: me._id,
         action: auditActionForSave(null, ownScope, true),
-        entity: "survey",
+        entity: 'survey',
         entityId: newId,
         metadata: { localId: args.localId, draft: true },
       }),
@@ -863,14 +863,14 @@ export const upsert = mutation({
       normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(args), muni.code)),
       muni,
     );
-    validateBusinessRules(normalized, addressCtx, "submit");
+    validateBusinessRules(normalized, addressCtx, 'submit');
 
     // Confirm ward exists within the municipality
     const ward = await ctx.db
-      .query("wards")
-      .withIndex("by_municipality_ward", (q) => q.eq("municipalityId", args.municipalityId).eq("wardNo", args.wardNo))
+      .query('wards')
+      .withIndex('by_municipality_ward', (q) => q.eq('municipalityId', args.municipalityId).eq('wardNo', args.wardNo))
       .unique();
-    if (!ward) clientError("BAD_REQUEST", "Unknown ward", { wardNo: ["unknown ward"] });
+    if (!ward) clientError('BAD_REQUEST', 'Unknown ward', { wardNo: ['unknown ward'] });
 
     const existing = await resolveExistingSurveyForSave(ctx, me, {
       id: args.id,
@@ -879,7 +879,7 @@ export const upsert = mutation({
     });
     if (existing) await assertSurveyWritable(ctx, me, existing);
     if (!existing && !canInsert) {
-      clientError("BAD_REQUEST", "No survey found to update — open the record from QC review and try saving again");
+      clientError('BAD_REQUEST', 'No survey found to update — open the record from QC review and try saving again');
     }
 
     await assertUniqueSurveySlot(ctx, {
@@ -909,27 +909,27 @@ export const upsert = mutation({
         writeAudit(ctx, {
           actorId: me._id,
           action: auditActionForSave(existing, ownScope, false),
-          entity: "survey",
+          entity: 'survey',
           entityId: existing._id,
         }),
       ]);
       return existing._id;
     }
 
-    const newId = await ctx.db.insert("surveys", {
+    const newId = await ctx.db.insert('surveys', {
       ...writable,
       surveyorId: me._id,
       localId: args.localId,
-      status: "draft",
-      qcStatus: "pending",
+      status: 'draft',
+      qcStatus: 'pending',
       serverVersion: 1,
     });
     await Promise.all([
       refreshSurveyCompletionPct(ctx, newId),
       writeAudit(ctx, {
         actorId: me._id,
-        action: "survey.created",
-        entity: "survey",
+        action: 'survey.created',
+        entity: 'survey',
         entityId: newId,
         metadata: { localId: args.localId },
       }),
@@ -940,19 +940,19 @@ export const upsert = mutation({
 
 /** Attach or refresh GPS on a draft survey before submit. */
 export const setGps = mutation({
-  args: { id: v.id("surveys"), gps: gpsCapture },
+  args: { id: v.id('surveys'), gps: gpsCapture },
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)]);
-    if (!survey) clientError("NOT_FOUND", "Survey not found");
-    if (survey.surveyorId !== me._id && me.role === "surveyor") {
-      clientError("FORBIDDEN", "Not your survey");
+    if (!survey) clientError('NOT_FOUND', 'Survey not found');
+    if (survey.surveyorId !== me._id && me.role === 'surveyor') {
+      clientError('FORBIDDEN', 'Not your survey');
     }
     await assertMunicipalityInScope(ctx, me, survey.municipalityId);
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
     await assertSurveyWritable(ctx, me, survey);
     const gpsMessage = validateGps(args.gps, { strict: false });
     if (gpsMessage) {
-      clientError("VALIDATION", gpsMessage, { gps: [gpsMessage] });
+      clientError('VALIDATION', gpsMessage, { gps: [gpsMessage] });
     }
     await ctx.db.patch(args.id, {
       gps: args.gps,
@@ -985,14 +985,14 @@ type SubmitFloorRow = {
 
 async function syncSubmitArea(
   ctx: MutationCtx,
-  survey: Doc<"surveys">,
+  survey: Doc<'surveys'>,
   input: {
     plotSqft?: number;
     plinthSqft?: number;
     floors?: SubmitFloorRow[];
     keepClientFloorIds?: string[];
   },
-): Promise<Doc<"surveys">> {
+): Promise<Doc<'surveys'>> {
   let serverVersion = survey.serverVersion;
 
   if (input.floors) {
@@ -1010,7 +1010,7 @@ async function syncSubmitArea(
           areaSqft: fl.areaSqft,
         });
         if (Object.keys(floorErrors).length > 0) {
-          clientError("VALIDATION", "Invalid floor row", floorErrors);
+          clientError('VALIDATION', 'Invalid floor row', floorErrors);
         }
 
         const row = {
@@ -1024,16 +1024,16 @@ async function syncSubmitArea(
         };
 
         const existing = await ctx.db
-          .query("floors")
-          .withIndex("by_survey_clientFloorId", (q) =>
-            q.eq("surveyId", survey._id).eq("clientFloorId", fl.clientFloorId),
+          .query('floors')
+          .withIndex('by_survey_clientFloorId', (q) =>
+            q.eq('surveyId', survey._id).eq('clientFloorId', fl.clientFloorId),
           )
           .unique();
 
         if (existing) {
           await ctx.db.patch(existing._id, row);
         } else {
-          await ctx.db.insert("floors", {
+          await ctx.db.insert('floors', {
             surveyId: survey._id,
             clientFloorId: fl.clientFloorId,
             ...row,
@@ -1045,8 +1045,8 @@ async function syncSubmitArea(
     if (input.keepClientFloorIds) {
       const keep = new Set(input.keepClientFloorIds);
       const rows = await ctx.db
-        .query("floors")
-        .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
+        .query('floors')
+        .withIndex('by_survey', (q) => q.eq('surveyId', survey._id))
         .collect();
       const deleteOps = [];
       for (const row of rows) {
@@ -1059,8 +1059,8 @@ async function syncSubmitArea(
   }
 
   const floorRows = await ctx.db
-    .query("floors")
-    .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
+    .query('floors')
+    .withIndex('by_survey', (q) => q.eq('surveyId', survey._id))
     .collect();
 
   const resolvedPlot =
@@ -1069,7 +1069,7 @@ async function syncSubmitArea(
       : derivePlotSqftForSubmit(survey.plotSqft, floorRows);
   const resolvedPlinth = input.plinthSqft ?? plinthSqftFromFloors(floorRows);
 
-  const areaPatch: Partial<Pick<Doc<"surveys">, "plotSqft" | "plinthSqft">> = {};
+  const areaPatch: Partial<Pick<Doc<'surveys'>, 'plotSqft' | 'plinthSqft'>> = {};
   if (resolvedPlot > 0 && resolvedPlot !== survey.plotSqft) areaPatch.plotSqft = resolvedPlot;
   if (resolvedPlinth !== survey.plinthSqft) areaPatch.plinthSqft = resolvedPlinth;
 
@@ -1079,17 +1079,17 @@ async function syncSubmitArea(
       serverVersion: serverVersion + 1,
     });
     const updated = await ctx.db.get(survey._id);
-    if (!updated) clientError("NOT_FOUND", "Survey not found");
+    if (!updated) clientError('NOT_FOUND', 'Survey not found');
     return updated;
   }
 
   return survey;
 }
 
-async function ensureSurveyAreaReady(ctx: MutationCtx, survey: Doc<"surveys">): Promise<Doc<"surveys">> {
+async function ensureSurveyAreaReady(ctx: MutationCtx, survey: Doc<'surveys'>): Promise<Doc<'surveys'>> {
   const floors = await ctx.db
-    .query("floors")
-    .withIndex("by_survey", (q) => q.eq("surveyId", survey._id))
+    .query('floors')
+    .withIndex('by_survey', (q) => q.eq('surveyId', survey._id))
     .collect();
   const derivedPlot = derivePlotSqftForSubmit(survey.plotSqft, floors);
   if (!(derivedPlot > 0) || derivedPlot === survey.plotSqft) {
@@ -1102,7 +1102,7 @@ async function ensureSurveyAreaReady(ctx: MutationCtx, survey: Doc<"surveys">): 
     serverVersion: survey.serverVersion + 1,
   });
   const updated = await ctx.db.get(survey._id);
-  if (!updated) clientError("NOT_FOUND", "Survey not found");
+  if (!updated) clientError('NOT_FOUND', 'Survey not found');
   return updated;
 }
 
@@ -1113,7 +1113,7 @@ async function ensureSurveyAreaReady(ctx: MutationCtx, survey: Doc<"surveys">): 
  */
 export const submit = mutation({
   args: {
-    id: v.id("surveys"),
+    id: v.id('surveys'),
     plotSqft: v.optional(v.number()),
     plinthSqft: v.optional(v.number()),
     floors: v.optional(v.array(submitFloorRow)),
@@ -1123,19 +1123,19 @@ export const submit = mutation({
   handler: async (ctx, args) => {
     const [me, surveyOrNull] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)]);
     let survey = surveyOrNull;
-    if (!survey) clientError("NOT_FOUND", "Survey not found");
-    const [, ownScope] = await Promise.all([requireCapability(ctx, me, "surveys.submit"), isOwnScopeSurveyor(ctx, me)]);
+    if (!survey) clientError('NOT_FOUND', 'Survey not found');
+    const [, ownScope] = await Promise.all([requireCapability(ctx, me, 'surveys.submit'), isOwnScopeSurveyor(ctx, me)]);
     if (survey.surveyorId !== me._id && ownScope) {
-      clientError("FORBIDDEN", "Not your survey");
+      clientError('FORBIDDEN', 'Not your survey');
     }
-    if (survey.status !== "draft" && survey.status !== "rejected") {
+    if (survey.status !== 'draft' && survey.status !== 'rejected') {
       const message =
-        survey.status === "submitted"
-          ? "This survey is already submitted and awaiting QC review"
-          : survey.status === "approved"
-            ? "Approved surveys cannot be submitted again"
-            : "Only draft surveys can be submitted";
-      clientError("BAD_STATE", message);
+        survey.status === 'submitted'
+          ? 'This survey is already submitted and awaiting QC review'
+          : survey.status === 'approved'
+            ? 'Approved surveys cannot be submitted again'
+            : 'Only draft surveys can be submitted';
+      clientError('BAD_STATE', message);
     }
     await assertMunicipalityInScope(ctx, me, survey.municipalityId);
     assertCanReadWard(me, survey.municipalityId, survey.wardNo);
@@ -1153,8 +1153,8 @@ export const submit = mutation({
     }
 
     const floors = await ctx.db
-      .query("floors")
-      .withIndex("by_survey", (q) => q.eq("surveyId", args.id))
+      .query('floors')
+      .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
       .collect();
     const areaErrors = validateAreaSection({
       plotSqft: survey.plotSqft,
@@ -1162,43 +1162,43 @@ export const submit = mutation({
       floors: floors.map((f) => ({ floorName: f.floorName, areaSqft: f.areaSqft })),
     });
     if (Object.keys(areaErrors).length > 0) {
-      clientError("VALIDATION", "Area details incomplete", areaErrors);
+      clientError('VALIDATION', 'Area details incomplete', areaErrors);
     }
 
     const photos = await ctx.db
-      .query("photos")
-      .withIndex("by_survey", (q) => q.eq("surveyId", args.id))
+      .query('photos')
+      .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
       .collect();
     const slots = new Set(photos.map((p) => p.slot));
     const missing: string[] = [];
-    if (!slots.has("front")) missing.push("front photo required");
-    if (!slots.has("side")) missing.push("side photo required");
+    if (!slots.has('front')) missing.push('front photo required');
+    if (!slots.has('side')) missing.push('side photo required');
     if (missing.length > 0) {
-      clientError("VALIDATION", "Required photos missing", { photos: missing });
+      clientError('VALIDATION', 'Required photos missing', { photos: missing });
     }
     if (!survey.gps) {
-      clientError("VALIDATION", "GPS capture required", { gps: ["capture GPS first"] });
+      clientError('VALIDATION', 'GPS capture required', { gps: ['capture GPS first'] });
     }
 
     const muni = await ctx.db.get(survey.municipalityId);
-    if (!muni) clientError("NOT_FOUND", "Municipality not found");
+    if (!muni) clientError('NOT_FOUND', 'Municipality not found');
     const district = await ctx.db.get(muni.districtId);
     const addressCtx = {
       ...addressTenantContext(muni, district),
       configuredPostalCode: muni.postalCode,
     };
-    validateBusinessRules(survey as unknown as Record<string, unknown>, addressCtx, "submit");
+    validateBusinessRules(survey as unknown as Record<string, unknown>, addressCtx, 'submit');
 
     await ctx.db.patch(args.id, {
-      status: "submitted",
-      qcStatus: survey.qcStatus === "rejected" ? "pending" : survey.qcStatus,
+      status: 'submitted',
+      qcStatus: survey.qcStatus === 'rejected' ? 'pending' : survey.qcStatus,
       submittedAt: Date.now(),
       serverVersion: survey.serverVersion + 1,
     });
     await writeAudit(ctx, {
       actorId: me._id,
-      action: "survey.submitted",
-      entity: "survey",
+      action: 'survey.submitted',
+      entity: 'survey',
       entityId: args.id,
     });
 
@@ -1207,35 +1207,35 @@ export const submit = mutation({
 });
 
 export const remove = mutation({
-  args: { id: v.id("surveys") },
+  args: { id: v.id('surveys') },
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)]);
     if (!survey) return;
-    if (survey.surveyorId !== me._id && me.role !== "admin") {
-      clientError("FORBIDDEN", "Not your survey");
+    if (survey.surveyorId !== me._id && me.role !== 'admin') {
+      clientError('FORBIDDEN', 'Not your survey');
     }
     await assertMunicipalityInScope(ctx, me, survey.municipalityId);
-    if (survey.qcStatus === "approved") {
-      clientError("LOCKED", "Cannot delete an approved survey");
+    if (survey.qcStatus === 'approved') {
+      clientError('LOCKED', 'Cannot delete an approved survey');
     }
 
     // Cascade delete child rows.
-    for await (const f of ctx.db.query("floors").withIndex("by_survey", (q) => q.eq("surveyId", args.id))) {
+    for await (const f of ctx.db.query('floors').withIndex('by_survey', (q) => q.eq('surveyId', args.id))) {
       await ctx.db.delete(f._id);
     }
-    for await (const p of ctx.db.query("photos").withIndex("by_survey", (q) => q.eq("surveyId", args.id))) {
+    for await (const p of ctx.db.query('photos').withIndex('by_survey', (q) => q.eq('surveyId', args.id))) {
       await ctx.storage.delete(p.storageId);
       await ctx.db.delete(p._id);
     }
-    for await (const r of ctx.db.query("qcRemarks").withIndex("by_survey", (q) => q.eq("surveyId", args.id))) {
+    for await (const r of ctx.db.query('qcRemarks').withIndex('by_survey', (q) => q.eq('surveyId', args.id))) {
       await ctx.db.delete(r._id);
     }
     await ctx.db.delete(args.id);
 
     await writeAudit(ctx, {
       actorId: me._id,
-      action: "survey.deleted",
-      entity: "survey",
+      action: 'survey.deleted',
+      entity: 'survey',
       entityId: args.id,
     });
   },
@@ -1245,7 +1245,7 @@ export const remove = mutation({
 
 type SurveyUpsertArgs = {
   localId: string;
-  municipalityId: Id<"municipalities">;
+  municipalityId: Id<'municipalities'>;
   clientUpdatedAt: number;
   wardNo: string;
   parcelNo: string;
@@ -1266,8 +1266,8 @@ type SurveyUpsertArgs = {
   plinthSqft: number;
   isSlum: boolean;
   municipalWaterConnection: boolean;
-  waterSource: Doc<"surveys">["waterSource"];
-  sanitationType: Doc<"surveys">["sanitationType"];
+  waterSource: Doc<'surveys'>['waterSource'];
+  sanitationType: Doc<'surveys'>['sanitationType'];
   municipalWasteCollection: boolean;
   sectorNo?: string;
   oldPropertyNo?: string;
@@ -1275,12 +1275,12 @@ type SurveyUpsertArgs = {
   constructedYear?: number;
   respondentName?: string;
   relationship?: string;
-  owners?: Doc<"surveys">["owners"];
+  owners?: Doc<'surveys'>['owners'];
   familySize?: number;
   altMobileNo?: string;
   houseNo?: string;
   electricityNo?: string;
-  gps?: Doc<"surveys">["gps"];
+  gps?: Doc<'surveys'>['gps'];
   street?: string;
 };
 
@@ -1299,8 +1299,8 @@ export function normalizePropertyFields<
     sectorNo: args.sectorNo?.trim() || undefined,
     oldPropertyNo: args.oldPropertyNo?.trim() || undefined,
     propertyId: args.propertyId?.trim() || undefined,
-    parcelNo: (args.parcelNo ?? "").trim(),
-    unitNo: (args.unitNo ?? "").trim(),
+    parcelNo: (args.parcelNo ?? '').trim(),
+    unitNo: (args.unitNo ?? '').trim(),
     constructedYear: args.constructedYear,
   };
 }
@@ -1326,7 +1326,7 @@ export function normalizeOwnerFields<
     altMobileNo?: string;
     respondentName?: string;
     relationship?: string;
-    owners?: Doc<"surveys">["owners"];
+    owners?: Doc<'surveys'>['owners'];
     familySize?: number;
   },
 >(args: T): T {
@@ -1336,7 +1336,7 @@ export function normalizeOwnerFields<
   };
   const owners = normalizeOwners(args.owners as Parameters<typeof normalizeOwners>[0]);
   const relationship = trimOpt(args.relationship as string | undefined);
-  const mobileNo = primaryOwnerMobile(owners, relationship) ?? trimOpt(args.mobileNo as string | undefined) ?? "";
+  const mobileNo = primaryOwnerMobile(owners, relationship) ?? trimOpt(args.mobileNo as string | undefined) ?? '';
   const altMobileNo = owners?.[0]?.altMobileNo ?? trimOpt(args.altMobileNo as string | undefined);
   return {
     ...args,
@@ -1350,26 +1350,26 @@ export function normalizeOwnerFields<
 }
 
 /** Remove mutation-only keys before writing to the `surveys` table. */
-export function stripLocalId<T extends { localId: string; id?: Id<"surveys">; surveyorId?: Id<"users"> }>(
+export function stripLocalId<T extends { localId: string; id?: Id<'surveys'>; surveyorId?: Id<'users'> }>(
   args: T,
-): Omit<T, "localId" | "id"> {
+): Omit<T, 'localId' | 'id'> {
   const { localId: _l, id: _id, ...rest } = args;
   return rest;
 }
 
 type DraftMutationArgs = {
-  id?: Id<"surveys">;
+  id?: Id<'surveys'>;
   localId: string;
-  municipalityId: Id<"municipalities">;
+  municipalityId: Id<'municipalities'>;
   clientUpdatedAt: number;
   wardNo?: string;
   [key: string]: unknown;
 };
 
 export function mergeDraftArgs(
-  existing: Doc<"surveys"> | null,
+  existing: Doc<'surveys'> | null,
   patch: DraftMutationArgs,
-  muni: Doc<"municipalities">,
+  muni: Doc<'municipalities'>,
 ): SurveyUpsertArgs {
   const base: SurveyUpsertArgs = existing
     ? {
@@ -1434,24 +1434,24 @@ function pickDefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 function validateBusinessRules(
   in_: Record<string, unknown>,
   addressCtx: Parameters<typeof validateAddressSection>[1],
-  mode: "draft" | "submit" = "submit",
+  mode: 'draft' | 'submit' = 'submit',
 ): void {
   const details: Record<string, string[]> = {};
-  const strict = mode === "submit";
+  const strict = mode === 'submit';
 
   Object.assign(
     details,
     validateOwnerSection(
       {
         relationship: in_.relationship as string | undefined,
-        owners: in_.owners as Parameters<typeof validateOwnerSection>[0]["owners"],
+        owners: in_.owners as Parameters<typeof validateOwnerSection>[0]['owners'],
       },
       { requirePrimaryMobile: strict },
     ),
   );
-  const denormalizedMobile = String(in_.mobileNo ?? "").trim();
+  const denormalizedMobile = String(in_.mobileNo ?? '').trim();
   if (denormalizedMobile && !isValidIndianOwnerMobile(denormalizedMobile)) {
-    details.mobileNo = ["Enter a valid 10-digit mobile (starts 6-9)"];
+    details.mobileNo = ['Enter a valid 10-digit mobile (starts 6-9)'];
   }
   Object.assign(
     details,
@@ -1469,24 +1469,24 @@ function validateBusinessRules(
   );
   const plot = in_.plotSqft as unknown as number;
   const plinth = in_.plinthSqft as unknown as number;
-  if (typeof plot === "number" && typeof plinth === "number" && plinth > plot && plot > 0) {
-    details.plinthSqft = ["Plinth area cannot exceed plot area"];
+  if (typeof plot === 'number' && typeof plinth === 'number' && plinth > plot && plot > 0) {
+    details.plinthSqft = ['Plinth area cannot exceed plot area'];
   }
   const familySize = in_.familySize as unknown as number | undefined;
   if (familySize != null && (familySize < 1 || !Number.isInteger(familySize))) {
-    details.familySize = ["Family size must be a whole number ≥ 1"];
+    details.familySize = ['Family size must be a whole number ≥ 1'];
   }
 
-  const parcelNo = String(in_.parcelNo ?? "").trim();
+  const parcelNo = String(in_.parcelNo ?? '').trim();
   if (strict && !parcelNo) {
-    details.parcelNo = ["Parcel number is required"];
+    details.parcelNo = ['Parcel number is required'];
   }
-  const unitNo = String(in_.unitNo ?? "").trim();
+  const unitNo = String(in_.unitNo ?? '').trim();
   if (strict && !unitNo) {
-    details.unitNo = ["Unit number is required"];
+    details.unitNo = ['Unit number is required'];
   }
-  if (strict && !String(in_.assessmentYear ?? "").trim()) {
-    details.assessmentYear = ["Assessment year is required"];
+  if (strict && !String(in_.assessmentYear ?? '').trim()) {
+    details.assessmentYear = ['Assessment year is required'];
   }
   Object.assign(
     details,
@@ -1522,7 +1522,7 @@ function validateBusinessRules(
     }
   }
   if (in_.gps) {
-    const gpsMessage = validateGps(in_.gps as NonNullable<Doc<"surveys">["gps"]>, {
+    const gpsMessage = validateGps(in_.gps as NonNullable<Doc<'surveys'>['gps']>, {
       strict,
     });
     if (gpsMessage) {
@@ -1531,8 +1531,8 @@ function validateBusinessRules(
   }
   if (Object.keys(details).length > 0) {
     throw new ConvexError({
-      code: "VALIDATION",
-      message: "Business rule violation",
+      code: 'VALIDATION',
+      message: 'Business rule violation',
       details,
     });
   }

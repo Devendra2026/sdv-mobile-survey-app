@@ -96,7 +96,11 @@ export function visitedStepPatch(
 
 export function incompleteStepLabels(draft: WizardDraft): string[] {
   const c = stepCompletion(draft);
-  return WIZARD_STEPS.filter((s) => !c[s.key]).map((s) => s.label);
+  const labels: string[] = [];
+  for (const s of WIZARD_STEPS) {
+    if (!c[s.key]) labels.push(s.label);
+  }
+  return labels;
 }
 
 export function allStepsComplete(draft: WizardDraft): boolean {
