@@ -130,6 +130,7 @@ export function indicatorSteps(draft: WizardDraft, activeKey: string) {
     short: s.short,
     completed: c[s.key],
     progress: (c[s.key] ? 'complete' : stepHasProgress(draft, s.key) ? 'in_progress' : 'incomplete') as StepStatus,
+    /** Field surveyors may jump to any step and fill sections in any order. */
     reachable: true,
   }));
 }

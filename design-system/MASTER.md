@@ -1,61 +1,40 @@
 # Survey App Design System
 
-## Brand
+Government field-survey mobile app — professional, accessible, high-contrast.
 
-- Primary: `#003B8E`
-- Accent: `#D50000`
-- Primary soft: `#EAF2FE`
-- Success: `#16A34A` · Warning: `#D97706` · Danger: `#DC2626`
+## Colors
 
-## Typography (NativeWind)
+| Token                        | Value                 | Use                            |
+| ---------------------------- | --------------------- | ------------------------------ |
+| brand                        | `#003B8E`             | Headers, primary actions       |
+| brand-soft                   | `#E6EBF4`             | Selected rows, chips           |
+| page-light / page-dark       | `#F5F7FA` / `#0F172A` | Screen backgrounds             |
+| surface-light / surface-dark | `#FFFFFF` / `#1E293B` | Cards, modals                  |
+| success                      | `#16A34A`             | Complete steps, sync indicator |
+| warning                      | `#F59E0B`             | In-progress steps              |
+| danger                       | `#DC2626`             | Errors, QC rejected            |
 
-- Display / H1–H3 / Body / Helper / Caption / Label — see `tailwind.config.js`
-- Field forms: `text-body` for inputs, `text-caption` for helpers
-- Admin tables/lists: `text-[13px]` primary, `text-caption` secondary
+## Typography
 
-## Spacing & layout
-
-- 4px grid via `space(n) = n × 4`
-- Screen padding: `14px` horizontal
-- Card radius: `rounded-xl` (12px) field · `rounded-2xl` (16px) admin
-- Card elevation: `border border-line-subtle shadow-sm`
+- Display / H1 / H2 for screen titles (500 weight)
+- Body 15px for form labels and inputs
+- Caption / helper 11–12px for hints and metadata
+- Label 11px uppercase for section headers
 
 ## Touch targets
 
-- Primary actions: 52px height (`size="lg"`)
-- Secondary: 44px minimum
-- Step chips: min 44px wide
+- Minimum 44px height for buttons and chips (`touch-sm` / `touch-md` / `touch`)
+- Wizard footer: primary Next action gets flex priority
 
-## Status semantics
+## Wizard UX patterns
 
-| Status    | Tone    | Usage               |
-| --------- | ------- | ------------------- |
-| draft     | warning | In-progress surveys |
-| submitted | info    | Awaiting QC         |
-| approved  | success | Locked records      |
-| rejected  | danger  | Needs revision      |
+1. Progress bar + "Step X of 9" with tappable step sheet — **all steps freely navigable**
+2. Step chips: completed (checkmark), in-progress (warning dot); never lock steps during collection
+3. Cloud sync: "Save draft" → "Update cloud" after first sync; green cloud-done badge in footer
+4. Photos: auto-sync draft when online before capture
+5. Scroll: form content uses `wizardScrollContentStyle` (no `flexGrow: 1`); 140px bottom padding clears save bar + keyboard
 
-## Motion
+## Anti-patterns
 
-- Wizard stack: `slide_from_right`
-- Press feedback: `active:opacity-90` (no layout shift)
-- Respect `prefers-reduced-motion` for Reanimated transitions
-
-## Survey UX
-
-- One question per screen in `/wizard/flow`
-- Progress: step indicator + "Question X of Y" bar
-- Local auto-save on every field change; debounced cloud sync on all wizard steps when district+ULB set
-- Locked future wizard steps until prior steps complete
-
-## Anti-patterns (avoid)
-
-- Emoji as icons — use Ionicons only
-- Light-mode body text below `#475569` contrast
-- Invisible borders in light mode
-- Scale transforms on press that shift layout
-
-## Stack
-
-- React Native + Expo + NativeWind
-- Copy-own primitives in `src/components/ui/primitives.tsx` (21st.dev-style)
+- Do not use `flexGrow: 1` on wizard ScrollView content — it blocks vertical scrolling
+- Do not block step navigation during field collection — validate only on Next/Submit

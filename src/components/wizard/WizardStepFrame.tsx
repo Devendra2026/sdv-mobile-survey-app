@@ -4,9 +4,7 @@
  */
 import { Banner, Spinner, Toast } from '@/components';
 import { FloatingSaveBar, WizardHeader } from '@/components/wizard';
-import type { Id } from '@/convex/_generated/dataModel';
-import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
-import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
+import { formatSaveDraftError, useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import { createNewDraft, draftToSaveDraftPayload, useWizardDraft, type WizardDraft } from '@/hooks/useWizardDraft';
 import {
   FIRST_WIZARD_ROUTE,
@@ -21,11 +19,11 @@ import {
 } from '@/hooks/wizardSteps';
 import { toUserMessage } from '@/utils/errors';
 import { backOrReplace } from '@/utils/navigation';
-import { keyboardAvoidingProps, scrollViewProps } from '@/utils/scroll-props';
+import { wizardScrollContentStyle, wizardScrollViewProps } from '@/utils/scroll-props';
 import { stepValidationDetails } from '@/utils/wizardValidation';
 import { useRouter } from 'expo-router';
-import { ReactNode, useCallback, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, View } from 'react-native';
+import { ReactNode, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface WizardStepFrameProps {
@@ -55,36 +53,6 @@ export function WizardStepFrame({
   const { save: saveToServer, saving: savingDraft } = useSaveSurveyDraft();
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
-  const onSynced = useCallback(
-    async (result: { surveyId: Id<'surveys'> | null }) => {
-      if (draft && result.surveyId && draft.serverSurveyId !== result.surveyId) {
-        await update({ serverSurveyId: result.surveyId });
-      }
-    },
-    [draft, update],
-  );
-
-  const onSyncState = useCallback(
-    async (state: { pendingCloudSync: boolean; lastSyncError?: string; lastSyncedAt?: number }) => {
-      await update({
-        pendingCloudSync: state.pendingCloudSync,
-        lastSyncError: state.lastSyncError,
-        lastSyncedAt: state.lastSyncedAt,
-      });
-    },
-    [update],
-  );
-
-  const onSyncError = useCallback((error: unknown) => {
-    setToast({ title: toUserMessage(error), tone: 'danger' });
-  }, []);
-
-  const { lastSyncedAt, syncing, isOnline, lastSyncError, pendingCloudSync, flushSync } = useDebouncedCloudSave(draft, {
-    onSynced,
-    onError: onSyncError,
-    onSyncState,
-  });
-
   if (loadingDraft || !draft || loading) {
     return (
       <View className="flex-1 bg-page-light dark:bg-page-dark">
@@ -98,18 +66,11 @@ export function WizardStepFrame({
   const currentStepValidation = stepValidationDetails(draft).find((s) => s.key === activeKey);
   const currentMissing = currentStepValidation?.missingFields ?? [];
 
-  const persistAndSync = async () => {
-    if (isOnline && draftToSaveDraftPayload(draft)) {
-      flushSync();
-    }
-  };
-
   const goBack = async () => {
     const prev = prevStep(activeKey);
     if (prev) {
       const prevKey = stepKeyFromRoute(prev);
       if (prevKey) await update(visitedStepPatch(draft, prevKey));
-      await persistAndSync();
       router.replace({ pathname: prev as never, params: { localId } });
     } else backOrReplace(router);
   };
@@ -121,7 +82,6 @@ export function WizardStepFrame({
     const nextKey = stepKeyFromRoute(next);
     if (nextKey) await update(visitedStepPatch(draft, nextKey));
     else await update(visitedStepPatch(draft, 'review'));
-    await persistAndSync();
     router.replace({ pathname: next as never, params: { localId } });
   };
 
@@ -135,26 +95,32 @@ export function WizardStepFrame({
     try {
       const result = await saveToServer(draft);
       if (!result.surveyId) {
-        setToast({ title: 'Could not save draft', tone: 'danger' });
+        const err = result.sectionErrors.header ?? 'Could not save draft';
+        setToast({ title: err, tone: 'danger' });
         return;
       }
       if (result.failedSections.length > 0) {
-        setToast({ title: `Partial save — retry: ${result.failedSections.join(', ')}`, tone: 'danger' });
+        const detail = formatSaveDraftError(result);
+        setToast({ title: detail ? `Partial save — ${detail}` : 'Partial save failed', tone: 'danger' });
         await update({
           serverSurveyId: result.surveyId,
           pendingCloudSync: true,
-          lastSyncError: `Failed: ${result.failedSections.join(', ')}`,
+          lastSyncError: detail || `Failed: ${result.failedSections.join(', ')}`,
           lastSyncedAt: draft.lastSyncedAt,
         });
         return;
       }
+      const wasSynced = Boolean(draft.serverSurveyId);
       await update({
         serverSurveyId: result.surveyId,
         pendingCloudSync: false,
         lastSyncError: undefined,
         lastSyncedAt: Date.now(),
       });
-      setToast({ title: 'Draft saved to cloud', tone: 'success' });
+      setToast({
+        title: wasSynced ? 'Cloud copy updated' : 'Draft saved — continue collecting; tap again to sync changes',
+        tone: 'success',
+      });
     } catch (e) {
       await update({ pendingCloudSync: true, lastSyncError: toUserMessage(e) });
       setToast({ title: toUserMessage(e), tone: 'danger' });
@@ -189,17 +155,8 @@ export function WizardStepFrame({
     const step = WIZARD_STEPS.find((s) => s.key === key);
     if (!step) return;
     await update(visitedStepPatch(draft, step.key));
-    await persistAndSync();
     router.replace({ pathname: step.route as never, params: { localId } });
   };
-
-  let syncLabel: string | undefined;
-  if (syncing) syncLabel = 'Saving progress…';
-  else if (!isOnline) syncLabel = 'Offline — saved locally, will sync when online';
-  else if (lastSyncError) syncLabel = `Sync failed — tap to retry`;
-  else if (pendingCloudSync) syncLabel = 'Pending cloud sync…';
-  else if (lastSyncedAt) syncLabel = `Saved ${new Date(lastSyncedAt).toLocaleTimeString()}`;
-  else if (canSaveDraft) syncLabel = 'Progress auto-saves when you change steps';
 
   const nextLabel =
     activeKey === 'photos'
@@ -225,12 +182,8 @@ export function WizardStepFrame({
         </View>
       </SafeAreaView>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} {...keyboardAvoidingProps()}>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 14, paddingBottom: 24, flexGrow: 1 }}
-          {...scrollViewProps}
-        >
+      <View style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={wizardScrollContentStyle()} {...wizardScrollViewProps}>
           {nextBlocked && currentMissing.length > 0 ? (
             <Banner
               tone="warning"
@@ -242,29 +195,19 @@ export function WizardStepFrame({
           ) : null}
           {children({ draft, update })}
         </ScrollView>
-        {syncLabel ? (
-          <Pressable
-            onPress={lastSyncError || pendingCloudSync ? flushSync : undefined}
-            className="px-4 py-1.5 bg-page-light dark:bg-page-dark border-t border-line-subtle"
-          >
-            <Text
-              className={`text-[11px] text-center ${lastSyncError ? 'text-danger font-medium' : 'text-ink-tertiary-light'}`}
-            >
-              {syncLabel}
-            </Text>
-          </Pressable>
-        ) : null}
         <FloatingSaveBar
           onBack={prevStep(activeKey) ? goBack : undefined}
           onSaveDraft={canSaveDraft ? onSaveDraft : undefined}
+          saveDraftLabel={draft.serverSurveyId ? 'Update cloud' : 'Save draft'}
+          cloudSynced={Boolean(draft.serverSurveyId) && !draft.pendingCloudSync}
           onNext={goNext}
           nextLabel={nextLabel}
           nextDisabled={nextBlocked}
           saveDraftDisabled={!canSaveDraft}
           loading={loading}
-          savingDraft={savingDraft || syncing}
+          savingDraft={savingDraft}
         />
-      </KeyboardAvoidingView>
+      </View>
       {toast ? <Toast visible title={toast.title} tone={toast.tone} onHide={() => setToast(null)} /> : null}
     </View>
   );

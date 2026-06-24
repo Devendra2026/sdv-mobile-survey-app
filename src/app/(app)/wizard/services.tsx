@@ -1,7 +1,7 @@
 /**
  * Step 6 — Municipal services: water supply, sanitation, solid waste.
  */
-import { AppCard, AppDropdown, ChipSelector, SectionLabel, Spinner } from '@/components';
+import { AppCard, AppDropdown, AppInput, ChipSelector, SectionLabel, Spinner } from '@/components';
 import { WizardStepFrame } from '@/components/wizard';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { servicesStepComplete } from '@/utils/services';
@@ -98,6 +98,17 @@ export default function StepServices() {
               label="Municipal / Town Panchayat door-to-door collection"
               value={draft.municipalWasteCollection}
               onChange={(v) => update({ municipalWasteCollection: v })}
+            />
+          </AppCard>
+
+          <SectionLabel>Electricity</SectionLabel>
+          <AppCard padded className="mb-4">
+            <AppInput
+              label="Electricity consumer number"
+              placeholder="Optional — if available"
+              value={draft.electricityNo ?? ''}
+              onChangeText={(v) => update({ electricityNo: v.trim() || undefined })}
+              autoCapitalize="characters"
             />
           </AppCard>
 

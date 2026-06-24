@@ -31,7 +31,13 @@ export function ReviewPhotosSection({
   onEditStep: () => void;
 }) {
   const { photoBySlot, previewBySlot, uploadingSlot, capturedCount, requiredCount, capture, confirmRemove } =
-    useWizardPhotoCapture({ draft, update, serverSurveyId, localId: draft.localId });
+    useWizardPhotoCapture({
+      draft,
+      update,
+      serverSurveyId,
+      localId: draft.localId,
+      onRecoveryError: (message) => setToast({ title: message, tone: 'danger' }),
+    });
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);
 
   const onCapture = async (slot: SurveyPhotoSlot) => {
@@ -57,7 +63,10 @@ export function ReviewPhotosSection({
     [photoBySlot],
   );
 
-  const urlRows = useQuery(api.photos.resolveStorageUrls, storageIds.length > 0 ? { storageIds } : 'skip');
+  const urlRows = useQuery(
+    api.photos.resolveStorageUrls,
+    serverSurveyId && storageIds.length > 0 ? { storageIds, surveyId: serverSurveyId } : 'skip',
+  );
   const urlByStorageId = useMemo(() => {
     const m = new Map<string, string>();
     for (const row of urlRows ?? []) {

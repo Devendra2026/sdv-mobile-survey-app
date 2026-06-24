@@ -34,7 +34,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
-import { useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
+import { formatSaveDraftError, useSaveSurveyDraft } from '@/hooks/useSaveSurveyDraft';
 import {
   clearDraft,
   draftToSaveDraftPayload,
@@ -43,7 +43,7 @@ import {
   useWizardDraft,
 } from '@/hooks/useWizardDraft';
 import { convexValidationMessages, toUserMessage } from '@/utils/errors';
-import { scrollViewProps } from '@/utils/scroll-props';
+import { wizardScrollContentStyle, wizardScrollViewProps } from '@/utils/scroll-props';
 import { allMissingFields } from '@/utils/wizardValidation';
 import { useMutation } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -138,7 +138,11 @@ export default function ReviewScreen() {
         return;
       }
       if (result.failedSections.length > 0) {
-        setToast({ title: `Save incomplete: ${result.failedSections.join(', ')}`, tone: 'danger' });
+        const detail = formatSaveDraftError(result);
+        setToast({
+          title: detail ? `Save incomplete: ${detail}` : `Save incomplete: ${result.failedSections.join(', ')}`,
+          tone: 'danger',
+        });
         return;
       }
       const surveyId = result.surveyId;
@@ -163,7 +167,7 @@ export default function ReviewScreen() {
     <View className="flex-1 bg-page-light dark:bg-page-dark">
       <ReviewWizardHeader draft={draft} />
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32, flexGrow: 1 }} {...scrollViewProps}>
+      <ScrollView contentContainerStyle={wizardScrollContentStyle(24)} {...wizardScrollViewProps}>
         <ReviewCompletionBanner allComplete={submitReady} draft={draft} />
         {!submitReady ? <ReviewStepChecklist draft={draft} /> : null}
         <ReviewSurveyStartSection

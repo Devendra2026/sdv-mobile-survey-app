@@ -1,7 +1,8 @@
 'use no memo';
 
 /**
- * Step 7 — GPS capture. Single-shot coordinate capture with no accuracy validation.
+ * Step 7 — GPS capture. Single-shot coordinate with strict submit validation
+ * (mock block, freshness, positive accuracy).
  */
 import { AppButton, AppCard, Banner, GPSStatus, SectionLabel, Spinner } from '@/components';
 import { GpsMapPreview } from '@/components/gis';

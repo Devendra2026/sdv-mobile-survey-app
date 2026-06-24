@@ -7,6 +7,7 @@ import { AppButton, AppCard, AppDropdown, AppInput, NumberStepper, SectionLabel,
 import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import { altMobileError, primaryMobileError, sanitizeFixedDigits } from '@/convex/surveyFieldValidation';
+import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { newOwnerRow, stepCompletion, type WizardDraft, type WizardOwnerRow } from '@/hooks/useWizardDraft';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
@@ -171,9 +172,11 @@ function OwnerStepBody({
 
 export default function StepOwner() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  const ownerRules = useQuery(api.ownerRules.respondentRelationships, {});
+  const { convexReady } = useClerkConvexAuth();
+  const ownerRules = useQuery(api.ownerRules.respondentRelationships, convexReady ? {} : 'skip');
 
-  if (!ownerRules || !localId) return <Spinner label="Loading…" />;
+  if (!localId) return <Spinner label="Loading…" />;
+  if (!ownerRules) return <Spinner label="Loading…" />;
 
   return (
     <WizardStepFrame

@@ -1,6 +1,4 @@
 import { AppButton, AppInput, Banner } from '@/components';
-import type { Id } from '@/convex/_generated/dataModel';
-import { useDebouncedCloudSave } from '@/hooks/useDebouncedCloudSave';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { allStepsComplete, incompleteStepLabels } from '@/hooks/wizardSteps';
 import {
@@ -11,10 +9,9 @@ import {
   type SurveyQuestion,
   writeQuestionValue,
 } from '@/survey/questionCatalog';
-import { toUserMessage } from '@/utils/errors';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 interface QuestionFlowScreenProps {
@@ -30,21 +27,6 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
   const q = questions[questionIndex];
   const progress = questionProgress(questionIndex);
   const [error, setError] = useState<string | null>(null);
-  const [flowToast, setFlowToast] = useState<string | null>(null);
-
-  const onSynced = useCallback(
-    async (result: { surveyId: Id<'surveys'> | null }) => {
-      if (result.surveyId && draft.serverSurveyId !== result.surveyId) {
-        await update({ serverSurveyId: result.surveyId });
-      }
-    },
-    [draft.serverSurveyId, update],
-  );
-
-  const { lastSyncedAt, syncing, isOnline } = useDebouncedCloudSave(draft, {
-    onSynced,
-    onError: (e) => setFlowToast(toUserMessage(e)),
-  });
 
   const value = useMemo(() => (q ? readQuestionValue(draft, q.field) : ''), [draft, q]);
 
@@ -63,14 +45,6 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
       </View>
     );
   }
-
-  const syncLabel = syncing
-    ? 'Syncing…'
-    : lastSyncedAt
-      ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString()}`
-      : isOnline
-        ? 'Saved locally'
-        : 'Offline — saved locally';
 
   const goNext = async () => {
     if (q.kind === 'redirect' && q.redirectRoute) {
@@ -117,8 +91,6 @@ export function QuestionFlowScreen({ localId, questionIndex, draft, update, ques
       <View className="h-1.5 rounded-full bg-line-subtle mt-3 overflow-hidden">
         <View className="h-full bg-brand rounded-full" style={{ width: `${progress.pct}%` }} />
       </View>
-      <Text className="text-caption text-ink-tertiary-light mt-2">{syncLabel}</Text>
-      {flowToast ? <Text className="text-caption text-danger mt-1">{flowToast}</Text> : null}
       {!allStepsComplete(draft) && q.kind === 'redirect' ? (
         <Banner tone="warning" title="Steps incomplete" message={`Finish: ${incomplete.join(', ')}`} className="mt-4" />
       ) : null}

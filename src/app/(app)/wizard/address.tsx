@@ -16,7 +16,7 @@ const convexIdEq = (a?: string | null, b?: string | null) => a != null && b != n
 
 export default function StepAddress() {
   const { localId } = useLocalSearchParams<{ localId: string }>();
-  if (!localId) return null;
+  if (!localId) return <Spinner label="Loading…" />;
 
   return (
     <WizardStepFrame

@@ -34,6 +34,10 @@ export default function WizardEntry() {
           router.replace('/surveys');
           return;
         }
+        if (survey.status !== 'draft') {
+          router.replace({ pathname: '/(app)/survey/[id]', params: { id: surveyId } });
+          return;
+        }
         const draft = surveyToDraft(survey);
         await persistDraft(draft);
         localId = draft.localId;

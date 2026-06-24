@@ -239,7 +239,6 @@ export async function persistDraft(draft: WizardDraft): Promise<void> {
   const next = {
     ...draft,
     updatedAt: Date.now(),
-    pendingCloudSync: draft.municipalityId ? true : draft.pendingCloudSync,
   };
   await AsyncStorage.setItem(KEY(next.localId), JSON.stringify(next));
 }

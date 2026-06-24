@@ -4,7 +4,7 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 
 ## Environment setup
 
-- Fleet APKs use Clerk **development** (`pk_test_…`) — **100 emails/month** cap. If sign-in shows the email-limit error, run `npm run clerk:unblock-field-user` (requires `CLERK_SECRET_KEY` in web `.env.local`) and/or disable **Client Trust** in Clerk Dashboard → Attack protection. See [README.md](../README.md) § Clerk dev email limit.
+- Fleet APKs use Clerk **development** (`pk_test_…`) — **100 emails/month** cap. If sign-in shows the email-limit error, run `npm run clerk:unblock-field-user` or `npm run clerk:provision-field-user` (requires `CLERK_SECRET_KEY` in web `.env.local`) and/or disable **Client Trust** in Clerk Dashboard → Attack protection. See [README.md](../README.md) § Clerk dev email limit and [CLERK_FIELD_UNBLOCK.md](./CLERK_FIELD_UNBLOCK.md).
 - Set `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY` and `EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY` in EAS preview/production **and** `.env.local`
 - `npm run verify:eas-preview` fails if the EAS Maps key is missing or does not match `.env.local`
 - Enable Maps SDK for Android and iOS in Google Cloud Console
@@ -28,6 +28,15 @@ Use this on Nagar Nigam fleet devices before promoting a production Android buil
 - [ ] Text display (full + 6-decimal) matches `draft.gps`
 - [ ] Retake updates marker without stale pin
 - [ ] Review screen and survey detail show the same coordinates as wizard GPS step
+
+## Photos and cloud sync
+
+- [ ] Capture front + side on photos step — previews show immediately after capture
+- [ ] Force-close app after capture, reopen wizard — photo previews load from cloud (not blank)
+- [ ] Toggle airplane mode after capture — photo saved locally; link completes when back online
+- [ ] Partial sync toast shows specific error (e.g. locked survey), not generic "photos failed"
+- [ ] Tap Next on photos step only after sync bar shows saved (no pending cloud sync)
+- [ ] Review submit blocked when save incomplete; retry sync from sync bar tap
 
 ## Convex
 

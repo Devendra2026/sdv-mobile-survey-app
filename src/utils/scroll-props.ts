@@ -10,6 +10,31 @@ export const scrollViewProps: Pick<
   overScrollMode: 'always',
 };
 
+/** Space below wizard form content so fields clear the floating save bar + keyboard. */
+export const WIZARD_FOOTER_SCROLL_PADDING = 140;
+
+export const wizardScrollViewProps: Pick<
+  ScrollViewProps,
+  | 'keyboardShouldPersistTaps'
+  | 'nestedScrollEnabled'
+  | 'showsVerticalScrollIndicator'
+  | 'overScrollMode'
+  | 'keyboardDismissMode'
+  | 'automaticallyAdjustKeyboardInsets'
+> = {
+  ...scrollViewProps,
+  keyboardDismissMode: 'on-drag',
+  automaticallyAdjustKeyboardInsets: Platform.OS === 'ios',
+};
+
+export function wizardScrollContentStyle(extraBottom = 0) {
+  return {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: WIZARD_FOOTER_SCROLL_PADDING + extraBottom,
+  };
+}
+
 export const horizontalScrollProps: Pick<
   ScrollViewProps,
   'nestedScrollEnabled' | 'showsHorizontalScrollIndicator' | 'overScrollMode' | 'decelerationRate'

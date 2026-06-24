@@ -1,5 +1,5 @@
 /**
- * Offline photo upload queue — flush when network returns.
+ * Offline photo link queue — flush when network returns (storage already uploaded).
  */
 import type { SurveyPhotoSlot } from '@/utils/surveyPhotos';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,10 +18,10 @@ export type QueuedPhotoUpload = {
 };
 
 export async function enqueuePhotoUpload(entry: QueuedPhotoUpload): Promise<void> {
-  const raw = await AsyncStorage.getItem(QUEUE_KEY);
-  const queue: QueuedPhotoUpload[] = raw ? (JSON.parse(raw) as QueuedPhotoUpload[]) : [];
-  queue.push(entry);
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  const queue = await readPhotoUploadQueue();
+  const without = queue.filter((e) => !(e.localId === entry.localId && e.slot === entry.slot));
+  without.push(entry);
+  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(without));
 }
 
 export async function readPhotoUploadQueue(): Promise<QueuedPhotoUpload[]> {
@@ -29,8 +29,22 @@ export async function readPhotoUploadQueue(): Promise<QueuedPhotoUpload[]> {
   return raw ? (JSON.parse(raw) as QueuedPhotoUpload[]) : [];
 }
 
-async function clearPhotoUploadQueue(): Promise<void> {
-  await AsyncStorage.removeItem(QUEUE_KEY);
+export async function hasPendingPhotoUploads(localId: string): Promise<boolean> {
+  const queue = await readPhotoUploadQueue();
+  return queue.some((e) => e.localId === localId);
+}
+
+export function previewUrisFromQueue(
+  queue: QueuedPhotoUpload[],
+  localId: string,
+): Partial<Record<SurveyPhotoSlot, string>> {
+  const out: Partial<Record<SurveyPhotoSlot, string>> = {};
+  for (const item of queue) {
+    if (item.localId === localId && item.previewUri) {
+      out[item.slot] = item.previewUri;
+    }
+  }
+  return out;
 }
 
 export async function dequeuePhotoUpload(localId: string, slot: SurveyPhotoSlot): Promise<void> {

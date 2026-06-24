@@ -3,126 +3,52 @@
  * deduped by localId / serverSurveyId and sorted by last modified.
  */
 import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
-import { draftCompletionPct, listDrafts, type WizardDraft } from '@/hooks/useWizardDraft';
-import { surveyOwnerListLabel } from '@/utils/format';
+import { clearDraft, draftCompletionPct, listDrafts, type WizardDraft } from '@/hooks/useWizardDraft';
+import {
+  isStaleLinkedLocalDraft,
+  mergeDraftLists,
+  type LocalDraftRow,
+  type ServerDraftRow,
+  type UnifiedDraftItem,
+} from '@/utils/unifiedDraftMerge';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from 'convex/react';
 import { useCallback, useMemo, useState } from 'react';
 
-export type UnifiedDraftItem = {
-  key: string;
-  source: 'local' | 'server' | 'merged';
-  localId: string;
-  serverSurveyId?: Id<'surveys'>;
-  parcelNo: string;
-  unitNo: string;
-  ownerName: string;
-  wardNo: string;
-  createdAt: number;
-  updatedAt: number;
-  completionPct: number;
-  /** Resume via local AsyncStorage */
-  resumeLocal: boolean;
-};
+export type { UnifiedDraftItem };
 
-function serverDraftToItem(row: {
-  _id: Id<'surveys'>;
-  localId: string;
-  parcelNo: string;
-  unitNo: string;
-  wardNo: string;
-  owners?: { name?: string }[];
-  respondentName?: string;
-  _creationTime: number;
-  clientUpdatedAt: number;
-  completionPct?: number;
-}): UnifiedDraftItem {
+function toLocalDraftRow(d: WizardDraft): LocalDraftRow {
   return {
-    key: `server:${row._id}`,
-    source: 'server',
-    localId: row.localId,
-    serverSurveyId: row._id,
-    parcelNo: row.parcelNo || 'Draft',
-    unitNo: row.unitNo || '—',
-    ownerName: surveyOwnerListLabel(row.owners, row.respondentName) || 'In progress',
-    wardNo: row.wardNo || '—',
-    createdAt: row._creationTime,
-    updatedAt: row.clientUpdatedAt,
-    completionPct: row.completionPct ?? 0,
-    resumeLocal: false,
-  };
-}
-
-function localDraftToItem(d: WizardDraft): UnifiedDraftItem {
-  return {
-    key: `local:${d.localId}`,
-    source: 'local',
     localId: d.localId,
     serverSurveyId: d.serverSurveyId,
-    parcelNo: d.parcelNo || 'Draft',
-    unitNo: d.unitNo || '—',
-    ownerName: d.owners?.[0]?.name?.trim() || 'In progress',
-    wardNo: d.wardNo ?? '—',
+    parcelNo: d.parcelNo,
+    unitNo: d.unitNo,
+    wardNo: d.wardNo,
+    ownerName: d.owners?.[0]?.name,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
     completionPct: draftCompletionPct(d),
-    resumeLocal: true,
   };
 }
 
-function mergeDraftLists(local: WizardDraft[], server: Parameters<typeof serverDraftToItem>[0][]): UnifiedDraftItem[] {
-  const byLocalId = new Map<string, UnifiedDraftItem>();
-  const byServerId = new Map<string, UnifiedDraftItem>();
-
+/** Drop local copies linked to surveys that are no longer server drafts (e.g. after submit). */
+export async function purgeStaleLocalDrafts(
+  local: WizardDraft[],
+  serverDrafts: ServerDraftRow[],
+): Promise<WizardDraft[]> {
+  const kept: WizardDraft[] = [];
   for (const d of local) {
-    const item = localDraftToItem(d);
-    byLocalId.set(d.localId, item);
-    if (d.serverSurveyId) byServerId.set(d.serverSurveyId, item);
-  }
-
-  for (const row of server) {
-    const serverItem = serverDraftToItem(row);
-    const localMatch = byLocalId.get(row.localId);
-    const existingByServer = byServerId.get(row._id);
-
-    if (localMatch) {
-      const merged: UnifiedDraftItem = {
-        ...localMatch,
-        key: `merged:${row.localId}`,
-        source: 'merged',
-        serverSurveyId: row._id,
-        parcelNo: localMatch.parcelNo !== 'Draft' ? localMatch.parcelNo : serverItem.parcelNo,
-        unitNo: localMatch.unitNo !== '—' ? localMatch.unitNo : serverItem.unitNo,
-        ownerName: localMatch.ownerName !== 'In progress' ? localMatch.ownerName : serverItem.ownerName,
-        wardNo: localMatch.wardNo !== '—' ? localMatch.wardNo : serverItem.wardNo,
-        createdAt: Math.min(localMatch.createdAt, serverItem.createdAt),
-        updatedAt: Math.max(localMatch.updatedAt, serverItem.updatedAt),
-        completionPct: Math.max(localMatch.completionPct, serverItem.completionPct),
-        resumeLocal: true,
-      };
-      byLocalId.set(row.localId, merged);
-      byServerId.set(row._id, merged);
+    if (isStaleLinkedLocalDraft(toLocalDraftRow(d), serverDrafts)) {
+      await clearDraft(d.localId);
       continue;
     }
-
-    if (existingByServer) continue;
-    byLocalId.set(row.localId, serverItem);
-    byServerId.set(row._id, serverItem);
+    kept.push(d);
   }
-
-  const seen = new Set<string>();
-  const items: UnifiedDraftItem[] = [];
-  for (const item of byLocalId.values()) {
-    const dedupeKey = item.serverSurveyId ?? item.localId;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-    items.push(item);
-  }
-
-  return items.sort((a, b) => b.updatedAt - a.updatedAt);
+  return kept;
 }
+
+export { mergeDraftLists };
 
 export function useUnifiedDrafts() {
   const { convexReady } = useClerkConvexAuth();
@@ -136,19 +62,26 @@ export function useUnifiedDrafts() {
       : 'skip',
   );
 
-  const refreshLocal = useCallback(() => {
-    void listDrafts().then(setLocalDrafts);
-  }, []);
+  const refreshLocal = useCallback(async () => {
+    const allLocal = await listDrafts();
+    if (serverDrafts === undefined) {
+      setLocalDrafts(allLocal);
+      return;
+    }
+    const pruned = await purgeStaleLocalDrafts(allLocal, serverDrafts);
+    setLocalDrafts(pruned);
+  }, [serverDrafts]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshLocal();
+      void refreshLocal();
     }, [refreshLocal]),
   );
 
   const items = useMemo(() => {
-    if (serverDrafts === undefined) return mergeDraftLists(localDrafts, []);
-    return mergeDraftLists(localDrafts, serverDrafts);
+    const localRows = localDrafts.map(toLocalDraftRow);
+    if (serverDrafts === undefined) return mergeDraftLists(localRows, []);
+    return mergeDraftLists(localRows, serverDrafts);
   }, [localDrafts, serverDrafts]);
 
   const loading = serverDrafts === undefined;

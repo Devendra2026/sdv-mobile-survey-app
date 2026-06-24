@@ -9,7 +9,7 @@ import { builtUpSqftFromFloors, openLandSqftFromFloors, plinthSqftFromFloors } f
 import { usageTypeToOccupied } from '@/utils/floorRow';
 import { formatArea, humanizeRole } from '@/utils/format';
 import type { MastersBundle } from '@/utils/mastersBundle';
-import { scrollViewProps } from '@/utils/scroll-props';
+import { wizardScrollViewProps } from '@/utils/scroll-props';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -373,8 +373,8 @@ function FloorEditorModal({ masters, value, open, onChange, onClose, onSave }: F
             </Pressable>
           </View>
           <ScrollView
-            {...scrollViewProps}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: FIELD_GAP }}
+            {...wizardScrollViewProps}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: FIELD_GAP }}
           >
             <AppDropdown
               label="Floor No."

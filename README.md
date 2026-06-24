@@ -30,6 +30,14 @@ Development instances cap Clerk-delivered emails at **100/month**. Fleet APK ins
    npm run clerk:unblock-field-user -- --all-fleet
    ```
 
+   **Provision when sign-up is blocked (dev email quota):**
+
+   ```bash
+   npm run clerk:provision-field-user -- --email user@example.com --name "Full Name" --password "secret" --role surveyor
+   ```
+
+   User signs in on the existing APK (not Sign Up). See `docs/CLERK_PK_LIVE_MIGRATION.md` for production rollout.
+
    Sets `bypass_client_trust` so password sign-in on a new device skips email codes.
 
 3. **Retry sign-in** on the installed APK (no rebuild needed).

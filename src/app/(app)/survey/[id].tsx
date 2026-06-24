@@ -22,8 +22,10 @@ import {
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
-import { surveyToDraft } from '@/hooks/useWizardDraft';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { clearDraft, surveyToDraft } from '@/hooks/useWizardDraft';
 import { allStepsComplete, incompleteStepLabels } from '@/hooks/wizardSteps';
+import { canWithCapabilities } from '@/lib/permissions';
 import { toUserMessage } from '@/utils/errors';
 import { normalizeMastersBundle } from '@/utils/mastersBundle';
 import { backOrReplace } from '@/utils/navigation';
@@ -38,7 +40,7 @@ export default function SurveyDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const id = params.id as Id<'surveys'> | undefined;
-  const me = useQuery(api.users.currentUser, {});
+  const { user: me, role, capabilities, isLoading: meLoading } = useCurrentUser();
   const survey = useQuery(api.survey.get, id ? { id } : 'skip');
   const masters = useQuery(api.masters.bundle, {});
   const submit = useMutation(api.survey.submit);
@@ -47,7 +49,7 @@ export default function SurveyDetailScreen() {
   const [busy, setBusy] = useState(false);
   const hideToast = useCallback(() => setToast(null), []);
 
-  if (!id || me === undefined || masters === undefined) return <Spinner label="Loading…" />;
+  if (!id || meLoading || masters === undefined) return <Spinner label="Loading…" />;
   if (survey === undefined) return <Spinner label="Loading survey…" />;
   if (survey === null) {
     return (
@@ -57,7 +59,17 @@ export default function SurveyDetailScreen() {
     );
   }
 
-  const canEdit = me?.role === 'surveyor' ? survey.surveyorId === me._id && survey.qcStatus !== 'approved' : true;
+  const canQcReview = canWithCapabilities(capabilities, role, 'qc.review');
+  const canQcDecide = canWithCapabilities(capabilities, role, 'qc.decide');
+  const canEditDraft = canWithCapabilities(capabilities, role, 'surveys.editDraft');
+  const isOwnSurvey = !!me && survey.surveyorId === me._id;
+  const inQcQueue = survey.status === 'submitted' && survey.qcStatus === 'pending';
+  const canEdit =
+    !!me &&
+    canEditDraft &&
+    survey.qcStatus !== 'approved' &&
+    !(inQcQueue && !canQcReview) &&
+    (role !== 'surveyor' || isOwnSurvey);
   const bundle = normalizeMastersBundle(masters);
   const isOwnDraft = survey.status === 'draft' && !!me && survey.surveyorId === me._id;
   const draftForCheck = surveyToDraft(survey);
@@ -69,10 +81,7 @@ export default function SurveyDetailScreen() {
   const canSubmitBase = canEdit && survey.status === 'draft' && isOwnDraft;
   const canSubmit = canSubmitBase && submitReady;
   const canContinueWizard = canEdit && (survey.status === 'draft' || survey.qcStatus === 'rejected');
-  const canReview =
-    (me?.role === 'supervisor' || me?.role === 'admin') &&
-    survey.status === 'submitted' &&
-    survey.qcStatus !== 'approved';
+  const canReview = canQcDecide && inQcQueue;
 
   const doSubmit = async () => {
     if (!submitReady) {
@@ -93,6 +102,9 @@ export default function SurveyDetailScreen() {
     setBusy(true);
     try {
       await submit({ id });
+      if (survey.localId) {
+        await clearDraft(survey.localId);
+      }
       setToast({ title: 'Submitted for review', tone: 'success' });
     } catch (e) {
       setToast({ title: toUserMessage(e), tone: 'danger' });
