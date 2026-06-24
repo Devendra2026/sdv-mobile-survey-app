@@ -20,6 +20,7 @@
     "lockfile:eas": "node ./scripts/lockfile-eas.mjs",
     "verify:preview-native": "node ./scripts/verify-no-dev-client.mjs preview",
     "verify:clerk-convex": "node ./scripts/verify-clerk-convex.mjs",
+    "verify:clerk-convex:prod": "node ./scripts/verify-clerk-convex.mjs --prod",
     "verify:gps-error-messages": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-error-messages.ts",
     "verify:gps-validation": "npx tsx --tsconfig tsconfig.json ./scripts/verify-gps-validation.ts",
     "verify:wizard": "npx tsx --tsconfig tsconfig.json ./scripts/verify-wizard-validation.ts",

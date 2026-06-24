@@ -60,6 +60,19 @@ if (convexUrl && !isValidHttpsUrl(convexUrl)) {
 }
 
 const clerkPk = env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+const clerkIssuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim();
+
+function clerkIssuerFromPublishableKey(pk) {
+  const match = pk.trim().match(/^pk_(?:test|live)_(.+)$/);
+  if (!match) return null;
+  try {
+    const host = Buffer.from(match[1], 'base64').toString('utf8').replace(/\$$/, '');
+    return `https://${host}`;
+  } catch {
+    return null;
+  }
+}
+
 if (clerkPk && !/^pk_(test|live)_/.test(clerkPk)) {
   fail(`${envName} EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not a valid Clerk key`);
 } else if (clerkPk?.startsWith('pk_test_')) {
@@ -68,6 +81,17 @@ if (clerkPk && !/^pk_(test|live)_/.test(clerkPk)) {
   );
 } else if (clerkPk) {
   ok('Clerk production key (pk_live_…)');
+}
+
+if (clerkPk && clerkIssuer) {
+  const pkIssuer = clerkIssuerFromPublishableKey(clerkPk);
+  if (pkIssuer && pkIssuer !== clerkIssuer) {
+    fail(
+      `${envName} CLERK_JWT_ISSUER_DOMAIN (${clerkIssuer}) does not match publishable key (${pkIssuer})`,
+    );
+  } else if (pkIssuer) {
+    ok(`Clerk issuer matches publishable key (${clerkIssuer})`);
+  }
 }
 
 const mapsKey = MAPS_KEYS.map((k) => env[k]?.trim()).find(Boolean);

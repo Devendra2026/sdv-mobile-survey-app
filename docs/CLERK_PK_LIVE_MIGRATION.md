@@ -24,27 +24,30 @@ Use this checklist when moving field APKs off the development Clerk instance (`p
 ### 2. Convex deployment
 
 ```bash
-cd survey-app
-npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://YOUR_PRODUCTION_ISSUER"
+cd ../sdv-front-new-app
+npm run sync:clerk:prod
 ```
 
-Update [`convex/clerk.ts`](../convex/clerk.ts) fallback issuer if used as repo default.
-
-Configure production webhook in Clerk → Webhooks → same Convex `/clerk-webhook` URL with production signing secret:
+Or manually:
 
 ```bash
+npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://clerk.sdvedutech.in"
 npx convex env set CLERK_WEBHOOK_SECRET whsec_xxx
 ```
 
+(Set `CLERK_WEBHOOK_SECRET` in `sdv-front-new-app/.env.production` first, then `sync:clerk:prod`.)
+
 ### 3. Web admin (`sdv-front-new-app`)
 
-In `.env.local`:
+In `.env.production` (Dokploy) — **not** `.env.local` for production deploy:
 
 ```
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_…
-CLERK_JWT_ISSUER_DOMAIN=https://YOUR_PRODUCTION_ISSUER
+CLERK_JWT_ISSUER_DOMAIN=https://clerk.sdvedutech.in
 CLERK_SECRET_KEY=sk_live_…
 ```
+
+Keep `.env.local` on `pk_test_` for local development only.
 
 ### 4. Mobile fleet env
 
