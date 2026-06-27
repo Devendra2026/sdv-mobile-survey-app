@@ -1,0 +1,7 @@
+# Convex performance monitoring — set alerts in Convex dashboard for:
+# - masters:dashboardCounts
+# - analytics:surveyStatsBreakdown
+# - webDashboard:homeBundle
+#
+# After deploying schema with surveyAggregateBuckets, run once:
+# npx convex run surveyAggregates:backfillSurveyAggregates --internal

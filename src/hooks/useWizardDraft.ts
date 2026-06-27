@@ -1,25 +1,3 @@
-/**
- * Wizard draft state — persisted in AsyncStorage so steps can be filled
- * in over multiple sessions (a surveyor pauses in the field, app closes,
- * comes back later).
- *
- * Why not store the draft in Convex from step 1?
- *   The Convex schema requires every field on `surveys`. A draft has lots
- *   of half-filled fields. Two options:
- *     (a) make every field on `surveys` optional (loses type safety)
- *     (b) keep drafts client-side until "submit"
- *
- *   We pick (b). The wizard writes to AsyncStorage on every step; the
- *   Any step can call `survey.saveDraft` (partial payload, relaxed rules).
- *   Review calls `survey.submit` after all steps are complete — full
- *   validation runs server-side at submit time. Idempotency via `localId`
- *   means retries are safe.
- *
- * Lifecycle:
- *   - createNewDraft()   → generates a fresh localId, returns the empty draft
- *   - useWizardDraft(id) → loads the draft for `localId`, exposes update + reset
- *   - clearDraft(id)     → drops the entry from AsyncStorage after successful submit
- */
 import { validateGpsCapture } from '@/convex/lib/gpsValidation';
 import { primaryOwnerMobileFromOwners } from '@/convex/ownerMobile';
 import {
@@ -29,7 +7,7 @@ import {
   isValidTenDigitMobile,
   isValidUnitNo,
   primaryMobileError,
-} from '@/convex/surveyFieldValidation';
+} from '../../convex/surveyFieldValidation';
 import { isPinValidForUlb } from '@/utils/addressValidation';
 import { plinthSqftFromFloors } from '@/utils/area';
 import { normalizeFloorFields, usageTypeToOccupied } from '@/utils/floorRow';
@@ -42,6 +20,42 @@ import type { Id } from '../../convex/_generated/dataModel';
 import type { StepConfig } from './wizardSteps';
 
 const KEY = (localId: string) => `wizard_draft:${localId}`;
+
+const DRAFT_PERSIST_DEBOUNCE_MS = 300;
+
+const pendingDraftWrites = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingDraftPayloads = new Map<string, WizardDraft>();
+
+function scheduleDraftPersist(localId: string, draft: WizardDraft): void {
+  pendingDraftPayloads.set(localId, draft);
+  const existing = pendingDraftWrites.get(localId);
+  if (existing) clearTimeout(existing);
+  pendingDraftWrites.set(
+    localId,
+    setTimeout(() => {
+      pendingDraftWrites.delete(localId);
+      const toWrite = pendingDraftPayloads.get(localId);
+      if (toWrite) {
+        pendingDraftPayloads.delete(localId);
+        void AsyncStorage.setItem(KEY(localId), JSON.stringify(toWrite));
+      }
+    }, DRAFT_PERSIST_DEBOUNCE_MS),
+  );
+}
+
+/** Flush a debounced draft write immediately (e.g. before navigate away or submit). */
+export async function flushDraftPersist(localId: string): Promise<void> {
+  const timer = pendingDraftWrites.get(localId);
+  if (timer) {
+    clearTimeout(timer);
+    pendingDraftWrites.delete(localId);
+  }
+  const draft = pendingDraftPayloads.get(localId);
+  if (draft) {
+    pendingDraftPayloads.delete(localId);
+    await AsyncStorage.setItem(KEY(localId), JSON.stringify(draft));
+  }
+}
 
 export type WizardOwnerRow = {
   clientOwnerId: string;
@@ -232,6 +246,12 @@ export async function createNewDraft(): Promise<WizardDraft> {
 }
 
 export async function clearDraft(localId: string): Promise<void> {
+  const timer = pendingDraftWrites.get(localId);
+  if (timer) {
+    clearTimeout(timer);
+    pendingDraftWrites.delete(localId);
+  }
+  pendingDraftPayloads.delete(localId);
   await AsyncStorage.removeItem(KEY(localId));
 }
 
@@ -441,7 +461,7 @@ export async function listDrafts(): Promise<WizardDraft[]> {
 
 /**
  * Reactive draft hook. Reads the row from AsyncStorage; `update` patches
- * any subset of fields and re-persists synchronously.
+ * any subset of fields and re-persists with a short debounce.
  */
 type DraftStore = {
   drafts: Record<string, WizardDraft>;
@@ -474,7 +494,7 @@ function draftStoreReducer(state: DraftStore, action: DraftStoreAction): DraftSt
       const current = state.drafts[action.localId];
       if (!current) return state;
       const next = { ...current, ...action.patch, updatedAt: Date.now() };
-      void AsyncStorage.setItem(KEY(action.localId), JSON.stringify(next));
+      scheduleDraftPersist(action.localId, next);
       return { drafts: { ...state.drafts, [action.localId]: next }, pendingId: state.pendingId };
     }
     default:
@@ -518,6 +538,13 @@ export function useWizardDraft(localId: string | undefined) {
 
     return () => {
       alive = false;
+    };
+  }, [localId]);
+
+  useEffect(() => {
+    if (!localId) return;
+    return () => {
+      void flushDraftPersist(localId);
     };
   }, [localId]);
 

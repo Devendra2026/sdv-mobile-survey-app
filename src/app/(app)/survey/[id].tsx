@@ -42,7 +42,7 @@ export default function SurveyDetailScreen() {
   const id = params.id as Id<'surveys'> | undefined;
   const { user: me, role, capabilities, isLoading: meLoading } = useCurrentUser();
   const survey = useQuery(api.survey.get, id ? { id } : 'skip');
-  const masters = useQuery(api.masters.bundle, {});
+  const masters = useQuery(api.masters.bundle, { includeWards: false, includeTenantCatalog: true });
   const submit = useMutation(api.survey.submit);
   const decide = useMutation(api.qc.decide);
   const [toast, setToast] = useState<{ title: string; tone: 'success' | 'danger' } | null>(null);

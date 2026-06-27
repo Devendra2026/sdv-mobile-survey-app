@@ -6,9 +6,8 @@ import { timeAgo } from '@/utils/format';
 import { flatListProps } from '@/utils/scroll-props';
 import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { useMutation } from 'convex/react';
-import { useCallback, useRef } from 'react';
+import { memo, useCallback } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +21,7 @@ const ICONS: Record<string, { name: keyof typeof Ionicons.glyphMap; tone: string
 
 const ListSeparator = () => <View className="h-2" />;
 
-function NotificationRow({
+const NotificationRow = memo(function NotificationRow({
   item,
   onMarkRead,
 }: {
@@ -49,30 +48,11 @@ function NotificationRow({
       </View>
     </Pressable>
   );
-}
+});
 
 export default function NotificationsScreen() {
   const list = useConvexReadyQuery(api.masters.listNotifications);
-  const markAllRead = useMutation(api.masters.markAllRead);
   const markRead = useMutation(api.masters.markRead);
-  const markedOnFocus = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      markedOnFocus.current = false;
-      return () => {
-        markedOnFocus.current = false;
-      };
-    }, []),
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!list || markedOnFocus.current || !list.some((n: Doc<'notifications'>) => !n.readAt)) return;
-      markedOnFocus.current = true;
-      void markAllRead({});
-    }, [list, markAllRead]),
-  );
 
   const handleMarkRead = useCallback(
     (id: Doc<'notifications'>['_id']) => {
@@ -80,6 +60,8 @@ export default function NotificationsScreen() {
     },
     [markRead],
   );
+
+  const keyExtractor = useCallback((n: Doc<'notifications'>) => n._id, []);
 
   const renderItem = useCallback(
     ({ item }: { item: Doc<'notifications'> }) => <NotificationRow item={item} onMarkRead={handleMarkRead} />,
@@ -101,7 +83,7 @@ export default function NotificationsScreen() {
       ) : (
         <FlatList
           data={list}
-          keyExtractor={(n) => n._id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={{ padding: 14 }}
           {...flatListProps}
           ItemSeparatorComponent={ListSeparator}

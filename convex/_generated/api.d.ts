@@ -28,6 +28,7 @@ import type * as lib_auditActor from "../lib/auditActor.js";
 import type * as lib_gpsValidation from "../lib/gpsValidation.js";
 import type * as lib_propertyIdLookup from "../lib/propertyIdLookup.js";
 import type * as lib_qcWardStats from "../lib/qcWardStats.js";
+import type * as lib_surveyAggregates from "../lib/surveyAggregates.js";
 import type * as lib_surveyProgress from "../lib/surveyProgress.js";
 import type * as lib_surveySearch from "../lib/surveySearch.js";
 import type * as lib_surveyUniqueness from "../lib/surveyUniqueness.js";
@@ -45,8 +46,10 @@ import type * as qc from "../qc.js";
 import type * as rbac from "../rbac.js";
 import type * as serviceMasters from "../serviceMasters.js";
 import type * as survey from "../survey.js";
+import type * as surveyAggregates from "../surveyAggregates.js";
 import type * as surveyEditRules from "../surveyEditRules.js";
 import type * as surveyExport from "../surveyExport.js";
+import type * as surveyFieldValidation from "../surveyFieldValidation.js";
 import type * as surveyReassignment from "../surveyReassignment.js";
 import type * as surveys from "../surveys.js";
 import type * as taxRates from "../taxRates.js";
@@ -54,6 +57,7 @@ import type * as taxationMasters from "../taxationMasters.js";
 import type * as tenancy from "../tenancy.js";
 import type * as tenants from "../tenants.js";
 import type * as users from "../users.js";
+import type * as webDashboard from "../webDashboard.js";
 
 import type {
   ApiFromModules,
@@ -82,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gpsValidation": typeof lib_gpsValidation;
   "lib/propertyIdLookup": typeof lib_propertyIdLookup;
   "lib/qcWardStats": typeof lib_qcWardStats;
+  "lib/surveyAggregates": typeof lib_surveyAggregates;
   "lib/surveyProgress": typeof lib_surveyProgress;
   "lib/surveySearch": typeof lib_surveySearch;
   "lib/surveyUniqueness": typeof lib_surveyUniqueness;
@@ -99,8 +104,10 @@ declare const fullApi: ApiFromModules<{
   rbac: typeof rbac;
   serviceMasters: typeof serviceMasters;
   survey: typeof survey;
+  surveyAggregates: typeof surveyAggregates;
   surveyEditRules: typeof surveyEditRules;
   surveyExport: typeof surveyExport;
+  surveyFieldValidation: typeof surveyFieldValidation;
   surveyReassignment: typeof surveyReassignment;
   surveys: typeof surveys;
   taxRates: typeof taxRates;
@@ -108,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   tenancy: typeof tenancy;
   tenants: typeof tenants;
   users: typeof users;
+  webDashboard: typeof webDashboard;
 }>;
 
 /**

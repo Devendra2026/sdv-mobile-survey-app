@@ -9,7 +9,7 @@ import {
   parcelNoError,
   primaryMobileError,
   unitNoError,
-} from '@/convex/surveyFieldValidation';
+} from '../../convex/surveyFieldValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 import { stepCompletion } from '@/hooks/useWizardDraft';
 import type { StepConfig } from '@/hooks/wizardSteps';

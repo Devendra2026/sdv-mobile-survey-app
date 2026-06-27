@@ -17,17 +17,11 @@ export default function AdminUsersScreen() {
   const [role, setRole] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
 
-  const {
-    results: users,
-    status,
-    loadMore,
-  } = usePaginatedQuery(
-    api.admin.listUsers,
-    { role: role as never },
-    {
-      initialNumItems: PAGE_SIZE,
-    },
-  );
+  const paginated = usePaginatedQuery(api.admin.listUsers, { role: role ?? undefined }, { initialNumItems: PAGE_SIZE });
+
+  const users = paginated.results;
+  const status = paginated.status;
+  const loadMore = paginated.loadMore;
 
   const isLoading = status === 'LoadingFirstPage';
   const isLoadingMore = status === 'LoadingMore';

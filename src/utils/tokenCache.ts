@@ -18,6 +18,9 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+/** Clerk client JWT key used by @clerk/expo (see package constants). */
+export const CLERK_CLIENT_JWT_KEY = '__clerk_client_jwt';
+
 export const tokenCache = {
   getToken(key: string) {
     return safe(() => SecureStore.getItemAsync(key), null);
@@ -29,3 +32,8 @@ export const tokenCache = {
     return safe(() => SecureStore.deleteItemAsync(key), undefined);
   },
 };
+
+/** Clear cached Clerk client JWT before remounting ClerkProvider (retry after startup timeout). */
+export async function clearClerkClientJwtCache(): Promise<void> {
+  await tokenCache.clearToken(CLERK_CLIENT_JWT_KEY);
+}

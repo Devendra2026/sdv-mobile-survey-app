@@ -395,6 +395,30 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_active", ["userId", "isActive"]),
 
+  /**
+   * Precomputed survey counters per scope bucket (surveyor / municipality / district / ward).
+   * Maintained by syncSurveyAggregates on survey writes — powers dashboard KPIs without full collects.
+   */
+  surveyAggregateBuckets: defineTable({
+    bucketKey: v.string(),
+    total: v.number(),
+    drafts: v.number(),
+    submitted: v.number(),
+    pending: v.number(),
+    approved: v.number(),
+    rejected: v.number(),
+  }).index("by_bucketKey", ["bucketKey"]),
+
+  /** Per-day created/submitted counts per bucket — powers "today" KPIs. */
+  surveyDailyRollups: defineTable({
+    bucketKey: v.string(),
+    dateKey: v.string(),
+    created: v.number(),
+    submitted: v.number(),
+  })
+    .index("by_bucket_date", ["bucketKey", "dateKey"])
+    .index("by_bucketKey", ["bucketKey"]),
+
   /** Bulk demand notice PDF export jobs (parcel-ordered, client captures official A4 layout). */
   demandNoticeExportJobs: defineTable({
     requestedBy: v.id("users"),

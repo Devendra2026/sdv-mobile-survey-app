@@ -2,7 +2,8 @@
  * Taxation-step canonical dropdown values and idempotent masters seed.
  * Property-use subcategories are keyed by parent `property_use` value.
  */
-import type { MutationCtx } from "./_generated/server";
+import { resolveTaxRateZoneKey } from "../lib/qc/tax-rate-matrix";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 export type MasterOption = { value: string; label: string };
 
@@ -126,6 +127,41 @@ function isValidPropertyUse(propertyUse: string): boolean {
   return PROPERTY_USE_SET.has(propertyUse) || LEGACY_PROPERTY_USES.has(propertyUse);
 }
 
+/** Map legacy / alias zone keys to canonical values used in rate matrices. */
+export function normalizeTaxRateZone(value?: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  return resolveTaxRateZoneKey(trimmed);
+}
+
+/** Allowed tax zone keys: defaults, DB masters, and their canonical aliases. */
+export function buildAllowedTaxZoneSet(masterValues?: string[]): Set<string> {
+  const allowed = new Set(TAX_RATE_ZONES.map((o) => o.value));
+  const values = masterValues?.length ? masterValues : TAX_RATE_ZONES.map((o) => o.value);
+  for (const value of values) {
+    allowed.add(value);
+    allowed.add(normalizeTaxRateZone(value));
+  }
+  return allowed;
+}
+
+export async function loadAllowedTaxZoneSet(ctx: QueryCtx | MutationCtx): Promise<Set<string>> {
+  const rows = await ctx.db.query("masters").collect();
+  const dbValues = rows.filter((m) => m.isActive !== false && m.category === "tax_rate_zone").map((m) => m.value);
+  return buildAllowedTaxZoneSet(dbValues);
+}
+
+export function normalizeTaxationFields<
+  T extends {
+    taxRateZone?: string;
+  },
+>(args: T): T {
+  return {
+    ...args,
+    taxRateZone: normalizeTaxRateZone(args.taxRateZone),
+  };
+}
+
 export function validateTaxationSection(
   input: {
     ownershipType?: string;
@@ -136,9 +172,11 @@ export function validateTaxationSection(
     taxRateZone?: string;
   },
   mode: "draft" | "submit" = "submit",
+  options?: { allowedTaxZones?: Set<string> },
 ): Record<string, string[]> {
   const details: Record<string, string[]> = {};
   const strict = mode === "submit";
+  const taxZoneSet = options?.allowedTaxZones ?? TAX_ZONE_SET;
 
   const ownership = input.ownershipType?.trim() ?? "";
   if (strict && (!ownership || !OWNERSHIP_SET.has(ownership))) {
@@ -179,10 +217,10 @@ export function validateTaxationSection(
     details.roadType = ["Select a valid road type"];
   }
 
-  const taxRateZone = input.taxRateZone?.trim() ?? "";
-  if (strict && (!taxRateZone || !TAX_ZONE_SET.has(taxRateZone))) {
+  const taxRateZone = normalizeTaxRateZone(input.taxRateZone);
+  if (strict && (!taxRateZone || !taxZoneSet.has(taxRateZone))) {
     details.taxRateZone = ["Select a valid road size tax zone"];
-  } else if (taxRateZone && !TAX_ZONE_SET.has(taxRateZone)) {
+  } else if (taxRateZone && !taxZoneSet.has(taxRateZone)) {
     details.taxRateZone = ["Select a valid road size tax zone"];
   }
 

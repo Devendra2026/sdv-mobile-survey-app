@@ -8,7 +8,12 @@ import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { displayPropertyId } from '@/convex/propertyId';
-import { constructedYearError, parcelNoError, sanitizeFixedDigits, unitNoError } from '@/convex/surveyFieldValidation';
+import {
+  constructedYearError,
+  parcelNoError,
+  sanitizeFixedDigits,
+  unitNoError,
+} from '../../../../convex/surveyFieldValidation';
 import { useConvexReadyQuery } from '@/hooks/use-convex-ready-query';
 import { useMastersBundle } from '@/hooks/use-masters-bundle';
 import { stepCompletion, type WizardDraft } from '@/hooks/useWizardDraft';

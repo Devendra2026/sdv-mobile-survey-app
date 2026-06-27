@@ -14,21 +14,24 @@ import { useHideAppSplash } from '@/hooks/use-hide-app-splash';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useSessionBootstrap } from '@/hooks/use-session-bootstrap';
 import { useSyncConvexUser } from '@/hooks/use-sync-convex-user';
+import { initMobileMonitoring } from '@/lib/perf-monitor';
 import { ThemeProvider } from '@/theme';
-import { tokenCache } from '@/utils/tokenCache';
+import { clearClerkClientJwtCache, tokenCache } from '@/utils/tokenCache';
 import { ClerkProvider, useAuth } from '@clerk/expo';
+import { resourceCache } from '@clerk/expo/resource-cache';
 import { ConvexProviderWithAuth, ConvexReactClient } from 'convex/react';
 import { Slot } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
-import { InteractionManager, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import '../../global.css';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+initMobileMonitoring();
 
-const CLERK_LOAD_TIMEOUT_MS = 15_000;
+const CLERK_LOAD_TIMEOUT_MS = 45_000;
 
 /* ────────────────────────── Auth gate ────────────────────────── */
 
@@ -52,13 +55,20 @@ function signedInLoadingMessage(
  * Convex mounts only after Clerk has loaded so startup work does not block clerk-js FAPI.
  * @see https://github.com/clerk/javascript/issues/8245
  */
-function ClerkThenConvex({ convex }: { convex: ConvexReactClient }) {
+function ClerkThenConvex({ onClerkRetry }: { onClerkRetry: () => void }) {
   const { isLoaded } = useAuth();
   const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  const convex = useMemo(() => {
+    if (!isLoaded || !envReady) return null;
+    return new ConvexReactClient(env.convexUrl, { unsavedChangesWarning: false });
+  }, [isLoaded]);
 
   useEffect(() => {
     if (isLoaded) {
       setLoadTimedOut(false);
+      setRetrying(false);
       return;
     }
     const timer = setTimeout(() => setLoadTimedOut(true), CLERK_LOAD_TIMEOUT_MS);
@@ -67,9 +77,21 @@ function ClerkThenConvex({ convex }: { convex: ConvexReactClient }) {
 
   useHideAppSplash(isLoaded || loadTimedOut);
 
+  const handleRetry = () => {
+    setRetrying(true);
+    setLoadTimedOut(false);
+    void clearClerkClientJwtCache().finally(() => onClerkRetry());
+  };
+
   if (!isLoaded) {
-    if (loadTimedOut) return <ClerkStartupError />;
+    if (loadTimedOut) {
+      return <ClerkStartupError onRetry={handleRetry} retrying={retrying} />;
+    }
     return <AppLoadingView message="Loading sign-in…" />;
+  }
+
+  if (!convex) {
+    return <AppLoadingView message="Connecting to server…" />;
   }
 
   return (
@@ -98,6 +120,7 @@ function AuthGate() {
   const { me, needsSync, syncing, error: syncError } = useSyncConvexUser();
   const { showBlockingOverlay } = useSessionBootstrap(me, needsSync, syncing);
   const { replace, segments, navigationReady } = useSafeRouter();
+  const lastNavTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded || !navigationReady) return;
@@ -106,35 +129,31 @@ function AuthGate() {
     const inAdminGroup = segments[0] === '(admin)';
     const inAppGroup = segments[0] === '(app)';
 
+    let target: string | null = null;
+
     if (!isSignedIn) {
-      if (!inAuthGroup) replace('/(auth)/sign-in');
+      if (!inAuthGroup) target = '/(auth)/sign-in';
+    } else if (!convexReady || me === undefined) {
       return;
-    }
-
-    if (!convexReady) return;
-
-    if (me === undefined) return;
-
-    if (me === null) {
+    } else if (me === null) {
       if (segments[0] !== '(auth)' || segments[1] !== 'setup') {
-        replace('/(auth)/setup');
+        target = '/(auth)/setup';
       }
-      return;
-    }
-
-    if (me.status !== 'active' || me.role === 'pending') {
+    } else if (me.status !== 'active' || me.role === 'pending') {
       if (segments[0] !== '(auth)' || segments[1] !== 'awaiting-approval') {
-        replace('/(auth)/awaiting-approval');
+        target = '/(auth)/awaiting-approval';
       }
-      return;
+    } else if (me.role === 'admin') {
+      if (!inAdminGroup && !inAppGroup) target = '/(admin)/approvals';
+    } else if (me.role === 'qc_supervisor' || me.role === 'surveyor' || me.role === 'supervisor') {
+      if (!inAppGroup) target = '/dashboard';
     }
 
-    if (me.role === 'admin') {
-      if (!inAdminGroup && !inAppGroup) replace('/(admin)/approvals');
-      return;
-    }
-    if (me.role === 'qc_supervisor' || me.role === 'surveyor' || me.role === 'supervisor') {
-      if (!inAppGroup) replace('/dashboard');
+    if (target && target !== lastNavTargetRef.current) {
+      lastNavTargetRef.current = target;
+      replace(target);
+    } else if (!target) {
+      lastNavTargetRef.current = null;
     }
   }, [isLoaded, navigationReady, isSignedIn, convexReady, me, segments, replace]);
 
@@ -164,29 +183,24 @@ function AuthGate() {
 /* ────────────────────────── Root ────────────────────────── */
 
 function AppProviders() {
-  const [mounted, setMounted] = useState(false);
+  const [clerkRetryKey, setClerkRetryKey] = useState(0);
 
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setMounted(true));
-    return () => task.cancel();
+  const handleClerkRetry = useCallback(() => {
+    setClerkRetryKey((k) => k + 1);
   }, []);
 
-  const convex = useMemo(() => {
-    if (!envReady) return null;
-    return new ConvexReactClient(env.convexUrl, {
-      unsavedChangesWarning: false,
-    });
-  }, []);
-
-  useHideAppSplash(mounted);
-
-  if (!mounted || !convex) {
+  if (!envReady) {
     return <View style={bootScreenStyle} />;
   }
 
   return (
-    <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
-      <ClerkThenConvex convex={convex} />
+    <ClerkProvider
+      key={clerkRetryKey}
+      publishableKey={env.clerkPublishableKey}
+      tokenCache={tokenCache}
+      __experimental_resourceCache={resourceCache}
+    >
+      <ClerkThenConvex onClerkRetry={handleClerkRetry} />
     </ClerkProvider>
   );
 }

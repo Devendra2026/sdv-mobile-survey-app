@@ -7,8 +7,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { CONSTRUCTION_TYPES, FLOOR_NAMES, FLOOR_USAGE_FACTORS, FLOOR_USAGE_TYPES } from "./areaMasters";
-import { collectSurveysInFieldScope } from "./fieldAccess";
 import { filterWardsForUser, requireUser } from "./helpers";
+import { readDashboardCountsFromAggregates } from "./lib/surveyAggregates";
 import { RESPONDENT_RELATIONSHIPS } from "./ownerConstants";
 import { mergeMasterOptions, SANITATION_TYPES, WATER_SOURCES } from "./serviceMasters";
 import {
@@ -44,19 +44,30 @@ const MASTER_BUNDLE_CATEGORIES = [
   "floor_name",
 ] as const;
 
-async function loadActiveMastersByCategory(ctx: QueryCtx): Promise<Record<string, Option[]>> {
-  const categorySet = new Set<string>(MASTER_BUNDLE_CATEGORIES);
-  const rows = (await ctx.db.query("masters").collect()).filter(
-    (m) => m.isActive !== false && categorySet.has(m.category),
-  );
-  rows.sort((a, b) => a.category.localeCompare(b.category) || a.position - b.position);
-
+async function loadActiveMastersByCategory(
+  ctx: QueryCtx,
+): Promise<{ grouped: Record<string, Option[]>; catalogVersion: number }> {
   const grouped: Record<string, Option[]> = {};
-  for (const row of rows) {
-    if (!grouped[row.category]) grouped[row.category] = [];
-    grouped[row.category]!.push({ value: row.value, label: row.label });
+  let catalogVersion = 0;
+
+  const categoryRows = await Promise.all(
+    MASTER_BUNDLE_CATEGORIES.map((category) =>
+      ctx.db
+        .query("masters")
+        .withIndex("by_category_position", (q) => q.eq("category", category).eq("isActive", true))
+        .collect(),
+    ),
+  );
+
+  for (const rows of categoryRows) {
+    for (const row of rows) {
+      if (!grouped[row.category]) grouped[row.category] = [];
+      grouped[row.category]!.push({ value: row.value, label: row.label });
+      if (row._creationTime > catalogVersion) catalogVersion = row._creationTime;
+    }
   }
-  return grouped;
+
+  return { grouped, catalogVersion };
 }
 
 /** Load wards only for municipalities in scope (indexed per ULB — not a full-table scan). */
@@ -125,7 +136,7 @@ export const bundle = query({
     const includeWards = args.includeWards ?? true;
     const includeTenantCatalog = args.includeTenantCatalog ?? true;
 
-    const grouped = await loadActiveMastersByCategory(ctx);
+    const { grouped, catalogVersion } = await loadActiveMastersByCategory(ctx);
 
     let districtsOut: Array<{ _id: Id<"districts">; code: string; name: string; stateName: string }> = [];
     let ulbs: Array<{
@@ -171,7 +182,7 @@ export const bundle = query({
     }
 
     return {
-      updatedAt: Date.now(),
+      updatedAt: catalogVersion,
       districts: districtsOut,
       ulbs,
       wards: wardOut,
@@ -289,11 +300,18 @@ export const unreadCount = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireUser(ctx, { allowPending: true });
-    const rows = await ctx.db
-      .query("notifications")
-      .withIndex("by_user_read", (q) => q.eq("userId", me._id).eq("readAt", undefined))
-      .collect();
-    return rows.length;
+    let count = 0;
+    let cursor: string | null = null;
+    while (true) {
+      const batch = await ctx.db
+        .query("notifications")
+        .withIndex("by_user_read", (q) => q.eq("userId", me._id).eq("readAt", undefined))
+        .paginate({ numItems: 100, cursor });
+      count += batch.page.length;
+      if (batch.isDone) break;
+      cursor = batch.continueCursor;
+    }
+    return count;
   },
 });
 
@@ -346,33 +364,17 @@ export const dashboardCounts = query({
       return { total: 0, today: 0, drafts: 0, pending: 0, submittedToday: 0, approved: 0, submitted: 0, rejected: 0 };
     }
 
-    const rows = await collectSurveysInFieldScope(ctx, me);
-
-    const todayMs =
-      args.nowMs !== undefined
-        ? (() => {
-            const d = new Date(args.nowMs);
-            d.setHours(0, 0, 0, 0);
-            return d.getTime();
-          })()
-        : null;
-
+    const nowMs = args.nowMs ?? Date.now();
+    const agg = await readDashboardCountsFromAggregates(ctx, me, nowMs);
     return {
-      total: rows.length,
-      today: todayMs !== null ? rows.filter((r) => r._creationTime >= todayMs).length : 0,
-      drafts: rows.filter((r) => r.status === "draft").length,
-      pending: rows.filter((r) => r.qcStatus === "pending" && r.status === "submitted").length,
-      submittedToday:
-        todayMs !== null
-          ? rows.filter(
-              (r) =>
-                r.status === "submitted" &&
-                (r.submittedAt !== undefined ? r.submittedAt >= todayMs : r._creationTime >= todayMs),
-            ).length
-          : 0,
-      approved: rows.filter((r) => r.qcStatus === "approved").length,
-      submitted: rows.filter((r) => r.status === "submitted").length,
-      rejected: rows.filter((r) => r.qcStatus === "rejected").length,
+      total: agg.total,
+      today: agg.today,
+      drafts: agg.drafts,
+      pending: agg.pending,
+      submittedToday: agg.submittedToday,
+      approved: agg.approved,
+      submitted: agg.submitted,
+      rejected: agg.rejected,
     };
   },
 });

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared survey field validation — importable from Convex backend and Expo client.
  * Parcel/unit values are validated and stored as strings to preserve leading zeros.
  */

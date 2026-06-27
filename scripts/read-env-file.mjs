@@ -79,3 +79,32 @@ export function resolveFleetEnvPath(cwd = process.cwd()) {
 export function readFleetEnv(cwd = process.cwd()) {
   return parseEnvFile(resolveFleetEnvPath(cwd));
 }
+
+/**
+ * Env for `npx convex` child processes. When a dotenv file has self-hosted URL + admin
+ * key, applies them and unsets CONVEX_DEPLOYMENT (Convex CLI forbids both).
+ * @param {string} [envFilePath]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function buildConvexCliEnv(envFilePath) {
+  const convexEnv = { ...process.env };
+  if (!envFilePath) return convexEnv;
+
+  const parsed = parseEnvFile(envFilePath);
+  const url = parsed.CONVEX_SELF_HOSTED_URL?.trim();
+  const adminKey = parsed.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim();
+
+  if (url && adminKey) {
+    convexEnv.CONVEX_SELF_HOSTED_URL = url;
+    convexEnv.CONVEX_SELF_HOSTED_ADMIN_KEY = adminKey;
+    delete convexEnv.CONVEX_DEPLOYMENT;
+    return convexEnv;
+  }
+
+  const deployment = parsed.CONVEX_DEPLOYMENT?.trim();
+  if (deployment) {
+    convexEnv.CONVEX_DEPLOYMENT = deployment;
+  }
+
+  return convexEnv;
+}

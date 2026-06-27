@@ -6,17 +6,24 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { toUserMessage } from '@/utils/errors';
 import { formatSurveyParcelLabel, timeAgo } from '@/utils/format';
+import { flatListProps } from '@/utils/scroll-props';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type RemarkItem = FunctionReturnType<typeof api.qc.listRemarks>[number];
 
-function RemarkRow({ item, onResolve }: { item: RemarkItem; onResolve: (id: Id<'qcRemarks'>) => void }) {
+const RemarkRow = memo(function RemarkRow({
+  item,
+  onResolve,
+}: {
+  item: RemarkItem;
+  onResolve: (id: Id<'qcRemarks'>) => void;
+}) {
   return (
     <AppCard padded className="mb-2">
       <View className="flex-row items-center justify-between">
@@ -38,7 +45,7 @@ function RemarkRow({ item, onResolve }: { item: RemarkItem; onResolve: (id: Id<'
       <Text className="mt-2 text-body text-ink-primary-light dark:text-ink-primary-dark">{item.message}</Text>
     </AppCard>
   );
-}
+});
 
 export default function QcConversationScreen() {
   const router = useRouter();
@@ -136,6 +143,7 @@ export default function QcConversationScreen() {
         <FlatList
           data={remarks}
           keyExtractor={(r) => r._id}
+          {...flatListProps}
           contentContainerStyle={{ padding: 14, paddingBottom: 12, flexGrow: 1 }}
           ListEmptyComponent={
             <AppCard padded>

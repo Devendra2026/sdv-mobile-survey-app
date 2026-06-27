@@ -47,12 +47,23 @@ export const horizontalScrollProps: Pick<
 
 export const flatListProps: Pick<
   FlatListProps<unknown>,
-  'keyboardShouldPersistTaps' | 'nestedScrollEnabled' | 'showsVerticalScrollIndicator' | 'overScrollMode'
+  | 'keyboardShouldPersistTaps'
+  | 'nestedScrollEnabled'
+  | 'showsVerticalScrollIndicator'
+  | 'overScrollMode'
+  | 'initialNumToRender'
+  | 'maxToRenderPerBatch'
+  | 'windowSize'
+  | 'removeClippedSubviews'
 > = {
   keyboardShouldPersistTaps: 'handled',
   nestedScrollEnabled: true,
   showsVerticalScrollIndicator: true,
   overScrollMode: 'always',
+  initialNumToRender: 10,
+  maxToRenderPerBatch: 8,
+  windowSize: 7,
+  removeClippedSubviews: Platform.OS === 'android',
 };
 
 export function keyboardAvoidingProps(

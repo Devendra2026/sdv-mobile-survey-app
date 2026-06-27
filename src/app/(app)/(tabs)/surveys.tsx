@@ -43,9 +43,13 @@ export default function SurveysScreen() {
     [filter],
   );
 
-  const { results, status, loadMore } = usePaginatedQuery(api.survey.listPaginated, queryArgs, {
+  const paginated = usePaginatedQuery(api.survey.listPaginated, queryArgs, {
     initialNumItems: PAGE_SIZE,
   });
+
+  const results = paginated.results;
+  const status = paginated.status;
+  const loadMore = paginated.loadMore;
 
   const isLoading = status === 'LoadingFirstPage';
   const isLoadingMore = status === 'LoadingMore';
@@ -86,6 +90,8 @@ export default function SurveysScreen() {
     ),
     [isDraftFilter, onSurveyPress],
   );
+
+  const keyExtractor = useCallback((s: (typeof results)[number]) => s._id, []);
 
   const listFooter = useCallback(
     () => (
@@ -163,7 +169,7 @@ export default function SurveysScreen() {
       ) : (
         <FlatList
           data={sortedResults}
-          keyExtractor={(s) => s._id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={{ padding: 14 }}
           {...flatListProps}
           ItemSeparatorComponent={ListSeparator}

@@ -9,7 +9,7 @@ import {
   primaryMobileError,
   sanitizeFixedDigits,
   unitNoError,
-} from '@/convex/surveyFieldValidation';
+} from '../../convex/surveyFieldValidation';
 import type { WizardDraft } from '@/hooks/useWizardDraft';
 
 export type QuestionKind = 'text' | 'number' | 'redirect';

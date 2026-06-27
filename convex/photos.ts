@@ -10,13 +10,22 @@
  * to avoid stale references.
  */
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { hasCapability } from "./capabilities";
+import { hasCapability, type PermissionCache } from "./capabilities";
 import { assertCanAccessSurvey } from "./fieldAccess";
 import { clientError, requireUser, writeAudit } from "./helpers";
 import { photoSlot } from "./schema";
 import { assertSurveyWritable } from "./surveyEditRules";
+
+async function deleteStorageIfPresent(ctx: MutationCtx, storageId: Id<"_storage">): Promise<void> {
+  try {
+    await ctx.storage.delete(storageId);
+  } catch {
+    // blob may already be deleted
+  }
+}
 
 /** Returns a one-time upload URL. Valid for ~1 hour by Convex defaults. */
 export const generateUploadUrl = mutation({
@@ -52,24 +61,24 @@ export const linkPhoto = mutation({
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.surveyId)]);
     if (!survey) {
-      await ctx.storage.delete(args.storageId);
+      await deleteStorageIfPresent(ctx, args.storageId);
       clientError("NOT_FOUND", "Survey not found");
     }
     await assertCanAccessSurvey(ctx, me, survey);
     try {
       await assertSurveyWritable(ctx, me, survey);
     } catch {
-      await ctx.storage.delete(args.storageId);
+      await deleteStorageIfPresent(ctx, args.storageId);
       clientError("LOCKED", "Survey is locked — you cannot upload photos in its current state");
     }
     const canUpload =
       (await hasCapability(ctx, me, "surveys.uploadPhotos")) || (await hasCapability(ctx, me, "qc.review"));
     if (!canUpload) {
-      await ctx.storage.delete(args.storageId);
+      await deleteStorageIfPresent(ctx, args.storageId);
       clientError("FORBIDDEN", "You don't have permission to upload photos");
     }
     if (args.sizeKb <= 0 || args.sizeKb > 1024) {
-      await ctx.storage.delete(args.storageId);
+      await deleteStorageIfPresent(ctx, args.storageId);
       clientError("VALIDATION", "Photo size out of range (≤ 1 MB)");
     }
 
@@ -83,7 +92,7 @@ export const linkPhoto = mutation({
       if (existing.storageId === args.storageId) {
         return existing._id;
       }
-      await ctx.storage.delete(existing.storageId);
+      await deleteStorageIfPresent(ctx, existing.storageId);
       await ctx.db.delete(existing._id);
     }
 
@@ -148,8 +157,7 @@ export const resolveStorageUrls = query({
 
         if (!draftSurvey) return { storageId, url: null };
         const canUpload =
-          (await hasCapability(ctx, me, "surveys.uploadPhotos")) ||
-          (await hasCapability(ctx, me, "qc.review"));
+          (await hasCapability(ctx, me, "surveys.uploadPhotos")) || (await hasCapability(ctx, me, "qc.review"));
         if (!canUpload) return { storageId, url: null };
         return { storageId, url: await ctx.storage.getUrl(storageId) };
       }),
@@ -187,11 +195,7 @@ export const releaseStorage = mutation({
       }),
     );
 
-    try {
-      await ctx.storage.delete(args.storageId);
-    } catch {
-      // blob may already be deleted
-    }
+    await deleteStorageIfPresent(ctx, args.storageId);
 
     await writeAudit(ctx, {
       actorId: me._id,
@@ -221,8 +225,8 @@ export const removeBySurveySlot = mutation({
       .unique();
     if (!existing) return;
 
+    await deleteStorageIfPresent(ctx, existing.storageId);
     await Promise.all([
-      ctx.storage.delete(existing.storageId),
       ctx.db.delete(existing._id),
       writeAudit(ctx, {
         actorId: me._id,
@@ -292,15 +296,18 @@ export const frontThumbnails = query({
     const me = await requireUser(ctx);
     if (me.role === "pending") return {};
 
+    const permCache: PermissionCache = new Map();
     const ids = args.surveyIds.slice(0, 50);
-    const entries = await Promise.all(
-      ids.map(async (surveyId) => {
-        const survey = await ctx.db.get(surveyId);
+    const surveys = await Promise.all(ids.map((surveyId) => ctx.db.get(surveyId)));
+
+    const photoRows = await Promise.all(
+      ids.map(async (surveyId, index) => {
+        const survey = surveys[index];
         if (!survey) {
           return [surveyId, null] as const;
         }
         try {
-          await assertCanAccessSurvey(ctx, me, survey);
+          await assertCanAccessSurvey(ctx, me, survey, permCache);
         } catch {
           return [surveyId, null] as const;
         }
@@ -313,7 +320,7 @@ export const frontThumbnails = query({
       }),
     );
 
-    return Object.fromEntries(entries);
+    return Object.fromEntries(photoRows);
   },
 });
 
@@ -348,7 +355,7 @@ export const remove = mutation({
     if (survey.qcStatus === "approved" && me.role === "surveyor") {
       clientError("LOCKED", "Survey is locked");
     }
-    await ctx.storage.delete(photo.storageId);
+    await deleteStorageIfPresent(ctx, photo.storageId);
     await ctx.db.delete(args.id);
   },
 });

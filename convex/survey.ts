@@ -23,7 +23,12 @@ import {
 } from './fieldAccess';
 import { assertCanReadWard, canReadWard, clientError, requireUser, writeAudit } from './helpers';
 import { validateGps } from './lib/gpsValidation';
-import { refreshSurveyCompletionPct } from './lib/surveyProgress';
+import { syncSurveyAggregates } from './lib/surveyAggregates';
+import {
+  completionPctForSurvey,
+  computeSurveyCompletionPercent,
+  refreshSurveyCompletionPct,
+} from './lib/surveyProgress';
 import { filterSurveysBySearch } from './lib/surveySearch';
 import { assertUniqueSurveySlot, surveyIdentifyingSlotChanged } from './lib/surveyUniqueness';
 import { computeSurveyWardAggregates } from './lib/surveyWardStats';
@@ -38,7 +43,7 @@ import {
   resolveExistingSurveyForSave,
   resolvePostSaveStatuses,
 } from './surveyEditRules';
-import { validateTaxationSection } from './taxationMasters';
+import { loadAllowedTaxZoneSet, normalizeTaxationFields, validateTaxationSection } from './taxationMasters';
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from './tenancy';
 
 async function loadMunicipalityCodes(
@@ -456,7 +461,7 @@ export const listPaginated = query({
   },
   returns: v.object({
     page: v.array(v.any()),
-    continueCursor: v.string(),
+    continueCursor: v.union(v.string(), v.null()),
     isDone: v.boolean(),
     totalCount: v.number(),
     scopeTruncated: v.boolean(),
@@ -645,9 +650,9 @@ export const get = query({
   handler: async (ctx, args) => {
     const [me, survey] = await Promise.all([requireUser(ctx), ctx.db.get(args.id)]);
     if (!survey) return null;
+    await assertCanAccessSurvey(ctx, me, survey);
 
-    const [, floors, photos, qcRemarks, surveyor, muni] = await Promise.all([
-      assertCanAccessSurvey(ctx, me, survey),
+    const [floors, photos, qcRemarks, surveyor, muni] = await Promise.all([
       ctx.db
         .query('floors')
         .withIndex('by_survey', (q) => q.eq('surveyId', args.id))
@@ -767,11 +772,12 @@ export const saveDraft = mutation({
     };
 
     const merged = mergeDraftArgs(existing, args, muni);
+    const allowedTaxZones = await loadAllowedTaxZoneSet(ctx);
     const normalized = normalizeAddressFields(
-      normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code)),
+      normalizeOwnerFields(normalizeTaxationFields(withResolvedPropertyId(normalizePropertyFields(merged), muni.code))),
       muni,
     );
-    validateBusinessRules(normalized, addressCtx, 'draft');
+    validateBusinessRules(normalized, addressCtx, 'draft', { allowedTaxZones });
 
     if (existing && existing.status === 'submitted') {
       const isQcEditor = await hasCapability(ctx, me, 'qc.review');
@@ -792,6 +798,7 @@ export const saveDraft = mutation({
 
     if (existing) {
       const { status, qcStatus } = resolvePostSaveStatuses(existing);
+      const completionPct = await completionPctForSurvey(ctx, { ...existing, ...writable } as Doc<'surveys'>);
 
       await ctx.db.patch(existing._id, {
         ...writable,
@@ -799,19 +806,20 @@ export const saveDraft = mutation({
         qcStatus,
         serverVersion: existing.serverVersion + 1,
         clientUpdatedAt: args.clientUpdatedAt,
+        completionPct,
       });
-      await Promise.all([
-        refreshSurveyCompletionPct(ctx, existing._id),
-        writeAudit(ctx, {
-          actorId: me._id,
-          action: auditActionForSave(existing, ownScope, false),
-          entity: 'survey',
-          entityId: existing._id,
-        }),
-      ]);
+      const updated = await ctx.db.get(existing._id);
+      if (updated) await syncSurveyAggregates(ctx, existing, updated);
+      await writeAudit(ctx, {
+        actorId: me._id,
+        action: auditActionForSave(existing, ownScope, false),
+        entity: 'survey',
+        entityId: existing._id,
+      });
       return existing._id;
     }
 
+    const completionPct = computeSurveyCompletionPercent({ ...writable, floors: [], photos: [] });
     const newId = await ctx.db.insert('surveys', {
       ...writable,
       surveyorId: me._id,
@@ -820,17 +828,17 @@ export const saveDraft = mutation({
       qcStatus: 'pending',
       serverVersion: 1,
       clientUpdatedAt: args.clientUpdatedAt,
+      completionPct,
     });
-    await Promise.all([
-      refreshSurveyCompletionPct(ctx, newId),
-      writeAudit(ctx, {
-        actorId: me._id,
-        action: auditActionForSave(null, ownScope, true),
-        entity: 'survey',
-        entityId: newId,
-        metadata: { localId: args.localId, draft: true },
-      }),
-    ]);
+    const created = await ctx.db.get(newId);
+    if (created) await syncSurveyAggregates(ctx, null, created);
+    await writeAudit(ctx, {
+      actorId: me._id,
+      action: auditActionForSave(null, ownScope, true),
+      entity: 'survey',
+      entityId: newId,
+      metadata: { localId: args.localId, draft: true },
+    });
     return newId;
   },
 });
@@ -859,11 +867,12 @@ export const upsert = mutation({
       ...addressTenantContext(muni, district),
       configuredPostalCode: muni.postalCode,
     };
+    const allowedTaxZones = await loadAllowedTaxZoneSet(ctx);
     const normalized = normalizeAddressFields(
-      normalizeOwnerFields(withResolvedPropertyId(normalizePropertyFields(args), muni.code)),
+      normalizeOwnerFields(normalizeTaxationFields(withResolvedPropertyId(normalizePropertyFields(args), muni.code))),
       muni,
     );
-    validateBusinessRules(normalized, addressCtx, 'submit');
+    validateBusinessRules(normalized, addressCtx, 'submit', { allowedTaxZones });
 
     // Confirm ward exists within the municipality
     const ward = await ctx.db
@@ -904,6 +913,8 @@ export const upsert = mutation({
         serverVersion: existing.serverVersion + 1,
         clientUpdatedAt: args.clientUpdatedAt,
       });
+      const updatedUpsert = await ctx.db.get(existing._id);
+      if (updatedUpsert) await syncSurveyAggregates(ctx, existing, updatedUpsert);
       await Promise.all([
         refreshSurveyCompletionPct(ctx, existing._id),
         writeAudit(ctx, {
@@ -924,6 +935,8 @@ export const upsert = mutation({
       qcStatus: 'pending',
       serverVersion: 1,
     });
+    const createdUpsert = await ctx.db.get(newId);
+    if (createdUpsert) await syncSurveyAggregates(ctx, null, createdUpsert);
     await Promise.all([
       refreshSurveyCompletionPct(ctx, newId),
       writeAudit(ctx, {
@@ -1195,6 +1208,8 @@ export const submit = mutation({
       submittedAt: Date.now(),
       serverVersion: survey.serverVersion + 1,
     });
+    const submitted = await ctx.db.get(args.id);
+    if (submitted) await syncSurveyAggregates(ctx, survey, submitted);
     await writeAudit(ctx, {
       actorId: me._id,
       action: 'survey.submitted',
@@ -1230,6 +1245,7 @@ export const remove = mutation({
     for await (const r of ctx.db.query('qcRemarks').withIndex('by_survey', (q) => q.eq('surveyId', args.id))) {
       await ctx.db.delete(r._id);
     }
+    await syncSurveyAggregates(ctx, survey, null);
     await ctx.db.delete(args.id);
 
     await writeAudit(ctx, {
@@ -1435,6 +1451,7 @@ function validateBusinessRules(
   in_: Record<string, unknown>,
   addressCtx: Parameters<typeof validateAddressSection>[1],
   mode: 'draft' | 'submit' = 'submit',
+  options?: { allowedTaxZones?: Set<string> },
 ): void {
   const details: Record<string, string[]> = {};
   const strict = mode === 'submit';
@@ -1500,6 +1517,7 @@ function validateBusinessRules(
         taxRateZone: in_.taxRateZone as string | undefined,
       },
       mode,
+      options,
     ),
   );
   Object.assign(

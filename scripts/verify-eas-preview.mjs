@@ -270,6 +270,14 @@ if (!failed) {
 
 if (!failed) {
   try {
+    execSync('node ./scripts/verify-clerk-reachability.mjs', { stdio: 'inherit', cwd: process.cwd() });
+  } catch {
+    failed = true;
+  }
+}
+
+if (!failed) {
+  try {
     execSync('node ./scripts/verify-clerk-convex.mjs --prod', { stdio: 'inherit', cwd: process.cwd() });
   } catch {
     failed = true;

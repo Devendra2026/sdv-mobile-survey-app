@@ -20,27 +20,59 @@ import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { useDashboardCounts } from '@/hooks/use-dashboard-counts';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useUnifiedDrafts } from '@/hooks/useUnifiedDrafts';
+import { markScreenReady, markScreenStart } from '@/lib/perf-monitor';
 import { humanizeRole, surveyOwnerListLabel } from '@/utils/format';
 import { scrollViewProps } from '@/utils/scroll-props';
 import { TabScreenBottomSpacer } from '@/utils/ui-layout';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const screenStart = useMemo(() => {
+    markScreenStart('dashboard');
+    return performance.now();
+  }, []);
   const { convexReady } = useClerkConvexAuth();
   const counts = useDashboardCounts();
   const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
   const recent = useQuery(api.survey.list, convexReady ? { limit: 5, sortBy: 'updated' as const } : 'skip');
 
   const { isOnline } = useNetworkStatus();
-  const { items: draftItems, loading: draftsLoading } = useUnifiedDrafts();
+  const [draftsEnabled, setDraftsEnabled] = useState(false);
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
+
+  useEffect(() => {
+    if (counts === undefined) return;
+    const frame = requestAnimationFrame(() => setDraftsEnabled(true));
+    return () => cancelAnimationFrame(frame);
+  }, [counts]);
+
+  useEffect(() => {
+    if (me?.role !== 'supervisor' || counts === undefined) return;
+    const frame = requestAnimationFrame(() => setAnalyticsEnabled(true));
+    return () => cancelAnimationFrame(frame);
+  }, [me?.role, counts]);
+
+  const { items: draftItems, loading: draftsLoading } = useUnifiedDrafts({
+    enabled: draftsEnabled,
+    serverLimit: 20,
+  });
 
   const recentActivity = (recent ?? []).filter((s) => s.status !== 'draft');
 
-  if (me === undefined || counts === undefined || recent === undefined || draftsLoading) {
+  const readyForContent =
+    me !== undefined && counts !== undefined && recent !== undefined && !(draftsEnabled && draftsLoading);
+
+  useEffect(() => {
+    if (!readyForContent || !me) return;
+    markScreenReady('dashboard', screenStart);
+  }, [readyForContent, me, screenStart]);
+
+  if (me === undefined || counts === undefined || recent === undefined || (draftsEnabled && draftsLoading)) {
     return (
       <View className="flex-1 bg-page-light dark:bg-page-dark p-4 pt-16">
         <DashboardSkeleton />
@@ -84,7 +116,11 @@ export default function DashboardScreen() {
               <KpiCard label="Submitted" value={counts.submitted} icon="cloud-upload-outline" tone="info" />
             </View>
             <SectionLabel>Team analytics</SectionLabel>
-            <SurveyStatsBreakdown eyebrow="Scoped to your district or ULB assignment" />
+            {analyticsEnabled ? (
+              <SurveyStatsBreakdown eyebrow="Scoped to your district or ULB assignment" />
+            ) : (
+              <DashboardSkeleton />
+            )}
           </>
         ) : (
           <>

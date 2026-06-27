@@ -33,20 +33,17 @@ function clerkIssuerFromPublishableKey(pk) {
   }
 }
 
-function readConvexIssuer(webRoot, prodEnvPath) {
-  const convexEnv = { ...process.env };
-  if (isProd && existsSync(prodEnvPath)) {
-    const prod = parseEnvFile(prodEnvPath);
-    if (prod.CONVEX_SELF_HOSTED_URL) convexEnv.CONVEX_SELF_HOSTED_URL = prod.CONVEX_SELF_HOSTED_URL;
-    if (prod.CONVEX_SELF_HOSTED_ADMIN_KEY) {
-      convexEnv.CONVEX_SELF_HOSTED_ADMIN_KEY = prod.CONVEX_SELF_HOSTED_ADMIN_KEY;
-    }
+function readConvexIssuer(webRoot, useProductionEnv) {
+  const envFileName = useProductionEnv ? '.env.production' : '.env.local';
+  const envFilePath = path.join(webRoot, envFileName);
+  if (!existsSync(envFilePath)) {
+    throw new Error(`Missing ${envFilePath}`);
   }
-  return execSync('npx convex env get CLERK_JWT_ISSUER_DOMAIN', {
+  // --env-file avoids loading .env.local CONVEX_DEPLOYMENT alongside self-hosted prod keys.
+  return execSync(`npx convex env get CLERK_JWT_ISSUER_DOMAIN --env-file ${envFileName}`, {
     encoding: 'utf8',
     cwd: webRoot,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: convexEnv,
   }).trim();
 }
 
@@ -103,16 +100,16 @@ try {
 let convexIssuer = null;
 if (isProd) {
   try {
-    convexIssuer = readConvexIssuer(webRoot, webProdEnvPath);
+    convexIssuer = readConvexIssuer(webRoot, true);
   } catch (err) {
     fail(
       `Could not read Convex CLERK_JWT_ISSUER_DOMAIN: ${err instanceof Error ? err.message : err}\n` +
-        `  cd ../sdv-front-new-app && npm run sync:clerk:prod`,
+      `  cd ../sdv-front-new-app && npm run sync:clerk:prod`,
     );
   }
 } else {
   try {
-    convexIssuer = readConvexIssuer(webRoot, path.join(webRoot, '.env.local'));
+    convexIssuer = readConvexIssuer(webRoot, false);
   } catch {
     console.warn(
       '[verify-clerk-convex] Skipping Convex issuer check (no CONVEX_DEPLOYMENT / self-hosted env for dev)',
@@ -126,7 +123,7 @@ const targetIssuer = targetPk ? clerkIssuerFromPublishableKey(targetPk) : null;
 if (targetIssuer && convexIssuer && targetIssuer !== convexIssuer) {
   fail(
     `Convex issuer (${convexIssuer}) does not match ${isProd ? 'fleet' : 'EAS'} Clerk (${targetIssuer}).\n` +
-      `  cd ../sdv-front-new-app && npm run sync:clerk:prod`,
+    `  cd ../sdv-front-new-app && npm run sync:clerk:prod`,
   );
 } else if (targetIssuer && convexIssuer) {
   ok(`Convex issuer matches ${isProd ? 'production' : 'EAS'} Clerk (${convexIssuer})`);
@@ -150,8 +147,8 @@ if (!isProd && webPk && mobilePk) {
   if (webIssuerFromPk !== mobileIssuerFromPk) {
     fail(
       `Web and mobile dev use different Clerk instances.\n` +
-        `  Web: ${webIssuerFromPk}\n` +
-        `  Mobile: ${mobileIssuerFromPk}`,
+      `  Web: ${webIssuerFromPk}\n` +
+      `  Mobile: ${mobileIssuerFromPk}`,
     );
   } else {
     ok('Web .env.local and survey-app .env.local use the same Clerk app');
@@ -162,9 +159,9 @@ if (!isProd && webPk && mobilePk) {
   if (webIssuerFromPk !== easIssuer) {
     fail(
       `Web app uses a different Clerk instance than mobile/EAS.\n` +
-        `  Web: ${webIssuerFromPk ?? webPk.slice(0, 20)}…\n` +
-        `  Mobile/EAS: ${easIssuer ?? 'invalid'}\n` +
-        `  Update sdv-front-new-app/.env.local to match survey-app dev keys.`,
+      `  Web: ${webIssuerFromPk ?? webPk.slice(0, 20)}…\n` +
+      `  Mobile/EAS: ${easIssuer ?? 'invalid'}\n` +
+      `  Update sdv-front-new-app/.env.local to match survey-app dev keys.`,
     );
   } else {
     ok('Web .env.local uses the same Clerk app as mobile/EAS');

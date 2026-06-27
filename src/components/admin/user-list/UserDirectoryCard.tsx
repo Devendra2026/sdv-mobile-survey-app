@@ -2,10 +2,17 @@ import { Avatar, Tag } from '@/components';
 import type { Id } from '@/convex/_generated/dataModel';
 import { humanizeRole, timeAgo } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
+import { memo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { UserItem } from './types';
 
-export function UserDirectoryCard({ item, onOpen }: { item: UserItem; onOpen: (userId: Id<'users'>) => void }) {
+export const UserDirectoryCard = memo(function UserDirectoryCard({
+  item,
+  onOpen,
+}: {
+  item: UserItem;
+  onOpen: (userId: Id<'users'>) => void;
+}) {
   const statusTone =
     item.status === 'active' ? 'success' : item.status === 'disabled' ? 'danger' : ('warning' as const);
 
@@ -67,4 +74,4 @@ export function UserDirectoryCard({ item, onOpen }: { item: UserItem; onOpen: (u
       </View>
     </Pressable>
   );
-}
+});

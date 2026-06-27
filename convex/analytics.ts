@@ -8,8 +8,9 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { requireCapability } from "./capabilities";
-import { collectSurveysInFieldScope } from "./fieldAccess";
+import { collectSurveysInFieldScope, fieldSurveyAccess } from "./fieldAccess";
 import { clientError, requireUser } from "./helpers";
+import { bucketKeysForUserScope, readBucketByKey, sumDailyForDate } from "./lib/surveyAggregates";
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "./tenancy";
 
 export const surveyCountsShape = {
@@ -63,6 +64,33 @@ function countRows(rows: Doc<"surveys">[], todayStartMs: number | null): SurveyC
 /** Load every survey row visible to admin, supervisor, or QC within tenant scope. */
 async function loadScopedSurveys(ctx: QueryCtx, me: Doc<"users">): Promise<Doc<"surveys">[]> {
   return collectSurveysInFieldScope(ctx, me);
+}
+
+async function countsFromBucket(ctx: QueryCtx, bucketKey: string, todayDateKey: string | null): Promise<SurveyCounts> {
+  const c = await readBucketByKey(ctx, bucketKey);
+  let today = 0;
+  if (todayDateKey) {
+    const daily = await sumDailyForDate(ctx, [bucketKey], todayDateKey);
+    today = daily.created;
+  }
+  return {
+    total: c.total,
+    today,
+    drafts: c.drafts,
+    submitted: c.submitted,
+    approved: c.approved,
+    rejected: c.rejected,
+  };
+}
+
+function todayDateKeyFromMs(nowMs: number | undefined): string | null {
+  if (nowMs === undefined) return null;
+  const d = new Date(nowMs);
+  d.setHours(0, 0, 0, 0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 async function assertDistrictInScope(
@@ -192,16 +220,14 @@ export const surveyStatsBreakdown = query({
     const scope = await resolveTenantScope(ctx, me);
     const districtIds = tenantDistrictIds(scope);
     const muniIds = tenantMunicipalityIds(scope);
-
-    let rows = await loadScopedSurveys(ctx, me);
+    const access = await fieldSurveyAccess(ctx, me);
+    const todayDateKey = todayDateKeyFromMs(args.nowMs);
 
     if (args.districtId) {
       await assertDistrictInScope(me, args.districtId, districtIds);
-      rows = rows.filter((r) => r.districtId === args.districtId);
     }
     if (args.municipalityId) {
       await assertMunicipalityInScope(ctx, me, args.municipalityId);
-      rows = rows.filter((r) => r.municipalityId === args.municipalityId);
     }
     if (args.surveyorId) {
       const surveyor = await ctx.db.get("users", args.surveyorId);
@@ -209,51 +235,41 @@ export const surveyStatsBreakdown = query({
         clientError("BAD_REQUEST", "Unknown surveyor");
       }
       await assertSurveyorInScope(ctx, me, surveyor, muniIds, districtIds);
-      rows = rows.filter((r) => r.surveyorId === args.surveyorId);
     }
-
-    const todayStartMs =
-      args.nowMs !== undefined
-        ? (() => {
-            const d = new Date(args.nowMs);
-            d.setHours(0, 0, 0, 0);
-            return d.getTime();
-          })()
-        : null;
 
     const districtMap = new Map(scope.districts.map((d) => [d._id, d]));
     const muniMap = new Map(scope.municipalities.map((m) => [m._id, m]));
 
-    const byDistrictGroups = groupCounts(rows, (r) => r.districtId);
-    const byDistrict = [...byDistrictGroups.entries()]
-      .map(([districtId, group]) => {
-        const d = districtMap.get(districtId as Id<"districts">);
-        return {
-          districtId: districtId as Id<"districts">,
-          code: d?.code ?? "—",
-          name: d?.name ?? "Unknown district",
-          ...countRows(group, todayStartMs),
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const visibleDistricts = scope.districts.filter((d) => !args.districtId || d._id === args.districtId);
+    const byDistrict = await Promise.all(
+      visibleDistricts.map(async (d) => ({
+        districtId: d._id,
+        code: d.code,
+        name: d.name,
+        ...(await countsFromBucket(ctx, `district:${d._id}`, todayDateKey)),
+      })),
+    );
+    byDistrict.sort((a, b) => a.name.localeCompare(b.name));
 
-    const byUlbGroups = groupCounts(rows, (r) => r.municipalityId);
-    const byUlb = [...byUlbGroups.entries()]
-      .map(([municipalityId, group]) => {
-        const m = muniMap.get(municipalityId as Id<"municipalities">);
-        const d = m ? districtMap.get(m.districtId) : undefined;
+    const visibleMunis = scope.municipalities.filter((m) => {
+      if (args.districtId && m.districtId !== args.districtId) return false;
+      if (args.municipalityId && m._id !== args.municipalityId) return false;
+      return true;
+    });
+    const byUlb = await Promise.all(
+      visibleMunis.map(async (m) => {
+        const d = districtMap.get(m.districtId);
         return {
-          municipalityId: municipalityId as Id<"municipalities">,
-          code: m?.code ?? "—",
-          name: m?.name ?? "Unknown ULB",
-          districtId: m?.districtId ?? group[0]!.districtId,
+          municipalityId: m._id,
+          code: m.code,
+          name: m.name,
+          districtId: m.districtId,
           districtName: d?.name ?? "—",
-          ...countRows(group, todayStartMs),
+          ...(await countsFromBucket(ctx, `municipality:${m._id}`, todayDateKey)),
         };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const bySurveyorGroups = groupCounts(rows, (r) => r.surveyorId);
+      }),
+    );
+    byUlb.sort((a, b) => a.name.localeCompare(b.name));
 
     const activeSurveyors = filterActiveUsersInScope(
       await ctx.db
@@ -267,22 +283,29 @@ export const surveyStatsBreakdown = query({
       muniMap,
     );
 
-    const bySurveyor = activeSurveyors
-      .map((u) => {
-        const group = bySurveyorGroups.get(u._id) ?? [];
-        const muni = u.municipalityId ? muniMap.get(u.municipalityId) : undefined;
-        const dist = u.districtId ? districtMap.get(u.districtId) : muni ? districtMap.get(muni.districtId) : undefined;
-        return {
-          surveyorId: u._id,
-          name: u.name,
-          email: u.email,
-          municipalityName: muni?.name ?? null,
-          districtName: dist?.name ?? null,
-          status: "active" as const,
-          ...countRows(group, todayStartMs),
-        };
-      })
-      .sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted));
+    const bySurveyor = (
+      await Promise.all(
+        activeSurveyors
+          .filter((u) => !args.surveyorId || u._id === args.surveyorId)
+          .map(async (u) => {
+            const muni = u.municipalityId ? muniMap.get(u.municipalityId) : undefined;
+            const dist = u.districtId
+              ? districtMap.get(u.districtId)
+              : muni
+                ? districtMap.get(muni.districtId)
+                : undefined;
+            return {
+              surveyorId: u._id,
+              name: u.name,
+              email: u.email,
+              municipalityName: muni?.name ?? null,
+              districtName: dist?.name ?? null,
+              status: "active" as const,
+              ...(await countsFromBucket(ctx, `surveyor:${u._id}`, todayDateKey)),
+            };
+          }),
+      )
+    ).sort((a, b) => b.approved + b.submitted - (a.approved + a.submitted));
 
     const activeQcSupervisors = filterActiveUsersInScope(
       await ctx.db
@@ -296,6 +319,33 @@ export const surveyStatsBreakdown = query({
       muniMap,
     );
 
+    const scopeKeys = await bucketKeysForUserScope(ctx, me, scope, access);
+    let summaryKeys = scopeKeys;
+    if (args.surveyorId) summaryKeys = [`surveyor:${args.surveyorId}`];
+    else if (args.municipalityId) summaryKeys = [`municipality:${args.municipalityId}`];
+    else if (args.districtId) summaryKeys = [`district:${args.districtId}`];
+
+    let summary: SurveyCounts = {
+      total: 0,
+      today: 0,
+      drafts: 0,
+      submitted: 0,
+      approved: 0,
+      rejected: 0,
+    };
+    for (const key of summaryKeys) {
+      const part = await countsFromBucket(ctx, key, todayDateKey);
+      summary = {
+        total: summary.total + part.total,
+        today: summary.today + part.today,
+        drafts: summary.drafts + part.drafts,
+        submitted: summary.submitted + part.submitted,
+        approved: summary.approved + part.approved,
+        rejected: summary.rejected + part.rejected,
+      };
+    }
+
+    const rows = await loadScopedSurveys(ctx, me);
     const scopedSurveyIds = new Set(rows.map((r) => r._id));
     const byQcSupervisor = await Promise.all(
       activeQcSupervisors.map(async (u) => {
@@ -323,7 +373,7 @@ export const surveyStatsBreakdown = query({
     );
 
     return {
-      summary: countRows(rows, todayStartMs),
+      summary,
       byDistrict,
       byUlb,
       bySurveyor,

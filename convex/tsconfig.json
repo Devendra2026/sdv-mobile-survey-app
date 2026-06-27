@@ -15,5 +15,5 @@
     }
   },
   "include": ["./**/*"],
-  "exclude": ["./_generated"]
+  "exclude": ["./_generated", "./**/*.test.ts", "./**/*.test.tsx"]
 }

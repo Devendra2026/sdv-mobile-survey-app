@@ -18,6 +18,13 @@ import { useCallback, useMemo, useState } from 'react';
 
 export type { UnifiedDraftItem };
 
+export type UseUnifiedDraftsOptions = {
+  /** When false, skips server query and AsyncStorage refresh (defer dashboard load). */
+  enabled?: boolean;
+  /** Server draft page size — dashboard uses 20; surveys tab may use 100. */
+  serverLimit?: number;
+};
+
 function toLocalDraftRow(d: WizardDraft): LocalDraftRow {
   return {
     localId: d.localId,
@@ -50,15 +57,18 @@ export async function purgeStaleLocalDrafts(
 
 export { mergeDraftLists };
 
-export function useUnifiedDrafts() {
+const FOCUS_DEBOUNCE_MS = 300;
+
+export function useUnifiedDrafts(options: UseUnifiedDraftsOptions = {}) {
+  const { enabled = true, serverLimit = 100 } = options;
   const { convexReady } = useClerkConvexAuth();
   const [localDrafts, setLocalDrafts] = useState<WizardDraft[]>([]);
-  const me = useQuery(api.users.currentUser, convexReady ? {} : 'skip');
+  const me = useQuery(api.users.currentUser, convexReady && enabled ? {} : 'skip');
 
   const serverDrafts = useQuery(
     api.survey.list,
-    convexReady && me
-      ? { status: 'draft' as const, sortBy: 'updated' as const, surveyorId: me._id, limit: 100 }
+    convexReady && enabled && me
+      ? { status: 'draft' as const, sortBy: 'updated' as const, surveyorId: me._id, limit: serverLimit }
       : 'skip',
   );
 
@@ -74,17 +84,22 @@ export function useUnifiedDrafts() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshLocal();
-    }, [refreshLocal]),
+      if (!enabled) return;
+      const timer = setTimeout(() => {
+        void refreshLocal();
+      }, FOCUS_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }, [refreshLocal, enabled]),
   );
 
   const items = useMemo(() => {
+    if (!enabled) return [];
     const localRows = localDrafts.map(toLocalDraftRow);
     if (serverDrafts === undefined) return mergeDraftLists(localRows, []);
     return mergeDraftLists(localRows, serverDrafts);
-  }, [localDrafts, serverDrafts]);
+  }, [enabled, localDrafts, serverDrafts]);
 
-  const loading = serverDrafts === undefined;
+  const loading = enabled && serverDrafts === undefined;
 
   return { items, loading, refreshLocal };
 }

@@ -5,7 +5,7 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { hasCapability } from "./capabilities";
+import { hasCapability, type PermissionCache } from "./capabilities";
 import { assertCanReadWard, canReadWard } from "./helpers";
 import { assertMunicipalityInScope, resolveTenantScope, tenantDistrictIds, tenantMunicipalityIds } from "./tenancy";
 
@@ -16,23 +16,27 @@ export type FieldSurveyAccess = "own" | "assigned" | "admin" | "none";
  * Intentionally separate from `fieldSurveyAccess` so list visibility (assigned vs
  * own) does not block draft creation for misconfigured or mixed-capability roles.
  */
-export async function isOwnScopeSurveyor(ctx: QueryCtx, user: Doc<"users">): Promise<boolean> {
+export async function isOwnScopeSurveyor(ctx: QueryCtx, user: Doc<"users">, cache?: PermissionCache): Promise<boolean> {
   if (user.role === "surveyor") return true;
-  return await hasCapability(ctx, user, "surveys.viewOwn");
+  return await hasCapability(ctx, user, "surveys.viewOwn", cache);
 }
 
 /**
  * Whether `saveDraft` may insert a new row when no existing survey is resolved.
  * QC-only editors must open a record by server id; field surveyors and supervisors may create.
  */
-export async function canInsertSurveyDraft(ctx: QueryCtx, user: Doc<"users">): Promise<boolean> {
-  if (await isOwnScopeSurveyor(ctx, user)) return true;
+export async function canInsertSurveyDraft(
+  ctx: QueryCtx,
+  user: Doc<"users">,
+  cache?: PermissionCache,
+): Promise<boolean> {
+  if (await isOwnScopeSurveyor(ctx, user, cache)) return true;
   if (user.role === "supervisor") return true;
   const [editDraft, submit, viewAssigned, qcReview] = await Promise.all([
-    hasCapability(ctx, user, "surveys.editDraft"),
-    hasCapability(ctx, user, "surveys.submit"),
-    hasCapability(ctx, user, "surveys.viewAssigned"),
-    hasCapability(ctx, user, "qc.review"),
+    hasCapability(ctx, user, "surveys.editDraft", cache),
+    hasCapability(ctx, user, "surveys.submit", cache),
+    hasCapability(ctx, user, "surveys.viewAssigned", cache),
+    hasCapability(ctx, user, "qc.review", cache),
   ]);
   return editDraft && submit && viewAssigned && !qcReview;
 }
@@ -44,10 +48,11 @@ export async function assertCanAccessSurvey(
   ctx: SurveyAccessCtx,
   me: Doc<"users">,
   survey: Doc<"surveys">,
+  cache?: PermissionCache,
 ): Promise<void> {
   await assertMunicipalityInScope(ctx, me, survey.municipalityId);
 
-  const access = await fieldSurveyAccess(ctx, me);
+  const access = await fieldSurveyAccess(ctx, me, cache);
   if (access === "none") {
     throw new ConvexError({
       code: "FORBIDDEN",
@@ -71,8 +76,12 @@ export async function assertCanAccessSurvey(
   assertCanReadWard(me, survey.municipalityId, survey.wardNo);
 }
 
-export async function fieldSurveyAccess(ctx: QueryCtx, user: Doc<"users">): Promise<FieldSurveyAccess> {
-  if (user.role === "admin" || (await hasCapability(ctx, user, "surveys.viewAll"))) {
+export async function fieldSurveyAccess(
+  ctx: QueryCtx,
+  user: Doc<"users">,
+  cache?: PermissionCache,
+): Promise<FieldSurveyAccess> {
+  if (user.role === "admin" || (await hasCapability(ctx, user, "surveys.viewAll", cache))) {
     return "admin";
   }
   // Surveyors must always resolve to own-scope, even if dynamic role permissions
@@ -80,10 +89,13 @@ export async function fieldSurveyAccess(ctx: QueryCtx, user: Doc<"users">): Prom
   if (user.role === "surveyor") return "own";
   // Assigned / QC scope is broader than own — check it first so dual-capability users
   // (e.g. supervisor profile with leftover viewOwn) still see the full ULB.
-  if ((await hasCapability(ctx, user, "surveys.viewAssigned")) || (await hasCapability(ctx, user, "qc.review"))) {
+  if (
+    (await hasCapability(ctx, user, "surveys.viewAssigned", cache)) ||
+    (await hasCapability(ctx, user, "qc.review", cache))
+  ) {
     return "assigned";
   }
-  if (await hasCapability(ctx, user, "surveys.viewOwn")) return "own";
+  if (await hasCapability(ctx, user, "surveys.viewOwn", cache)) return "own";
   return "none";
 }
 

@@ -6,7 +6,7 @@
 import { AppButton, AppCard, AppDropdown, AppInput, NumberStepper, SectionLabel, Spinner } from '@/components';
 import { WizardStepFrame } from '@/components/wizard';
 import { api } from '@/convex/_generated/api';
-import { altMobileError, primaryMobileError, sanitizeFixedDigits } from '@/convex/surveyFieldValidation';
+import { altMobileError, primaryMobileError, sanitizeFixedDigits } from '../../../../convex/surveyFieldValidation';
 import { useClerkConvexAuth } from '@/hooks/use-clerk-convex-auth';
 import { newOwnerRow, stepCompletion, type WizardDraft, type WizardOwnerRow } from '@/hooks/useWizardDraft';
 import { Ionicons } from '@expo/vector-icons';

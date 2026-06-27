@@ -14,6 +14,7 @@ import { requireCapability } from "./capabilities";
 import { assertCanAccessSurvey, fieldSurveyAccess } from "./fieldAccess";
 import { assertCanReadWard, clientError, mapTruthyById, requireUser, writeAudit } from "./helpers";
 import { computeQcWardAggregates } from "./lib/qcWardStats";
+import { syncSurveyAggregates } from "./lib/surveyAggregates";
 import { normalizeParcelKey, resolvePropertyId } from "./propertyId";
 import { qcStatus, surveyStatus } from "./schema";
 import { collectSurveysForListPaginated } from "./survey";
@@ -387,6 +388,8 @@ export const decide = mutation({
         serverVersion: survey.serverVersion + 1,
       }),
     ]);
+    const updated = await ctx.db.get(args.surveyId);
+    if (updated) await syncSurveyAggregates(ctx, survey, updated);
 
     // If there's a comment, persist it as a remark too so the thread is complete.
     if (args.comment && args.comment.trim().length > 0) {
@@ -451,5 +454,7 @@ export const reopen = mutation({
         metadata: { reason: args.reason },
       }),
     ]);
+    const updated = await ctx.db.get(args.surveyId);
+    if (updated) await syncSurveyAggregates(ctx, survey, updated);
   },
 });
